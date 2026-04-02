@@ -1,0 +1,5410 @@
+<!DOCTYPE html>
+<html lang="ca">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Gestió Docent v51 — CEIP Rivo Rubeo</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;1,300;1,400&family=Instrument+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <!-- Supabase Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ink: #0A0A0B;
+      --ink-2: #3A3A3F;
+      --ink-3: #7A7A85;
+      --ink-4: #B8B8C2;
+      --bg: #F7F7F5;
+      --bg-2: #EFEFEC;
+      --bg-3: #E5E5E1;
+      --surface: #FFFFFF;
+      --border: rgba(0, 0, 0, 0.08);
+      --border-2: rgba(0, 0, 0, 0.13);
+      --green: #1A7A4E;
+      --green-bg: #EAF5EE;
+      --green-mid: #B8DFC8;
+      --red: #C43B2A;
+      --red-bg: #FAECEA;
+      --red-soft: #FAECEA;
+      --red-mid: #EBADAD;
+      --amber: #B86B0A;
+      --amber-bg: #FDF3E3;
+      --blue: #2B5BAA;
+      --blue-bg: #EBF0FA;
+      --purple: #6B4FA0;
+      --purple-bg: #F3EFF9;
+      --sh: 0 1px 3px rgba(0, 0, 0, 0.06), 0 0 1px rgba(0, 0, 0, 0.07);
+      --sh-lg: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.08);
+      --r: 12px;
+      --r-sm: 8px;
+      --nav-h: 62px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html {
+      font-size: 15px;
+    }
+
+    body {
+      font-family: 'Instrument Sans', sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* ── LOGIN ── */
+    #login {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+    }
+
+    .login-hero {
+      background: #0a1a0f;
+      padding: 48px 28px 36px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-hero::before {
+      content: '';
+      position: absolute;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(26, 122, 78, .35) 0%, transparent 70%);
+      top: -80px;
+      right: -60px;
+      pointer-events: none;
+    }
+
+    .hero-logo {
+      width: 180px;
+      height: 180px;
+      background: none;
+      border-radius: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .hero-text {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-text h1 {
+      font-family: Georgia, serif;
+      font-size: 30px;
+      font-weight: 300;
+      color: #fff;
+      line-height: 1.15;
+      letter-spacing: -.02em;
+    }
+
+    .hero-text h1 em {
+      font-style: italic;
+      color: var(--green-mid);
+    }
+
+    .hero-text p {
+      font-size: 12.5px;
+      color: rgba(255, 255, 255, .4);
+      margin-top: 5px;
+    }
+
+    .login-body {
+      flex: 1;
+      padding: 28px 20px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .login-body h2 {
+      font-family: Georgia, serif;
+      font-size: 20px;
+      font-weight: 400;
+      margin-bottom: 2px;
+    }
+
+    .role-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--r);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      box-shadow: var(--sh);
+      transition: transform .14s;
+    }
+
+    .role-card:active {
+      transform: scale(.98);
+    }
+
+    .rc-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .rc-icon.green {
+      background: var(--green-bg);
+    }
+
+    .rc-icon.blue {
+      background: var(--blue-bg);
+    }
+
+    .rc-text {
+      flex: 1;
+    }
+
+    .rc-text p {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .rc-text span {
+      font-size: 12.5px;
+      color: var(--ink-3);
+    }
+
+    .rc-arrow {
+      font-size: 18px;
+      color: var(--ink-4);
+    }
+
+    .pin-panel {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+      animation: fadeUp .2s ease;
+    }
+
+    .pin-panel.show {
+      display: flex;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    @keyframes slideInRole {
+      from {
+        opacity: 0;
+        transform: translateY(18px) scale(.97);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .login-step.active .role-card.animate-in {
+      animation: slideInRole .35s cubic-bezier(.22,.61,.36,1) both;
+    }
+
+    .login-step.active .role-card.animate-in:nth-child(2) {
+      animation-delay: .1s;
+    }
+
+    .login-step.active .back-btn.animate-in {
+      animation: slideInRole .3s cubic-bezier(.22,.61,.36,1) .2s both;
+    }
+
+    .login-step.active > h2.animate-in {
+      animation: slideInRole .3s cubic-bezier(.22,.61,.36,1) both;
+    }
+
+    .login-step.active > p.animate-in {
+      animation: slideInRole .3s cubic-bezier(.22,.61,.36,1) .05s both;
+    }
+
+    .pin-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--bg-2);
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+    }
+
+    .ph-av {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .ph-info p {
+      font-size: 13.5px;
+      font-weight: 600;
+    }
+
+    .ph-info span {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    .pin-back {
+      margin-left: auto;
+      font-size: 12.5px;
+      color: var(--ink-3);
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-2);
+      background: var(--surface);
+      font-family: inherit;
+    }
+
+    .user-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .user-opt {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 11px 13px;
+      border-radius: var(--r-sm);
+      border: 1.5px solid var(--border);
+      cursor: pointer;
+      background: var(--surface);
+      transition: all .14s;
+    }
+
+    .user-opt:active {
+      background: var(--bg);
+    }
+
+    .user-opt.selected {
+      border-color: var(--ink);
+      background: var(--bg);
+    }
+
+    .uo-av {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .uo-info p {
+      font-size: 13.5px;
+      font-weight: 500;
+    }
+
+    .uo-info span {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    .pin-field label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--ink-3);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+
+    .pin-field input {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--r-sm);
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 18px;
+      letter-spacing: .2em;
+      color: var(--ink);
+      background: var(--surface);
+      outline: none;
+    }
+
+    .pin-field input:focus {
+      border-color: var(--ink);
+    }
+
+    .pin-error {
+      font-size: 12.5px;
+      color: var(--red);
+      display: none;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .pin-error.show {
+      display: flex;
+    }
+
+    .btn-enter {
+      width: 100%;
+      padding: 15px;
+      background: var(--ink);
+      color: #fff;
+      border: none;
+      border-radius: var(--r-sm);
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-enter:active {
+      background: #2a2a2f;
+    }
+
+    .login-hint {
+      font-size: 12px;
+      color: var(--ink-4);
+      text-align: center;
+    }
+
+    .login-hint strong {
+      color: var(--ink-3);
+    }
+
+    /* ── LOGIN STEPS (base – mobile-first) ── */
+    .login-step {
+      display: none;
+      animation: fadeUp .3s ease-out forwards;
+    }
+
+    .login-step.active {
+      display: block;
+    }
+
+    .school-logo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .school-logo-btn {
+      background: #fff;
+      border: 2px solid var(--border-2);
+      border-radius: 16px;
+      padding: 20px;
+      cursor: pointer;
+      transition: transform .2s, border-color .2s, box-shadow .2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .02);
+    }
+
+    .school-logo-btn:active {
+      border-color: var(--ink);
+      transform: scale(.97);
+    }
+
+    .school-logo-btn img {
+      width: 100%;
+      height: 80px;
+      object-fit: contain;
+    }
+
+    .fallback-logo-text {
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--ink);
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    .role-cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .role-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      cursor: pointer;
+      transition: background .1s, transform .1s;
+      text-align: left;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    }
+
+    .role-card:active {
+      background: var(--bg);
+      transform: scale(0.99);
+    }
+
+    .role-card-icon {
+      width: 44px;
+      height: 44px;
+      background: #F0F4F4;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-right: 16px;
+      flex-shrink: 0;
+    }
+
+    .role-card-text {
+      flex: 1;
+    }
+
+    .role-card-text h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 2px 0;
+      color: var(--ink);
+    }
+
+    .role-card-text p {
+      font-size: 12px;
+      color: var(--ink-3);
+      margin: 0;
+    }
+
+    .role-card-arrow {
+      font-size: 16px;
+      color: #ddd;
+      margin-left: 10px;
+    }
+
+    .back-btn {
+      display: inline-block;
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--ink-3);
+      cursor: pointer;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-family: inherit;
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-2);
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+    }
+
+    .detail-header .icon-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .detail-header span {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .n-back {
+      font-size: 12.5px;
+      color: var(--ink-3);
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-2);
+      background: var(--surface);
+      font-family: inherit;
+    }
+
+    .name-search-wrap {
+      position: relative;
+      margin-bottom: 12px;
+    }
+
+    .name-search-input {
+      width: 100%;
+      padding: 12px 14px 12px 40px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      outline: none;
+      box-sizing: border-box;
+    }
+
+    .name-search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #4285F4;
+      font-size: 16px;
+    }
+
+    .name-list {
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      margin-bottom: 20px;
+    }
+
+    .name-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: background .1s;
+    }
+
+    .name-item.selected {
+      background: #EAF2FF;
+    }
+
+    .n-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .n-info {
+      flex: 1;
+    }
+
+    .n-info p {
+      font-size: 14px;
+      margin: 0;
+      font-weight: 500;
+    }
+
+    .n-info span {
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    .pin-section label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-3);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .pin-section .pin-field {
+      width: 100%;
+      padding: 16px;
+      background: #EAF2FF;
+      border: none;
+      border-radius: 10px;
+      font-size: 24px;
+      letter-spacing: 12px;
+      text-align: center;
+      color: var(--ink);
+      margin-bottom: 16px;
+      font-family: monospace;
+      box-sizing: border-box;
+    }
+
+    .btn-accedir {
+      width: 100%;
+      padding: 16px;
+      background: #000;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-accedir:active {
+      opacity: .8;
+    }
+
+    .login-error {
+      background: var(--red-bg);
+      color: var(--red);
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      border: 1px solid #F0C0B8;
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    /* ── APP ── */
+    #app {
+      display: none;
+    }
+
+    .app-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 54px;
+      background: rgba(247, 247, 245, .94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 10px;
+      z-index: 100;
+    }
+
+    .ah-logo {
+      width: 38px;
+      height: 38px;
+      background: none;
+      border-radius: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0
+    }
+
+    .ah-title {
+      flex: 1;
+    }
+
+    .ah-title p {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .ah-title span {
+      font-size: 11.5px;
+      color: var(--ink-3);
+    }
+
+    .role-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 20px;
+      border: 1px solid var(--border-2);
+      white-space: nowrap;
+    }
+
+    .chip-jefa {
+      background: var(--green-bg);
+      color: var(--green);
+      border-color: var(--green-mid);
+    }
+
+    .chip-teacher {
+      background: var(--blue-bg);
+      color: var(--blue);
+      border-color: #C0D0EE;
+    }
+
+    .chip-dir {
+      background: var(--purple-bg);
+      color: var(--purple);
+    }
+
+    .chip-dev {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .ah-menu-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: none;
+      border: 1px solid var(--border-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* BOTTOM NAV */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: var(--nav-h);
+      background: rgba(247, 247, 245, .96);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: stretch;
+      z-index: 100;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .bn-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      cursor: pointer;
+      padding: 6px 2px;
+      transition: background .1s;
+      position: relative;
+    }
+
+    .bn-item:active {
+      background: var(--bg-2);
+    }
+
+    .bn-item.active .bn-icon {
+      color: var(--ink);
+    }
+
+    .bn-item.active .bn-label {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .bn-icon {
+      font-size: 21px;
+      color: var(--ink-3);
+      transition: color .12s;
+      position: relative;
+    }
+
+    .bn-label {
+      font-size: 10.5px;
+      color: var(--ink-3);
+      transition: color .12s;
+    }
+
+    .bn-badge {
+      position: absolute;
+      top: -3px;
+      right: -7px;
+      min-width: 16px;
+      height: 16px;
+      background: var(--red);
+      color: #fff;
+      font-size: 9.5px;
+      font-weight: 700;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+    }
+
+    /* MAIN */
+    .main-content {
+      padding-top: 54px;
+      padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+      min-height: 100vh;
+    }
+
+    .page-wrap {
+      padding: 16px 16px 12px;
+    }
+
+    /* DRAWER */
+    .drawer-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .4);
+      z-index: 150;
+    }
+
+    .drawer-overlay.open {
+      display: block;
+    }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 280px;
+      background: var(--surface);
+      z-index: 151;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .25s ease;
+      box-shadow: -8px 0 32px rgba(0, 0, 0, .12);
+    }
+
+    .drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-head {
+      padding: 54px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .drawer-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .du-av {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .du-info p {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .du-info span {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    .drawer-nav {
+      flex: 1;
+      padding: 10px 12px;
+      overflow-y: auto;
+    }
+
+    .dn-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--ink-4);
+      padding: 10px 8px 5px;
+      margin-top: 6px;
+    }
+
+    .dn-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 8px;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--ink-2);
+      margin-bottom: 1px;
+      transition: background .1s;
+    }
+
+    .dn-item:active,
+    .dn-item.active {
+      background: var(--bg-3);
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .dn-badge {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 20px;
+    }
+
+    .dn-badge.red {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .dn-badge.amber {
+      background: var(--amber-bg);
+      color: var(--amber);
+    }
+
+    .drawer-foot {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .drawer-foot button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px;
+      border-radius: var(--r-sm);
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 13.5px;
+      color: var(--ink-3);
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin-bottom: 4px;
+    }
+
+    .drawer-foot button:active {
+      background: var(--bg-2);
+    }
+
+    /* UTILS */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 15px;
+      border-radius: var(--r-sm);
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      line-height: 1;
+      transition: all .12s;
+    }
+
+    .btn:active {
+      opacity: .8;
+    }
+
+    .btn-primary {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink-2);
+      border: 1px solid var(--border-2);
+    }
+
+    .btn-ghost:active {
+      background: var(--bg-2);
+    }
+
+    .btn-green {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .btn-red-soft {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .btn-amber-soft {
+      background: var(--amber-bg);
+      color: var(--amber);
+    }
+
+    .btn-sm {
+      padding: 7px 12px;
+      font-size: 12.5px;
+    }
+
+    .btn-full {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .sp {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 500;
+    }
+
+    .sp::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sp-green {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .sp-green::before {
+      background: var(--green);
+    }
+
+    .sp-red {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .sp-red::before {
+      background: var(--red);
+    }
+
+    .sp-amber {
+      background: var(--amber-bg);
+      color: var(--amber);
+    }
+
+    .sp-amber::before {
+      background: var(--amber);
+    }
+
+    .sp-blue {
+      background: var(--blue-bg);
+      color: var(--blue);
+    }
+
+    .sp-blue::before {
+      background: var(--blue);
+    }
+
+    .sp-ink {
+      background: var(--bg-2);
+      color: var(--ink-2);
+    }
+
+    .sp-ink::before {
+      background: var(--ink-3);
+    }
+
+    .sp-purple {
+      background: var(--purple-bg);
+      color: var(--purple);
+    }
+
+    .sp-purple::before {
+      background: var(--purple);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 14px 16px;
+      box-shadow: var(--sh);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+    }
+
+    .kpi.k-green::after {
+      background: var(--green);
+    }
+
+    .kpi.k-red::after {
+      background: var(--red);
+    }
+
+    .kpi.k-amber::after {
+      background: var(--amber);
+    }
+
+    .kpi.k-ink::after {
+      background: var(--ink);
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-3);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-family: Georgia, serif;
+      font-size: 30px;
+      font-weight: 400;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+
+    .kpi.k-red .kpi-value {
+      color: var(--red);
+    }
+
+    .kpi.k-amber .kpi-value {
+      color: var(--amber);
+    }
+
+    .kpi-sub {
+      font-size: 11.5px;
+      color: var(--ink-3);
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      box-shadow: var(--sh);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .card-head {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-head h3 {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .alert {
+      display: flex;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .alert-blue {
+      background: var(--blue-bg);
+      color: var(--blue);
+      border: 1px solid #C0D0EE;
+    }
+
+    .alert-amber {
+      background: var(--amber-bg);
+      color: var(--amber);
+      border: 1px solid #F0D5A8;
+    }
+
+    .alert-green {
+      background: var(--green-bg);
+      color: var(--green);
+      border: 1px solid var(--green-mid);
+    }
+
+    .alert-purple {
+      background: var(--purple-bg);
+      color: var(--purple);
+      border: 1px solid #D8C8F0;
+    }
+
+    .page-hdr {
+      margin-bottom: 18px;
+    }
+
+    .page-hdr h1 {
+      font-family: Georgia, serif;
+      font-size: 24px;
+      font-weight: 400;
+      letter-spacing: -.02em;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+
+    .page-hdr p {
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 11, .5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 16px;
+      width: 96vw;
+      max-width: 1100px;
+      box-shadow: var(--sh-lg);
+      overflow: hidden;
+      max-height: 92vh;
+      overflow-y: auto;
+      animation: fadeUp .2s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(100%)
+      }
+
+      to {
+        transform: translateY(0)
+      }
+    }
+
+    .modal-handle {
+      width: 38px;
+      height: 4px;
+      background: var(--bg-3);
+      border-radius: 2px;
+      margin: 12px auto 4px;
+    }
+
+    .m-head {
+      padding: 14px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .m-head h3 {
+      font-family: Georgia, serif;
+      font-size: 19px;
+      font-weight: 400;
+    }
+
+    .m-head p {
+      font-size: 12.5px;
+      color: var(--ink-3);
+      margin-top: 3px;
+    }
+
+    .m-body {
+      padding: 18px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .m-foot {
+      padding: 12px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .f-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-3);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .f-ctrl {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--r-sm);
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 15px;
+      color: var(--ink);
+      background: var(--surface);
+      outline: none;
+      transition: border .15s;
+    }
+
+    .f-ctrl:focus {
+      border-color: var(--ink);
+    }
+
+    textarea.f-ctrl {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .f-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .f-info {
+      background: var(--green-bg);
+      border-radius: var(--r-sm);
+      padding: 11px 13px;
+      font-size: 12.5px;
+      color: var(--green);
+      border: 1px solid var(--green-mid);
+      line-height: 1.5;
+    }
+
+    .f-warn {
+      background: var(--red-bg);
+      border-radius: var(--r-sm);
+      padding: 11px 13px;
+      font-size: 12.5px;
+      color: var(--red);
+      border: 1px solid #F0C0B8;
+      line-height: 1.5;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: calc(var(--nav-h) + 12px);
+      left: 16px;
+      right: 16px;
+      background: var(--ink);
+      color: #fff;
+      padding: 13px 16px;
+      border-radius: var(--r-sm);
+      font-size: 13.5px;
+      box-shadow: var(--sh-lg);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 300;
+      animation: fadeUp .25s ease;
+    }
+
+    .toast.show {
+      display: flex;
+    }
+
+    /* ══════════════
+   AVÍS RÀPID (TEACHER)
+══════════════ */
+    .avis-hero {
+      background: var(--ink);
+      border-radius: var(--r);
+      padding: 20px 18px;
+      margin-bottom: 16px;
+      color: #fff;
+    }
+
+    .avis-hero h2 {
+      font-family: Georgia, serif;
+      font-size: 22px;
+      font-weight: 300;
+      margin-bottom: 3px;
+    }
+
+    .avis-hero h2 em {
+      font-style: italic;
+      color: var(--green-mid);
+    }
+
+    .avis-hero p {
+      font-size: 12.5px;
+      color: rgba(255, 255, 255, .45);
+    }
+
+    .avis-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* FRANJA SELECTOR */
+    .franjes-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .franja-btn {
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--r-sm);
+      padding: 12px 8px;
+      text-align: center;
+      cursor: pointer;
+      background: var(--surface);
+      transition: all .14s;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .franja-btn:active {
+      transform: scale(.96);
+    }
+
+    .franja-btn.selected {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: #fff;
+    }
+
+    .franja-btn.patio.selected {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: #fff;
+    }
+
+    .franja-btn p {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .franja-btn span {
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    .franja-btn.selected span {
+      color: rgba(255, 255, 255, .6);
+    }
+
+    .franja-btn.patio.selected span {
+      color: rgba(255, 255, 255, .7);
+    }
+
+    .sel-all-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    /* AVIS ENVIADO */
+    .hist-day-body {
+      overflow: hidden;
+      transition: max-height .3s cubic-bezier(.4, 0, .2, 1);
+      max-height: none;
+    }
+
+    .hist-day-body:not(.hist-open) {
+      display: none;
+    }
+
+    .hist-arrow {
+      font-size: 10px;
+      color: var(--ink-4);
+      transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .avis-sent {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 32px 20px;
+      gap: 12px;
+    }
+
+    .avis-sent.show {
+      display: flex;
+    }
+
+    .sent-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: var(--green-bg);
+      border: 2px solid var(--green-mid);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+    }
+
+    .sent-title {
+      font-family: Georgia, serif;
+      font-size: 22px;
+      font-weight: 400;
+    }
+
+    .sent-sub {
+      font-size: 13.5px;
+      color: var(--ink-3);
+      line-height: 1.6;
+      max-width: 260px;
+    }
+
+    /* NEW AVIS CARD REDESIGN */
+    .avis-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      box-shadow: var(--sh);
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .ac-top {
+      padding: 14px 16px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .date-badge {
+      width: 48px;
+      height: 52px;
+      background: var(--bg-2);
+      border: 1.5px solid var(--border-2);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .db-day {
+      font-family: Georgia, serif;
+      font-size: 19px;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--ink);
+    }
+
+    .db-month {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--ink-3);
+      margin-top: 2px;
+    }
+
+    .avis-card.pendent .date-badge {
+      border-color: var(--red-mid);
+      background: var(--red-bg);
+    }
+
+    .avis-card.pendent .db-day {
+      color: var(--red);
+    }
+
+    .ac-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .ac-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1.2;
+    }
+
+    .ac-motiu {
+      font-size: 12.5px;
+      color: var(--ink-3);
+      margin-top: 2px;
+    }
+
+    .ac-side {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+
+    .ac-bottom {
+      padding: 0 16px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    /* ══════════════
+       DAILY AGENDA (TEACHER) - PREMIUM VERSION
+    ══════════════ */
+    .agenda-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 40px;
+      padding-top: 10px;
+    }
+
+    .agenda-row {
+      display: flex;
+      gap: 20px;
+      align-items: stretch;
+      min-height: 72px;
+      position: relative;
+    }
+
+    .agenda-time {
+      width: 58px;
+      padding-top: 6px;
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .at-start {
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1;
+    }
+
+    .at-end {
+      font-size: 11px;
+      color: var(--ink-4);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
+    .agenda-connector {
+      position: absolute;
+      left: 68px;
+      top: 14px;
+      bottom: -22px;
+      width: 2px;
+      background: var(--border-2);
+      z-index: 1;
+    }
+
+    .agenda-row:last-child .agenda-connector {
+      display: none;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: 65px;
+      top: 10px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border-2);
+      z-index: 2;
+    }
+
+    .agenda-row.modified-row .timeline-dot {
+      background: var(--amber);
+      border-color: var(--amber);
+      box-shadow: 0 0 0 4px #FFF1E7;
+    }
+
+    .agenda-slot {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: default;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--sh-sm);
+    }
+
+    .agenda-slot:hover {
+      box-shadow: var(--sh);
+      transform: translateY(-1px);
+    }
+
+    .agenda-slot.tp {
+      background: #FFFBF0;
+      border-color: #F8E8C1;
+      color: #B97C18;
+    }
+
+    .agenda-slot.blue-slot {
+      background: #F5F9FF;
+      border-color: #D1E1F8;
+      color: #2E5FA1;
+    }
+
+    .agenda-slot.green-slot {
+      background: #F6FBF8;
+      border-color: #CFE6D9;
+      color: #2C7A51;
+    }
+
+    .agenda-slot.patio-slot {
+      background: var(--bg-2);
+      border-color: var(--border-2);
+      color: var(--ink-3);
+    }
+
+    .agenda-slot.modified {
+      background: #FFF8F4;
+      border: 1.5px solid #FFCCB2;
+      color: #D35400;
+      box-shadow: 0 6px 16px rgba(211, 84, 0, 0.12);
+      cursor: pointer;
+    }
+
+    .agenda-slot.modified:active {
+      transform: scale(0.98);
+    }
+
+    .as-label {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .as-sub {
+      font-size: 11.5px;
+      margin-top: 3px;
+      opacity: 0.7;
+      font-weight: 500;
+    }
+
+    .as-tag {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: #D35400;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-bottom-left-radius: 10px;
+      letter-spacing: 0.06em;
+    }
+
+    /* Fix user select */
+    .franja-btn {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* ══════════════
+       SLOT CHIPS DEDUPLICATED
+    ══════════════ */
+
+    .slot-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: var(--bg-3);
+      color: var(--ink-2);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .slot-chip.all-day {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+
+    .slot-chip.patio {
+      background: var(--amber-bg);
+      color: var(--amber);
+      border-color: #F0D5A8;
+    }
+
+    .ac-coverage {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      font-size: 12px;
+      color: var(--green);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .ac-notes {
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: var(--blue-bg);
+      border-radius: var(--r-sm);
+      font-size: 12.5px;
+      color: var(--blue);
+      line-height: 1.5;
+      border: 1px solid #C0D0EE;
+    }
+
+    .ac-notes-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 4px;
+      color: rgba(43, 91, 170, .6);
+    }
+
+    /* ══════════════
+   TP SIMPLE
+══════════════ */
+
+    /* IA PROPOSAL */
+    .ia-section {
+      margin-top: 4px;
+    }
+
+    .ia-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--ink-3);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ia-proposal {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .ia-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--bg);
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+    }
+
+    .ia-franja {
+      font-size: 12.5px;
+      font-weight: 600;
+      min-width: 48px;
+      color: var(--ink-2);
+    }
+
+    .ia-docent {
+      flex: 1;
+      font-size: 13.5px;
+      font-weight: 500;
+    }
+
+    .ia-tp-warn {
+      font-size: 11px;
+      color: var(--amber);
+      background: var(--amber-bg);
+      padding: 2px 8px;
+      border-radius: 20px;
+      border: 1px solid #F0D5A8;
+      white-space: nowrap;
+    }
+
+    .ia-edit-btn {
+      background: none;
+      border: none;
+      font-size: 18px;
+      color: var(--ink-3);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+    }
+
+    .ia-edit-btn:active {
+      background: var(--bg-3);
+    }
+
+    .ia-generating {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .ia-generating .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--bg-3);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .ia-generating p {
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+
+    .arc-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* ══════════════
+   TP SIMPLE
+══════════════ */
+    .tp-deute-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tp-deute-row:last-child {
+      border-bottom: none;
+    }
+
+    .tdr-av {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .tdr-info {
+      flex: 1;
+    }
+
+    .tdr-info p {
+      font-size: 13.5px;
+      font-weight: 500;
+    }
+
+    .tdr-info span {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    .tp-my-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tp-my-row:last-child {
+      border-bottom: none;
+    }
+
+    .tmr-date {
+      font-size: 12px;
+      color: var(--ink-3);
+      min-width: 44px;
+    }
+
+    .tmr-info {
+      flex: 1;
+    }
+
+    .tmr-info p {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .tmr-info span {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    /* TODAY STATUS */
+    .today-status {
+      border-radius: var(--r);
+      overflow: hidden;
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+      box-shadow: var(--sh);
+    }
+
+    .ts-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ts-item:last-child {
+      border-bottom: none;
+    }
+
+    .ts-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .ts-dot.green {
+      background: var(--green);
+    }
+
+    .ts-dot.red {
+      background: var(--red);
+    }
+
+    .ts-dot.amber {
+      background: var(--amber);
+    }
+
+    .ts-dot.purple {
+      background: var(--purple);
+    }
+
+    .ts-text p {
+      font-size: 13.5px;
+      font-weight: 500;
+    }
+
+    .ts-text span {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    /* COB ROW */
+    .cob-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cob-row:last-child {
+      border-bottom: none;
+    }
+
+    .cob-date {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 7px 9px;
+      text-align: center;
+      flex-shrink: 0;
+      min-width: 44px;
+    }
+
+    .cob-date .cd-d {
+      font-family: Georgia, serif;
+      font-size: 19px;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .cob-date .cd-m {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--ink-3);
+    }
+
+    .cob-date.today {
+      background: var(--ink);
+      border-color: var(--ink);
+    }
+
+    .cob-date.today .cd-d,
+    .cob-date.today .cd-m {
+      color: #fff;
+    }
+
+    .cob-info p {
+      font-size: 13.5px;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .cob-info span {
+      font-size: 12.5px;
+      color: var(--ink-3);
+    }
+
+    .cob-tags {
+      display: flex;
+      gap: 5px;
+      margin-top: 7px;
+      flex-wrap: wrap;
+    }
+
+    /* DESKTOP */
+    @media(min-width:768px) {
+      html {
+        font-size: 14px;
+      }
+
+      #login {
+        flex-direction: row;
+      }
+
+      .login-hero {
+        width: 360px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 48px;
+      }
+
+      .hero-text h1 {
+        font-size: 38px;
+      }
+
+      .login-body {
+        justify-content: center;
+        padding: 48px 52px;
+      }
+
+      .app-header {
+        display: none;
+      }
+
+      .bottom-nav {
+        display: none;
+      }
+
+      .drawer-overlay,
+      .drawer {
+        display: none !important;
+      }
+
+      .shell-desk {
+        display: flex;
+        min-height: 100vh;
+      }
+
+      .sd {
+        width: 220px;
+        flex-shrink: 0;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .sd-top {
+        padding: 18px 14px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .sd-logo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 0;
+      }
+
+      .sd-logo-icon {
+        width: 36px;
+        height: 36px;
+        background: none;
+        border-radius: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .sd-logo-text p {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .sd-logo-text span {
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+
+      .sd-nav {
+        flex: 1;
+        padding: 8px;
+        overflow-y: auto;
+      }
+
+      .sd-sec {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--ink-4);
+        padding: 10px 8px 4px;
+        margin-top: 4px;
+      }
+
+      .sd-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: var(--r-sm);
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--ink-2);
+        margin-bottom: 1px;
+        transition: background .1s;
+      }
+
+      .sd-item:hover {
+        background: var(--bg-2);
+      }
+
+      .sd-item.active {
+        background: var(--bg-3);
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .sd-item-icon {
+        font-size: 14px;
+        width: 20px;
+        text-align: center;
+      }
+
+      .sd-badge {
+        margin-left: auto;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 20px;
+      }
+
+      .sd-badge.red {
+        background: var(--red-bg);
+        color: var(--red);
+      }
+
+      .sd-badge.amber {
+        background: var(--amber-bg);
+        color: var(--amber);
+      }
+
+      .sd-bottom {
+        padding: 12px 10px 16px;
+        border-top: 1px solid var(--border);
+      }
+
+      .sd-user {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        background: var(--bg-2);
+        border-radius: var(--r);
+        border: 1px solid var(--border);
+      }
+
+      .sdu-av {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+      }
+
+      .sdu-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .sdu-info p {
+        font-size: 13.5px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .sdu-info span {
+        font-size: 11.5px;
+        color: var(--ink-3);
+      }
+
+      .sd-btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 8px;
+        border-radius: var(--r-sm);
+        font-family: 'Instrument Sans', sans-serif;
+        font-size: 12.5px;
+        color: var(--ink-3);
+        background: none;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        transition: background .1s;
+      }
+
+      .sd-btn:hover {
+        background: var(--bg-2);
+      }
+
+      .desk-main {
+        margin-left: 220px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+
+      .desk-topbar {
+        background: rgba(247, 247, 245, .9);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+      }
+
+      .dtb-left {
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+
+      .dtb-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .desk-content {
+        padding: 24px 24px 36px;
+        flex: 1;
+      }
+
+      .main-content {
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+
+      .page-wrap {
+        padding: 0;
+      }
+
+      .kpi-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      .g2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .modal-overlay {
+        align-items: center;
+      }
+
+      .modal {
+        border-radius: 14px;
+        width: 460px;
+        max-height: 90vh;
+        animation: fadeUp .2s ease;
+      }
+
+      .modal-handle {
+        display: none;
+      }
+
+      .toast {
+        left: auto;
+        right: 24px;
+        width: 320px;
+        bottom: 24px;
+      }
+
+      .franjes-grid {
+        grid-template-columns: repeat(6, 1fr);
+      }
+
+      .avis-hero {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .login-step {
+        display: none;
+        animation: fadeUp .3s ease-out forwards;
+      }
+
+      .login-step.active {
+        display: block;
+      }
+
+      .school-logo-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      .school-logo-btn {
+        background: #fff;
+        border: 2px solid var(--border-2);
+        border-radius: 16px;
+        padding: 24px;
+        cursor: pointer;
+        transition: transform .2s, border-color .2s, box-shadow .2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, .02);
+      }
+
+      .school-logo-btn:hover {
+        border-color: var(--ink);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, .06);
+      }
+
+      .school-logo-btn img {
+        width: 100%;
+        height: 100px;
+        object-fit: contain;
+      }
+
+      .fallback-logo-text {
+        font-size: 14px;
+        font-weight: bold;
+        color: var(--ink);
+        text-align: center;
+        margin-top: 10px;
+      }
+
+      .role-cards {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .role-card {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        cursor: pointer;
+        transition: background .1s, transform .1s;
+        text-align: left;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        margin-bottom: 12px;
+      }
+
+      .role-card:active {
+        background: var(--bg);
+        transform: scale(0.99);
+      }
+
+      .role-card-icon {
+        width: 44px;
+        height: 44px;
+        background: #F0F4F4;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        margin-right: 16px;
+      }
+
+      .role-card-text {
+        flex: 1;
+      }
+
+      .role-card-text h3 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 2px 0;
+        color: var(--ink);
+      }
+
+      .role-card-text p {
+        font-size: 12px;
+        color: var(--ink-3);
+        margin: 0;
+      }
+
+      .role-card-arrow {
+        font-size: 16px;
+        color: #ddd;
+        margin-left: 10px;
+      }
+
+      .detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--bg-2);
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin-bottom: 16px;
+      }
+
+      .detail-header .icon-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .detail-header span {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .name-search-wrap {
+        position: relative;
+        margin-bottom: 12px;
+      }
+
+      .name-search-input {
+        width: 100%;
+        padding: 12px 14px 12px 40px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-size: 14px;
+        outline: none;
+      }
+
+      .name-search-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #4285F4;
+        font-size: 16px;
+      }
+
+      .name-list {
+        max-height: 280px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #fff;
+        margin-bottom: 20px;
+      }
+
+      .name-item {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: background .1s;
+      }
+
+      .name-item.selected {
+        background: #EAF2FF;
+      }
+
+      .n-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      .n-info {
+        flex: 1;
+      }
+
+      .n-info p {
+        font-size: 14px;
+        margin: 0;
+        font-weight: 500;
+      }
+
+      .n-info span {
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+
+      .pin-section label {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ink-3);
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+      }
+
+      .pin-field {
+        width: 100%;
+        padding: 16px;
+        background: #EAF2FF;
+        border: none;
+        border-radius: 10px;
+        font-size: 24px;
+        letter-spacing: 12px;
+        text-align: center;
+        color: var(--ink);
+        margin-bottom: 16px;
+        font-family: monospace;
+      }
+
+      .btn-accedir {
+        width: 100%;
+        padding: 16px;
+        background: #000;
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .btn-accedir:active {
+        opacity: .8;
+      }
+
+      .login-error {
+        background: var(--red-bg);
+        color: var(--red);
+        border-radius: var(--r-sm);
+        font-size: 13px;
+        border: 1px solid #F0C0B8;
+        display: none;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+  </style>
+</head>
+
+<body>
+
+  <!-- LOGIN -->
+  <div id="login">
+    <div class="login-hero">
+      <div class="hero-text">
+        <h1>Gestió<br><em>Docent</em></h1>
+        <p id="login-hero-sub">Selecciona la teva escola per accedir</p>
+      </div>
+    </div>
+    <div class="login-body">
+      <div id="login-err-msg" class="login-error"></div>
+
+      <!-- STEP 1: CERCAR ESCOLA -->
+      <script>
+        // Instantly skip school selector if escola already saved — avoids flash
+        if (localStorage.getItem('gd_last_escola_key')) {
+          document.write('<div id="step-school" class="login-step">');
+        } else {
+          document.write('<div id="step-school" class="login-step active">');
+        }
+      </script>
+        <h2 style="text-align:center;margin-bottom:8px">Benvingut/da</h2>
+        <p style="font-size:13.5px;color:var(--ink-3);margin-bottom:24px;text-align:center">Tria el teu centre educatiu
+        </p>
+
+        <div class="school-logo-grid">
+          <button class="school-logo-btn" onclick="selectSchoolByName('rivo')">
+            <img src="logo_rivo_png.png" alt="Rivo Rubeo"
+              onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='block'">
+            <div class="fallback-logo-text" style="display:none">RIVO RUBEO</div>
+          </button>
+
+          <button class="school-logo-btn" onclick="selectSchoolByName('oriol')">
+            <img src="logo_canoriol_png.png" alt="CEE Ca n'Oriol"
+              onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='block'">
+            <div class="fallback-logo-text" style="display:none">CEE CA N'ORIOL</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2: TRIA ROL -->
+      <script>
+        if (localStorage.getItem('gd_last_escola_key')) {
+          document.write('<div id="step-role" class="login-step active">');
+        } else {
+          document.write('<div id="step-role" class="login-step">');
+        }
+      </script>
+        <h2>Hola de nou</h2>
+        <p style="font-size:13.5px;color:var(--ink-3);margin-bottom:16px">Selecciona el teu perfil per accedir.</p>
+        <div class="role-cards">
+          <button class="role-card" onclick="selectRole('jefa')">
+            <div class="role-card-icon">🏛️</div>
+            <div class="role-card-text">
+              <h3>Equip Directiu</h3>
+              <p>Cap d'estudis, direcció i administració</p>
+            </div>
+            <div class="role-card-arrow">→</div>
+          </button>
+          <button class="role-card" onclick="selectRole('teacher')">
+            <div class="role-card-icon" style="background:#EAF2FF">👩‍🏫</div>
+            <div class="role-card-text">
+              <h3>Docent</h3>
+              <p>Accés al teu perfil i avís d'absències</p>
+            </div>
+            <div class="role-card-arrow">→</div>
+          </button>
+        </div>
+        <button class="back-btn" onclick="goToStep('school')">← Canviar d'escola</button>
+      </div>
+
+      <!-- STEP 3 & 4 COMBINAT: TRIA NOM I PIN -->
+      <div id="step-details" class="login-step">
+        <div class="detail-header">
+          <div class="icon-wrap">
+            <span id="detail-icon" style="font-size:18px">👩‍🏫</span>
+            <div style="display:flex;flex-direction:column">
+              <span id="detail-role">Docent</span>
+              <span style="font-size:10px;color:var(--ink-4);font-weight:400">Selecciona el teu nom</span>
+            </div>
+          </div>
+          <button class="n-back" onclick="goToStep('role')">← Torna</button>
+        </div>
+
+        <div class="name-search-wrap">
+          <span class="name-search-icon">🔍</span>
+          <input type="text" id="name-search" class="name-search-input" placeholder="Cerca el teu nom..."
+            oninput="filterNames()">
+        </div>
+
+        <div id="names-container" class="name-list"></div>
+
+        <div class="pin-section">
+          <label>CODI PERSONAL (4 DÍGITS)</label>
+          <input type="password" id="login-pin" class="pin-field" maxlength="4" placeholder="••••"
+            oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+          <button class="btn-accedir" onclick="onAccedirClick()">Accedir →</button>
+          <p style="text-align:center;font-size:11px;color:var(--ink-4);margin-top:10px">Codi de prova: 1234</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app">
+    <!-- MOBILE HEADER -->
+    <header class="app-header">
+      <div class="ah-title">
+        <p id="ah-title">Gestió Docent</p><span id="ah-page">Avui</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="role-chip" id="chip-mob"></span>
+        <button class="ah-menu-btn" onclick="openDrawer()">☰</button>
+      </div>
+    </header>
+
+    <!-- DRAWER -->
+    <div class="drawer-overlay" id="drawer-ov" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+      <div class="drawer-head">
+        <div class="drawer-user">
+          <div class="du-av" id="du-av"></div>
+          <div class="du-info">
+            <p id="du-name"></p><span id="du-role"></span>
+          </div>
+        </div>
+      </div>
+      <nav class="drawer-nav" id="drawer-nav"></nav>
+      <div class="drawer-foot">
+        <button onclick="logout()">← Tancar sessió</button>
+      </div>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav" id="bottom-nav"></nav>
+
+    <!-- DESKTOP -->
+    <div class="shell-desk hidden" id="desk-shell">
+      <aside class="sd">
+        <div class="sd-top">
+          <div class="sd-logo">
+            <div class="sd-logo-text">
+              <p id="sd-title">Gestió Docent</p><span>CEIP Rivo Rubeo</span>
+            </div>
+          </div>
+        </div>
+        <nav class="sd-nav" id="sd-nav"></nav>
+        <div class="sd-bottom">
+          <div class="sd-user">
+            <div class="sdu-av" id="sdu-av"></div>
+            <div class="sdu-info">
+              <p id="sdu-name"></p><span id="sdu-role"></span>
+            </div>
+          </div>
+          <button class="sd-btn" onclick="logout()">← Tancar sessió</button>
+        </div>
+      </aside>
+      <div class="desk-main">
+        <header class="desk-topbar">
+          <div class="dtb-left">CEIP Rivo Rubeo <span style="color:var(--ink-4);margin:0 4px">/</span> <span
+              id="dtb-page">Avui</span></div>
+          <div class="dtb-right"><span class="role-chip" id="chip-desk"></span>
+            <div id="desk-actions"></div>
+          </div>
+        </header>
+        <div class="desk-content" id="desk-content"></div>
+      </div>
+    </div>
+
+    <!-- MOBILE CONTENT -->
+    <div class="main-content" id="mob-content">
+      <div id="mob-page" class="page-wrap"></div>
+    </div>
+  </div>
+
+  <!-- MODALS -->
+
+
+  <div class="modal-overlay" id="modal-devolucion">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="m-head">
+        <h3>Programar devolució de TP</h3>
+      </div>
+      <div class="m-body">
+        <div><label class="f-label">Docent</label><select class="f-ctrl" id="tp-docent-sel">
+            <option>Selecciona docent...</option>
+          </select></div>
+        <div class="f-row">
+          <div><label class="f-label">Data</label><input type="date" class="f-ctrl" value="2026-03-13"></div>
+          <div><label class="f-label">Durada</label><select class="f-ctrl">
+              <option>30 minuts</option>
+              <option>1 hora</option>
+            </select></div>
+        </div>
+        <div><label class="f-label">Tram horari</label><select class="f-ctrl">
+            <option>1a hora</option>
+            <option>2a hora</option>
+            <option>3a hora</option>
+            <option>4a hora</option>
+            <option>Pati</option>
+          </select></div>
+        <div class="f-info">📧 El docent rebrà una notificació per correu.</div>
+      </div>
+      <div class="m-foot">
+        <button class="btn btn-green btn-full"
+          onclick="saveToast('modal-devolucion','✓ Devolució programada i docent notificat')">Programar i
+          notificar</button>
+        <button class="btn btn-ghost btn-full" onclick="closeModal('modal-devolucion')">Cancel·lar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-horari-app" style="z-index:9999;">
+    <div class="modal" style="width:96vw;max-width:1200px;border-radius:16px;">
+      <div class="modal-handle"></div>
+      <div class="m-head">
+        <h3 id="hm-title">Confirma l'horari</h3>
+        <p>Revisa que la IA ha llegit correctament l'horari</p>
+      </div>
+      <div class="m-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label class="f-label">Nom del docent</label><input type="text" class="f-ctrl" id="hm-nom"
+              placeholder="Ex: Maria García" style="grid-column:span 2"></div>
+          <div><label class="f-label">Rol</label><select class="f-ctrl" id="hm-rol">
+              <option value="tutor">Tutor/a</option>
+              <option value="especialista">Especialista</option>
+              <option value="ee">Ed. Especial</option>
+              <option value="directiu">Equip Directiu</option>
+            </select></div>
+          <div><label class="f-label">Grup principal</label><input type="text" class="f-ctrl" id="hm-grup"
+              placeholder="Ex: 6è B"></div>
+        </div>
+        <div>
+          <label class="f-label">Horari extret per la IA (pots editar)</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px;font-size:11px;color:var(--ink-3)">
+            <span style="display:flex;align-items:center;gap:3px"><span
+                style="width:10px;height:10px;background:var(--blue-bg);border:1px solid #85B7EB;border-radius:2px;display:inline-block"></span>Amb
+              el grup</span>
+            <span style="display:flex;align-items:center;gap:3px"><span
+                style="width:10px;height:10px;background:var(--amber-bg);border:1px solid #F0D5A8;border-radius:2px;display:inline-block"></span>TP</span>
+            <span style="display:flex;align-items:center;gap:3px"><span
+                style="width:10px;height:10px;background:var(--green-bg);border:1px solid var(--green-mid);border-radius:2px;display:inline-block"></span>Lliure</span>
+            <span style="display:flex;align-items:center;gap:3px"><span
+                style="width:10px;height:10px;background:var(--bg-3);border:1px solid var(--border);border-radius:2px;display:inline-block"></span>Pati</span>
+          </div>
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+            <table style="width:100%;border-collapse:collapse;min-width:550px;table-layout:auto">
+              <thead>
+                <tr>
+                  <th colspan="2"
+                    style="text-align:left;font-size:10px;font-weight:600;color:var(--ink-3);padding:6px 8px;background:var(--bg-2);border:1px solid var(--border);text-transform:uppercase;white-space:nowrap">
+                    Horari</th>
+                  <th
+                    style="font-size:10px;font-weight:600;color:var(--ink-3);padding:7px 6px;background:var(--bg-2);border:1px solid var(--border);text-transform:uppercase;letter-spacing:.04em;text-align:center">
+                    Dll</th>
+                  <th
+                    style="font-size:10px;font-weight:600;color:var(--ink-3);padding:7px 6px;background:var(--bg-2);border:1px solid var(--border);text-transform:uppercase;letter-spacing:.04em;text-align:center">
+                    Dm</th>
+                  <th
+                    style="font-size:10px;font-weight:600;color:var(--ink-3);padding:7px 6px;background:var(--bg-2);border:1px solid var(--border);text-transform:uppercase;letter-spacing:.04em;text-align:center">
+                    Dc</th>
+                  <th
+                    style="font-size:10px;font-weight:600;color:var(--ink-3);padding:7px 6px;background:var(--bg-2);border:1px solid var(--border);text-transform:uppercase;letter-spacing:.04em;text-align:center">
+                    Dj</th>
+                  <th
+                    style="font-size:10px;font-weight:600;color:var(--ink-3);padding:7px 6px;background:var(--bg-2);border:1px solid var(--border);text-transform:uppercase;letter-spacing:.04em;text-align:center">
+                    Dv</th>
+                </tr>
+              </thead>
+              <tbody id="hm-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="hm-tp" style="display:none;flex-wrap:wrap;gap:5px"></div>
+        <div id="hm-obs"
+          style="display:none;background:var(--amber-bg);color:var(--amber);border:1px solid #F0D5A8;border-radius:var(--r-sm);padding:11px 13px;font-size:12.5px;line-height:1.5">
+        </div>
+      </div>
+      <div class="m-foot">
+        <button class="btn btn-green btn-full" onclick="saveHorariApp()">✓ Confirmar i guardar</button>
+        <button class="btn btn-ghost btn-full"
+          onclick="document.getElementById('modal-horari-app').classList.remove('open');if(horariPendingResolve){horariPendingResolve();horariPendingResolve=null;}">Cancel·lar</button>
+      </div>
+    </div>
+    <div class="toast" id="toast-el"><span id="toast-msg"></span></div>
+
+    <script>
+      // Error Handler for Mobile Debugging
+      window.onerror = function (msg, url, line, col, error) {
+        var errInfo = msg + ' @ ' + line + ':' + col;
+        console.error("Global Error:", errInfo, error);
+        // Only show alert in dev/mobile to help debugging
+        if (window.location.hostname !== 'localhost') {
+          // alert("JavaScript Error: " + errInfo);
+        }
+      };
+
+      // CONFIGURACIO
+      const WORKER_URL = 'https://orange-bar-54f5gceip-claude-proxy.jvillal7.workers.dev';
+      const SUPA_URL = 'https://mtrylcazzwolgzfzmbrn.supabase.co';
+      const SUPA_KEY = 'sb_publishable_t3-NsA6e13wB0-kDuXvXGw_7b6vVllK';
+
+      // Global State
+      let currentUser = null;
+      let currentPerfil = null;
+      let currentEscola = null;
+      let currentRole = null;
+      let currentPage = null;
+      let docentsCargats = [];
+      let selectedFranjes = new Set();
+      let selectedDates = new Set();
+      let iaGenerated = false;
+      let horariPendingResolve = null;
+
+      // Login Steps State
+      let loginSchools = [];
+      let loginSelectedEscola = null;
+      let loginSelectedRole = null;
+      let loginSelectedUser = null;
+      let loginPinBuffer = "";
+
+      async function supaFetch(path, opts, retryCount = 0) {
+        opts = opts || {};
+        // Auto-append escola_id filter if school selected and NOT bypassed
+        const scopedEscolaId = (currentPerfil ? currentPerfil.escola_id : (loginSelectedEscola ? loginSelectedEscola.id : null));
+        if (scopedEscolaId && !path.includes('escola_id=eq.') && !opts.bypassSchoolId) {
+          const sep = path.includes('?') ? '&' : '?';
+          path += `${sep}escola_id=eq.${scopedEscolaId}`;
+        }
+
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function () { controller.abort(); }, 10000);
+        try {
+          const res = await fetch(SUPA_URL + '/rest/v1/' + path, {
+            method: opts.method || 'GET',
+            signal: controller.signal,
+            headers: Object.assign({
+              'Content-Type': 'application/json',
+              'apikey': SUPA_KEY,
+              'Authorization': 'Bearer ' + SUPA_KEY, // Use anon key since auth removed
+              'Prefer': opts.prefer || 'return=representation'
+            }, opts.headers || {}),
+            body: opts.body || undefined
+          });
+          clearTimeout(timeoutId);
+          if (!res.ok) {
+            const e = await res.text();
+            throw new Error('Supabase Error (' + res.status + '): ' + e);
+          }
+          const t = await res.text();
+          return t ? JSON.parse(t) : null;
+        } catch (err) {
+          clearTimeout(timeoutId);
+          if (err.name === 'AbortError') throw new Error('Temps d\'espera esgotat.');
+          if (retryCount < 1 && (err.name === 'TypeError')) return supaFetch(path, opts, retryCount + 1);
+          throw err;
+        }
+      }
+
+      // ── NEW SIMPLIFIED LOGIN LOGIC ──
+
+      async function initLogin() {
+        try {
+          loginSchools = await supaFetch('escoles');
+
+          // Restore last school if saved
+          const lastEscolaKey = localStorage.getItem('gd_last_escola_key');
+          if (lastEscolaKey) {
+            const matched = loginSchools.find(e => e.nom.toLowerCase().includes(lastEscolaKey));
+            if (matched) {
+              loginSelectedEscola = matched;
+              document.getElementById('login-hero-sub').textContent = matched.nom;
+              goToStep('role');
+            }
+          }
+        } catch (e) {
+          console.error("Login Init Error:", e);
+        }
+      }
+
+      function goToStep(stepId) {
+        document.querySelectorAll('.login-step').forEach(s => s.classList.remove('active'));
+        const stepEl = document.getElementById('step-' + stepId);
+        stepEl.classList.add('active');
+        hideLoginError();
+
+        // Trigger stagger animation on role step elements
+        if (stepId === 'role') {
+          const els = stepEl.querySelectorAll('h2, p, .role-card, .back-btn');
+          els.forEach(el => {
+            el.classList.remove('animate-in');
+            void el.offsetWidth; // force reflow to restart animation
+            el.classList.add('animate-in');
+          });
+        }
+      }
+
+      function selectSchoolByName(key) {
+        if (!loginSchools || loginSchools.length === 0) return showLoginError("Encara s'estan carregant les escoles. Espera un segon i torna-ho a provar.");
+
+        const matched = loginSchools.find(e => e.nom.toLowerCase().includes(key));
+        if (matched) {
+          loginSelectedEscola = matched;
+          localStorage.setItem('gd_last_escola_key', key);
+          document.getElementById('login-hero-sub').textContent = matched.nom;
+          goToStep('role');
+        } else {
+          showLoginError("Error: No s'ha trobat la configuració per aquest centre a la base de dades.");
+        }
+      }
+
+      async function selectRole(role) {
+        loginSelectedRole = role;
+        hideLoginError();
+        const container = document.getElementById('names-container');
+        const searchInput = document.getElementById('name-search');
+        if (searchInput) searchInput.value = "";
+
+        document.getElementById('detail-role').textContent = (role === 'teacher') ? 'Docent' : 'Equip Directiu';
+        document.getElementById('detail-icon').textContent = (role === 'teacher') ? '👩‍🏫' : '🏛️';
+
+        container.innerHTML = '<div style="padding:20px;text-align:center"><div class="spinner" style="width:20px;height:20px;margin:0 auto"></div></div>';
+        goToStep('details');
+
+        try {
+          let data = [];
+          if (role === 'teacher') {
+            data = await supaFetch('docents?actiu=eq.true&order=nom');
+          } else {
+            // Restore exact hardcoded management setup based on the selected school
+            const isRivo = loginSelectedEscola && loginSelectedEscola.nom.toLowerCase().includes('rivo');
+
+            if (isRivo) {
+              data = [
+                { id: 'm_jefa', nom: 'Veronica', rol: 'jefa', grup_principal: "Cap d'Estudis", pin: '1234', escola_id: loginSelectedEscola.id },
+                { id: 'm_dir', nom: 'Cristina', rol: 'director', grup_principal: 'Director', pin: '1234', escola_id: loginSelectedEscola.id },
+                { id: 'm_sec', nom: 'Patricia', rol: 'secretaria', grup_principal: 'Secretaria', pin: '1234', escola_id: loginSelectedEscola.id },
+                { id: 'm_dev', nom: 'Administrador', rol: 'dev', grup_principal: 'Accés tècnic total', pin: '1234', escola_id: loginSelectedEscola.id }
+              ];
+            } else {
+              // Ca n'Oriol Management Setup
+              data = [
+                { id: 'm_jefa_oriol', nom: 'Mireia', rol: 'jefa', grup_principal: "Cap d'Estudis", pin: '1234', escola_id: loginSelectedEscola.id }
+              ];
+            }
+          }
+
+          container.innerHTML = data.map(u => {
+            const init = (u.nom || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+            let color;
+            let displayRol;
+
+            if (role === 'teacher') {
+              const colors = ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#A142F4', '#24C1E0'];
+              color = colors[Math.abs(u.nom.length) % colors.length];
+              displayRol = u.grup_principal || 'Tutor';
+            } else {
+              // Exact color mapping for the 3 hardcoded management roles
+              if (u.rol === 'jefa') { color = 'var(--green)'; displayRol = "Cap d'Estudis"; }
+              else if (u.rol === 'director') { color = 'var(--purple)'; displayRol = "Director"; }
+              else if (u.rol === 'secretaria') { color = '#4285F4'; displayRol = "Secretaria"; }
+              else { color = '#000'; displayRol = "Accés tècnic total"; }
+            }
+
+            return `
+              <div class="name-item" id="user-${u.id}" onclick="selectUser(${JSON.stringify(u).replace(/"/g, '&quot;')})">
+                <div class="n-avatar" style="background:${color}">${init}</div>
+                <div class="n-info">
+                  <p>${u.nom}</p>
+                  <span>${displayRol}</span>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } catch (e) {
+          container.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px;text-align:center">Error carregant noms.</div>';
+        }
+      }
+
+      function selectUser(user) {
+        loginSelectedUser = user;
+        document.querySelectorAll('.name-item').forEach(el => el.classList.remove('selected'));
+        const el = document.getElementById('user-' + user.id);
+        if (el) el.classList.add('selected');
+        const pinField = document.getElementById('login-pin');
+        if (pinField) {
+          pinField.value = "";
+          pinField.focus();
+        }
+      }
+
+      async function onAccedirClick() {
+        if (!loginSelectedUser) return showLoginError("Selecciona el teu nom a la llista.");
+        const pin = document.getElementById('login-pin').value;
+        if (pin === loginSelectedUser.pin) {
+          currentEscola = loginSelectedEscola;
+          currentPerfil = (loginSelectedRole === 'teacher')
+            ? { id: loginSelectedUser.id, escola_id: loginSelectedEscola.id, nom: loginSelectedUser.nom, rol: 'teacher' }
+            : loginSelectedUser;
+          currentRole = currentPerfil.rol;
+          handleLoginSuccess();
+        } else {
+          showLoginError("PIN incorrecte. Torna-ho a provar.");
+        }
+      }
+
+      function filterNames() {
+        const q = document.getElementById('name-search').value.toLowerCase();
+        document.querySelectorAll('.name-item').forEach(item => {
+          const name = item.querySelector('p').innerText.toLowerCase();
+          item.style.display = name.includes(q) ? 'flex' : 'none';
+        });
+      }
+
+      function handleLoginSuccess() {
+        const mappedRole = (currentRole === 'admin') ? 'dev' : currentRole;
+        updateAppTitles();
+        sbGetDocents().then(data => { if (data) docentsCargats = data; });
+
+        const u = {
+          name: currentPerfil.nom,
+          role: (currentRole === 'dev' || currentRole === 'admin') ? 'Administrador' : (currentRole === 'jefa' ? "Cap d'Estudis" : (currentRole === 'director' ? 'Director' : (currentRole === 'secretaria' ? 'Secretaria' : "Docent"))),
+          init: currentPerfil.nom.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+          color: 'var(--ink)'
+        };
+
+        ['chip-mob', 'chip-desk'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.className = 'role-chip chip-' + (['admin', 'dev'].includes(currentRole) ? 'dev' : currentRole === 'jefa' ? 'jefa' : (['director', 'secretaria'].includes(currentRole) ? 'dir' : 'teacher'));
+            el.textContent = (['admin', 'dev'].includes(currentRole) ? 'Admin' : currentRole === 'jefa' ? "Cap d'Estudis" : (currentRole === 'director' ? 'Director' : (currentRole === 'secretaria' ? 'Secretaria' : 'Docent')));
+          }
+        });
+
+        ['du-av', 'sdu-av'].forEach(id => { const el = document.getElementById(id); if (el) { el.textContent = u.init; el.style.background = u.color; } });
+        ['du-name', 'sdu-name'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = u.name; });
+        ['du-role', 'sdu-role'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = u.role; });
+
+        buildBottomNav(mappedRole);
+        buildDrawerNav(mappedRole);
+        buildDesktopNav(mappedRole);
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        if (isDesktop()) {
+          document.getElementById('desk-shell').classList.remove('hidden');
+          document.getElementById('mob-content').style.display = 'none';
+        }
+
+        const defaultPage = (mappedRole === 'teacher') ? 'ta' : (mappedRole === 'director' || mappedRole === 'secretaria') ? 'di' : (mappedRole === 'dev') ? 'dv' : 'jd';
+        showPage(defaultPage);
+      }
+
+      function updateAppTitles() {
+        if (!currentEscola) return;
+        const t = currentEscola.nom;
+        document.title = `Gestió Docent — ${t}`;
+        document.getElementById('ah-title').innerText = t;
+        document.getElementById('sd-title').innerText = t;
+        const deskSub = document.querySelector('.sd-logo-text span');
+        if (deskSub) deskSub.innerText = t;
+      }
+
+      function logout() {
+        window.location.reload();
+      }
+
+      function showLoginError(msg) {
+        const el = document.getElementById('login-err-msg');
+        el.innerText = msg;
+        el.style.display = 'block';
+      }
+
+      function hideLoginError() {
+        const el = document.getElementById('login-err-msg');
+        if (el) el.style.display = 'none';
+      }
+
+      // Start Login Flow
+      window.addEventListener('DOMContentLoaded', initLogin);
+
+      async function sbGetDocents() { return await supaFetch('docents?select=*&actiu=eq.true&order=nom'); }
+      async function sbSaveDocent(d) {
+        if (d.id) return await supaFetch('docents?id=eq.' + d.id, { method: 'PATCH', body: JSON.stringify(d) });
+        return await supaFetch('docents', { method: 'POST', body: JSON.stringify(d) });
+      }
+      async function sbDeleteDocent(id) { return await supaFetch('docents?id=eq.' + id, { method: 'DELETE' }); }
+      async function sbGetAbsenciesAvui() {
+        const avui = new Date().toISOString().split('T')[0];
+        return await supaFetch('absencies?data=eq.' + avui + '&order=creat_el.desc');
+      }
+      async function sbGetAbsencies() { return await supaFetch('absencies?order=creat_el.desc&limit=50'); }
+      async function sbSaveAbsencia(a) { return await supaFetch('absencies', { method: 'POST', body: JSON.stringify(a) }); }
+      async function sbSaveCobertura(c) { return await supaFetch('cobertures', { method: 'POST', body: JSON.stringify(c) }); }
+      async function sbGetDeutesTP() { return await supaFetch('deutes_tp?retornat=eq.false&order=data_deute'); }
+      async function sbSaveDeuteTP(d) { return await supaFetch('deutes_tp', { method: 'POST', body: JSON.stringify(d) }); }
+      async function sbMarcarDeuteTornat(id) { return await supaFetch('deutes_tp?id=eq.' + id, { method: 'PATCH', body: JSON.stringify({ retornat: true }) }); }
+
+
+      // ── DADES ──
+      const USERS = {
+        jefa: { name: 'Veronica', role: "Cap d'Estudis", init: 'VB', color: 'var(--green)', chip: 'jefa', chipTxt: "Cap d'Estudis", title: 'Gestió Docent' },
+        director: { name: 'Cristina', role: 'Director', init: 'CG', color: 'var(--purple)', chip: 'dir', chipTxt: 'Director', title: 'Direcció' },
+        dev: { name: 'Administrador', role: 'Accés total', init: '⚙', color: 'var(--ink)', chip: 'dev', chipTxt: 'Admin', title: 'Administració' },
+      };
+      const isTeacher = r => r.startsWith('teacher') || /^t\d+$/.test(r);
+
+      const FRANJES = [
+        { id: 'f1a', label: '1a hora', sub: '9:00-9:30', time: '9:00-9:30', hora: '1a hora' },
+        { id: 'f1b', label: '1a hora', sub: '9:30-10:00', time: '9:30-10:00', hora: '1a hora' },
+        { id: 'f2a', label: '2a hora', sub: '10:00-10:30', time: '10:00-10:30', hora: '2a hora' },
+        { id: 'patiA', label: 'Pati A', sub: '10:30-11:00', time: '10:30-11:00', hora: 'Pati A', patio: true },
+        { id: 'patiB', label: 'Pati B', sub: '11:00-11:30', time: '11:00-11:30', hora: 'Pati B', patio: true },
+        { id: 'f3a', label: '3a hora', sub: '11:30-12:00', time: '11:30-12:00', hora: '3a hora' },
+        { id: 'f3b', label: '3a hora', sub: '12:00-12:30', time: '12:00-12:30', hora: '3a hora' },
+        { id: 'f4', label: 'Dinar', sub: '12:30-15:00', time: '12:30-15:00', hora: 'Dinar', lliure: true },
+        { id: 'f5a', label: '5a hora', sub: '15:00-15:30', time: '15:00-15:30', hora: '5a hora' },
+        { id: 'f5b', label: '5a hora', sub: '15:30-16:00', time: '15:30-16:00', hora: '5a hora' },
+        { id: 'f5c', label: '5a hora', sub: '16:00-16:30', time: '16:00-16:30', hora: '5a hora' },
+      ];
+
+      // IA mock: per cada franja absent, assigna un docent disponible
+      const IA_DOCENTS = {}; // S'omple des de Supabase
+
+      // Global normGrup: 1r B = 1R-B = 1rB = 1RB = i3a = I3-A
+      function normGrup(s) {
+        if (!s) return '';
+        return s.toLowerCase().replace(/[\s\-\.]/g, '').replace(/è|é/g, 'e').replace(/à/g, 'a').replace(/ò|ó/g, 'o').replace(/ú|ü/g, 'u').replace(/í|ï/g, 'i').replace(/º/g, '');
+      }
+
+      const NAV_CFG = {
+        jefa: [
+          {
+            sec: 'Avui', items: [
+              { id: 'jd', icon: '📊', label: 'Avui' },
+              { id: 'javis', icon: '🔔', label: 'Avisos rebuts', bc: 'red' },
+            ]
+          },
+          {
+            sec: 'Gestió', items: [
+              { id: 'jtp', icon: '🕐', label: 'Treball Personal', bc: 'amber' },
+              { id: 'jhoraris', icon: '📅', label: 'Horaris' },
+              { id: 'jh', icon: '📋', label: 'Historial' },
+            ]
+          },
+        ],
+        teacher: [
+          {
+            sec: 'El meu espai', items: [
+              { id: 'ta', icon: '🏠', label: 'Avisar absència' },
+              { id: 'tc', icon: '🔄', label: 'Les meves cobertures' },
+              { id: 'tt', icon: '🕐', label: 'El meu TP', bc: 'amber' },
+            ]
+          },
+        ],
+        director: [{ sec: 'Direcció', items: [{ id: 'di', icon: '📊', label: 'Resum' }, { id: 'df', icon: '📋', label: 'Informes' }] }],
+        dev: [{ sec: 'Sistema', items: [{ id: 'dv', icon: '⚙️', label: 'Administració' }] }],
+      };
+
+      const BNAV = {
+        jefa: [{ id: 'jd', icon: '📊', label: 'Avui' }, { id: 'javis', icon: '🔔', label: 'Avisos' }, { id: 'jtp', icon: '🕐', label: 'TP' }, { id: 'jhoraris', icon: '📅', label: 'Horaris' }, { id: 'jh', icon: '📋', label: 'Historial' }],
+        teacher: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }, { id: 'tt', icon: '🕐', label: 'TP' }],
+        director: [{ id: 'di', icon: '📊', label: 'Resum' }, { id: 'df', icon: '📋', label: 'Informes' }],
+        dev: [{ id: 'dv', icon: '⚙️', label: 'Admin' }],
+      };
+
+      const isDesktop = () => window.innerWidth >= 768;
+
+      function buildBottomNav(vr) {
+        const items = BNAV[vr] || BNAV.teacher;
+        document.getElementById('bottom-nav').innerHTML = items.map(it => `
+    <div class="bn-item" id="bn-${it.id}" onclick="showPage('${it.id}')">
+      <span class="bn-icon">${it.icon}${it.badge ? `<span class="bn-badge">${it.badge}</span>` : ''}</span>
+      <span class="bn-label">${it.label}</span>
+    </div>`).join('');
+      }
+
+      function buildDrawerNav(vr) {
+        const nav = document.getElementById('drawer-nav'); nav.innerHTML = '';
+        (NAV_CFG[vr] || NAV_CFG.teacher).forEach(sec => {
+          nav.innerHTML += `<div class="dn-label">${sec.sec}</div>`;
+          sec.items.forEach(it => {
+            const b = it.badge ? `<span class="dn-badge ${it.bc}">${it.badge}</span>` : '';
+            nav.innerHTML += `<div class="dn-item" id="dn-${it.id}" onclick="showPage('${it.id}');closeDrawer()">${it.icon} ${it.label}${b}</div>`;
+          });
+        });
+      }
+
+      function buildDesktopNav(vr) {
+        const nav = document.getElementById('sd-nav'); nav.innerHTML = '';
+        (NAV_CFG[vr] || NAV_CFG.teacher).forEach(sec => {
+          nav.innerHTML += `<div class="sd-sec">${sec.sec}</div>`;
+          sec.items.forEach(it => {
+            const b = it.badge ? `<span class="sd-badge ${it.bc}">${it.badge}</span>` : '';
+            nav.innerHTML += `<div class="sd-item" id="sd-${it.id}" onclick="showPage('${it.id}')"><span class="sd-item-icon">${it.icon}</span>${it.label}${b}</div>`;
+          });
+        });
+      }
+
+      // ── PAGE CONTENT ──
+      const PT = { jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal', jh: 'Historial', jhoraris: 'Horaris del centre', ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu Treball Personal', di: 'Resum', df: 'Informes', dv: 'Administració' };
+
+      async function showPage(id) {
+        currentPage = id;
+        const html = buildPage(id);
+        const title = PT[id] || '';
+
+        // IMPORTANT: Injectem NOMÉS en el contenidor actiu per evitar IDs duplicats.
+        // Si injectéssim als dos, getElementById trobaria l'element ocult i les
+        // dades carregarien en el contenidor equivocat (invisible).
+        if (isDesktop()) {
+          document.getElementById('desk-content').innerHTML = html;
+        } else {
+          document.getElementById('mob-page').innerHTML = html;
+        }
+        document.getElementById('ah-page').textContent = title;
+        document.getElementById('dtb-page').textContent = title;
+        const da = document.getElementById('desk-actions');
+        if (da) da.innerHTML = '';
+
+        // Gestionamos clases activas
+        ['bn', 'dn', 'sd'].forEach(p => {
+          document.querySelectorAll(`[id^="${p}-"]`).forEach(el => el.classList.remove('active'));
+          var ael = document.getElementById(p + '-' + id);
+          if (ael) ael.classList.add('active');
+        });
+
+        // 🚀 Càrrega de dades segura: injectem l'HTML i després carreguem
+        if (id === 'javis') loadAvisosData();
+        if (id === 'jh') loadHistorialData();
+        if (id === 'jtp') loadTPData();
+        if (id === 'jd') loadAvuiData();
+        if (id === 'tt') loadMeuTPData();
+        if (id === 'tc') loadMevesCoberturesData();
+
+        if (id === 'ta') {
+          selectedFranjes = new Set();
+          selectedDates = new Set();
+          const avui = new Date().toISOString().split('T')[0];
+          selectedDates.add(avui);
+          iaGenerated = false;
+          setTimeout(updateSelectedDatesUI, 10);
+        }
+      }
+
+      async function maybeGenerateIA() {
+        if (iaGenerated) return;
+        const container = document.getElementById('desk-actions'); // O on toqui
+        if (!container) return;
+        iaGenerated = true;
+        // Lògica de la IA aquí...
+      }
+
+      // ── DEFINICIÓ DE FUNCIONS DE CÀRREGA ──
+      async function loadAvisosData() {
+        const el = document.getElementById('avisos-list');
+        if (!el) return;
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant avisos...</div>';
+        try {
+          const data = await sbGetAbsencies();
+          if (!data || data.length === 0) {
+            el.innerHTML = '<div style="padding:32px 20px;text-align:center;color:var(--ink-3);font-size:14px">Cap absència registrada encara.</div>';
+            return;
+          }
+          window._avisMap = {};
+          data.forEach(a => { if (a.estat === 'pendent') window._avisMap[a.docent_nom] = a.id; });
+          const listHtml = data.filter(a => a.estat !== 'arxivat').map(a => {
+            const frangesIds = JSON.parse(a.franges || '[]');
+
+            // Obtenir objectes de franges i deduplicar/ordenar per etiqueta
+            const selectedFranges = FRANJES.filter(f => frangesIds.includes(f.id));
+            const schoolFranges = FRANJES.filter(f => !f.lliure);
+
+            // Deduplicar per etiqueta (ex: agrupar f1a i f1b en "1a hora")
+            const labelsSet = new Set();
+            const uniqueChips = [];
+            selectedFranges.forEach(f => {
+              if (!labelsSet.has(f.label)) {
+                labelsSet.add(f.label);
+                uniqueChips.push(f);
+              }
+            });
+
+            const isAllDay = frangesIds.length >= schoolFranges.length;
+
+            const chipsHtml = isAllDay
+              ? '<span class="slot-chip all-day">✨ Tot el dia</span>'
+              : uniqueChips.map(f => `<span class="slot-chip ${f.patio ? 'patio' : ''}">${f.label}</span>`).join('');
+
+            const estatLabel = a.estat === 'pendent' ? '<span class="sp sp-red">Pendent</span>' : '<span class="sp sp-green">Resolt</span>';
+
+            // Format de data
+            const dObj = a.data ? new Date(a.data) : new Date();
+            const day = dObj.getDate();
+            const month = dObj.toLocaleDateString('ca-ES', { month: 'short' }).replace('.', '').toUpperCase();
+
+            const actionButton = a.estat === 'pendent'
+              ? `<button onclick="marcarAvisResolt('${a.id}')" class="btn btn-green btn-sm" style="font-weight:600">✓ Resolt</button>`
+              : `<button onclick="arxivarAvis('${a.id}')" class="btn btn-red-soft btn-sm" style="font-weight:600">🗑️ Esborrar</button>`;
+
+            return `
+      <div class="avis-card ${a.estat === 'pendent' ? 'pendent' : ''}" id="avis-${a.id}">
+        <div class="ac-top">
+          <div class="date-badge">
+            <div class="db-day">${day}</div>
+            <div class="db-month">${month}</div>
+          </div>
+          <div class="ac-content">
+            <div class="ac-name">${a.docent_nom}</div>
+            <div class="ac-motiu">${a.motiu || 'Sense motiu daltat'}</div>
+          </div>
+          <div class="ac-side">
+            ${estatLabel}
+            ${actionButton}
+          </div>
+        </div>
+        <div class="ac-bottom">
+          ${chipsHtml}
+        </div>
+      </div>`;
+          }).join('');
+
+          el.innerHTML = listHtml;
+
+          // Triggeregem la IA si hi ha temes pendents
+          const pendents = data.filter(a => a.estat === 'pendent');
+          if (pendents.length > 0) {
+            setTimeout(maybeGenerateIA, 500);
+          }
+        } catch (e) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--red);font-size:13px">Error carregant avisos.</div>'; }
+      }
+
+      async function loadTPData() {
+        const el = document.getElementById('tp-list');
+        if (!el) return;
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant...</div>';
+        try {
+          const data = await sbGetDeutesTP();
+          if (!data || data.length === 0) {
+            el.innerHTML = '<div style="padding:32px 20px;text-align:center;color:var(--ink-3);font-size:14px">Cap deute de TP pendent.</div>';
+            return;
+          }
+          el.innerHTML = data.map(d => {
+            const data_fmt = d.data_deute ? new Date(d.data_deute).toLocaleDateString('ca-ES') : '';
+            const data_dev = d.data_devolucio ? new Date(d.data_devolucio).toLocaleDateString('ca-ES') : null;
+            return `<div class="row-item" style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-size:13.5px;font-weight:500">${d.docent_nom}</div>
+          <div style="font-size:12px;color:var(--ink-3)">${d.motiu} · ${data_fmt}</div></div>
+        <span class="sp ${data_dev ? 'sp-amber' : 'sp-red'}">${data_dev ? data_dev : 'Sense data'}</span>
+        <button class="btn btn-sm btn-ghost" onclick="marcarTornat('${d.id}')">Tornat</button>
+      </div>`;
+          }).join('');
+        } catch (e) { el.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px">Error carregant deutes.</div>'; }
+      }
+
+      async function loadHistorialData() {
+        const el = document.getElementById('historial-list');
+        if (!el) return;
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant historial...</div>';
+        try {
+          const [absencies, cobertures] = await Promise.all([
+            sbGetAbsencies(),
+            supaFetch('cobertures?order=data.desc&limit=100').catch(() => [])
+          ]);
+          if (!absencies || absencies.length === 0) {
+            el.innerHTML = '<div style="padding:32px 20px;text-align:center;color:var(--ink-3);font-size:14px">Cap absència registrada.</div>';
+            return;
+          }
+          const total = absencies.length;
+          const gestionades = absencies.filter(a => a.estat !== 'pendent').length;
+          const cobTotal = cobertures ? cobertures.length : 0;
+          let html = `<div class="kpi-grid" style="margin-bottom:16px">
+      <div class="kpi k-red"><div class="kpi-label">Total absències</div><div class="kpi-value">${total}</div></div>
+      <div class="kpi k-green"><div class="kpi-label">Gestionades</div><div class="kpi-value">${gestionades}</div></div>
+      <div class="kpi k-amber"><div class="kpi-label">Cobertures</div><div class="kpi-value">${cobTotal}</div></div>
+    </div>`;
+
+          const byDay = {};
+          absencies.forEach(a => {
+            const d = a.data || 'sense-data';
+            if (!byDay[d]) byDay[d] = { absencies: [], cobertures: [] };
+            byDay[d].absencies.push(a);
+          });
+          cobertures.forEach(c => {
+            const d = c.data || 'sense-data';
+            if (!byDay[d]) byDay[d] = { absencies: [], cobertures: [] };
+            byDay[d].cobertures.push(c);
+          });
+
+          const dies = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
+          html += dies.map((dia, didx) => {
+            const dd = byDay[dia];
+            const data_fmt = dia !== 'sense-data' ? new Date(dia + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'Sense data';
+            const allOk = dd.absencies.every(a => a.estat !== 'pendent');
+            const isOpen = didx === 0;
+
+            const absHtml = dd.absencies.map(a => {
+              const frangesIds = JSON.parse(a.franges || '[]');
+              const selectedFranges = FRANJES.filter(f => frangesIds.includes(f.id));
+              const schoolFranges = FRANJES.filter(f => !f.lliure);
+
+              // Deduplicar pèr etiqueta
+              const labelsSet = new Set();
+              const uniqueChips = [];
+              selectedFranges.forEach(f => {
+                if (!labelsSet.has(f.label)) {
+                  labelsSet.add(f.label);
+                  uniqueChips.push(f);
+                }
+              });
+
+              const isAllDay = frangesIds.length >= schoolFranges.length;
+              const chipsHtml = isAllDay
+                ? '<span class="slot-chip all-day">✨ Tot el dia</span>'
+                : uniqueChips.map(f => `<span class="slot-chip ${f.patio ? 'patio' : ''}">${f.label}</span>`).join('');
+
+              const estatLabel = a.estat === 'pendent' ? '<span class="sp sp-red">Pendent</span>' : '<span class="sp sp-green">Resolt</span>';
+
+              const cobs = dd.cobertures.filter(c => c.absencia_id === a.id || c.docent_absent_nom === a.docent_nom);
+              const coverageHtml = cobs.length > 0
+                ? `<div class="ac-coverage">✓ Cobert per: ${cobs.map(c => c.docent_cobrint_nom).join(', ')}</div>`
+                : (a.estat !== 'pendent' ? `<div class="ac-coverage">✓ Marcat com a resolt</div>` : '');
+
+              // Format de data badge
+              const dObj = a.data ? new Date(a.data) : new Date();
+              const dayNum = dObj.getDate();
+              const monthTxt = dObj.toLocaleDateString('ca-ES', { month: 'short' }).replace('.', '').toUpperCase();
+
+              return `
+        <div class="avis-card ${a.estat === 'pendent' ? 'pendent' : ''}" style="margin:8px 14px; box-shadow:none; border-color:var(--border)">
+          <div class="ac-top" style="padding:12px">
+            <div class="date-badge" style="transform:scale(0.85); margin-left:-4px">
+              <div class="db-day">${dayNum}</div>
+              <div class="db-month">${monthTxt}</div>
+            </div>
+            <div class="ac-content">
+              <div class="ac-name" style="font-size:14px">${a.docent_nom}</div>
+              <div class="ac-motiu">${a.motiu || 'Sense motiu'}</div>
+            </div>
+            <div class="ac-side">
+              ${estatLabel}
+            </div>
+          </div>
+          <div class="ac-bottom" style="padding:0 12px 10px">
+            <div style="display:flex; flex-wrap:wrap; gap:4px">
+              ${chipsHtml}
+            </div>
+            ${coverageHtml}
+          </div>
+        </div>`;
+            }).join('');
+
+            return `<div class="card" style="margin-bottom:10px;overflow:hidden">
+        <div onclick="toggleHistDay(${didx})" style="padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;border-bottom:${isOpen ? '1px solid var(--border)' : 'none'}">
+          <div style="flex:1"><div style="font-size:13.5px;font-weight:600">${data_fmt}</div></div>
+          <span class="sp ${allOk ? 'sp-green' : 'sp-red'}">${allOk ? 'Cobert' : 'Pendent'}</span>
+        </div>
+        <div id="hday-${didx}" class="hist-day-body${isOpen ? ' hist-open' : ''}" style="${isOpen ? '' : 'display:none'}">${absHtml}</div>
+      </div>`;
+          }).join('');
+          el.innerHTML = html;
+        } catch (e) { el.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px">Error carregant historial.</div>'; }
+      }
+
+      async function loadAvuiData() {
+        try {
+          const [deutes, absencies] = await Promise.all([
+            sbGetDeutesTP(),
+            sbGetAbsenciesAvui()
+          ]);
+          const kpiTpNum = document.getElementById('kpi-tp-num');
+          if (kpiTpNum) kpiTpNum.textContent = deutes ? deutes.length : 0;
+
+          const kpiAbs = document.getElementById('kpi-abs');
+          if (kpiAbs) {
+            const pendents = (absencies || []).filter(a => a.estat === 'pendent');
+            if (pendents.length === 0) {
+              kpiAbs.innerHTML = '<div style="color:var(--green);font-size:36px;text-align:center">0</div><span class="sp sp-green">Tot cobert</span>';
+            } else {
+              kpiAbs.innerHTML = `<div style="color:var(--red);font-size:36px;text-align:center">${pendents.length}</div>` +
+                pendents.map(a => `<span class="sp sp-red" style="font-size:10px;margin-right:4px">${a.docent_nom.split(' ')[0]}</span>`).join('');
+            }
+          }
+        } catch (e) { console.error('Error loadAvuiData:', e); }
+      }
+
+      async function loadMevesCoberturesData() {
+        const el = document.getElementById('cob-list');
+        if (!el) return;
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant la teva agenda d\'avui...</div>';
+        try {
+          const days = ['diumenge', 'dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres', 'dissabte'];
+          const today = new Date();
+          const todayCatalan = days[today.getDay()];
+          const todayISO = today.toISOString().split('T')[0];
+
+          // Carreguem dades
+          const [cobertures, absencies, docents] = await Promise.all([
+            supaFetch('cobertures?docent_cobrint_nom=eq.' + encodeURIComponent(currentPerfil.nom) + '&data=eq.' + todayISO),
+            sbGetAbsencies(),
+            sbGetDocents()
+          ]);
+
+          const me = docents.find(d => d.nom === currentPerfil.nom);
+          if (!me || !me.horari) {
+            el.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--ink-4)">L\'administració encara no ha carregat el teu horari.</div>';
+            return;
+          }
+
+          const myHorari = me.horari[todayCatalan] || {};
+
+          // Header de l'agenda - Premium
+          let html = `<div style="margin-bottom:24px; padding:0 4px">
+          <div style="font-size:12px; font-weight:700; color:var(--ink-4); text-transform:uppercase; margin-bottom:6px; letter-spacing:0.04em">La teva agenda d'avui</div>
+          <div style="font-size:24px; font-weight:600; text-transform:capitalize; font-family:Georgia, serif">${todayCatalan}, ${today.toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })}</div>
+        </div>`;
+
+          html += '<div class="agenda-wrap">';
+
+          FRANJES.forEach((f, idx) => {
+            const originalVal = myHorari[f.id] || '';
+
+            const cob = cobertures.find(c => {
+              return c.franja === f.id || c.franja === f.label || (c.franja === f.hora);
+            });
+
+            const isModified = !!cob;
+            let slotClass = '';
+            if (isModified) {
+              slotClass = 'modified';
+            } else {
+              const v = originalVal.toLowerCase();
+              if (v === 'tp' || v === 'treball personal') slotClass = 'tp';
+              else if (v === '' || v === 'lliure') slotClass = 'green-slot';
+              else if (f.patio) slotClass = 'patio-slot';
+              else if (originalVal) slotClass = 'blue-slot';
+            }
+
+            // Si el valor original és buit o "lliure", posem "Disponibilitat"
+            const label = isModified ? `COBERTURA: ${cob.docent_absent_nom} (${cob.grup})` :
+              ((!originalVal || originalVal.toLowerCase() === 'lliure') ? 'Disponibilitat' : originalVal);
+
+            const sub = isModified ? `Grup destí: ${cob.grup}` : (f.label + (f.sub ? ' · ' + f.sub : ''));
+            const onClick = isModified ? `onclick="openNotesPanel('${cob.absencia_id}', '${cob.docent_absent_nom}', '${cob.grup}')"` : '';
+
+            html += `
+          <div class="agenda-row ${isModified ? 'modified-row' : ''}">
+            <div class="agenda-time">
+              <span class="at-start">${f.sub ? f.sub.split('-')[0] : ''}</span>
+              <span class="at-end">${f.sub ? f.sub.split('-')[1] : ''}</span>
+            </div>
+            <div class="agenda-connector"></div>
+            <div class="timeline-dot"></div>
+            <div class="agenda-slot ${slotClass}" ${onClick}>
+              ${isModified ? '<span class="as-tag">Modificació</span>' : ''}
+              <div class="as-label">${label}</div>
+              <div class="as-sub">${sub}</div>
+            </div>
+          </div>`;
+          });
+
+          html += '</div>';
+          el.innerHTML = html;
+
+        } catch (e) {
+          console.error(e);
+          el.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px">Error carregant la teva agenda.</div>';
+        }
+      }
+
+      async function openNotesPanel(absenciaId, absentNom, absentGrup) {
+        const modal = document.getElementById('modal-view-notes');
+        const content = document.getElementById('notes-content');
+        const nomEl = document.getElementById('notes-absent-nom');
+        const grupEl = document.getElementById('notes-absent-grup');
+
+        if (!modal || !content) return;
+
+        nomEl.textContent = 'Notes de ' + absentNom;
+        grupEl.textContent = 'Instruccions per al grup ' + absentGrup;
+        content.innerHTML = '<div style="text-align:center;padding:20px"><div class="spinner"></div></div>';
+
+        openModal('modal-view-notes');
+
+        try {
+          const data = await supaFetch('absencies?id=eq.' + absenciaId);
+          if (data && data[0] && data[0].notes) {
+            content.innerHTML = data[0].notes.replace(/\n/g, '<br>');
+          } else {
+            content.innerHTML = '<div style="color:var(--ink-4); font-style:italic">No s\'ha deixat cap nota específica per a aquesta cobertura.</div>';
+          }
+        } catch (e) {
+          content.innerHTML = '<div style="color:var(--red)">No s\'ha pogut carregar la nota.</div>';
+        }
+      }
+
+      async function loadMeuTPData() {
+        const el = document.getElementById('meu-tp-list');
+        if (!el) return;
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant...</div>';
+        try {
+          var myNom = currentPerfil ? currentPerfil.nom : 'Docent';
+          const data = await supaFetch('deutes_tp?docent_nom=eq.' + encodeURIComponent(myNom) + '&retornat=eq.false');
+          if (!data || data.length === 0) {
+            el.innerHTML = '<div style="padding:32px 20px;text-align:center;color:var(--ink-3);font-size:14px">Cap deute de TP pendent.</div>';
+            return;
+          }
+          el.innerHTML = data.map(d => `<div class="row-item" style="padding:12px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:500">TP pendent de ${d.data_deute}</div>
+      <span class="sp sp-red" style="font-size:11px">Pendent de devolució</span>
+    </div>`).join('');
+        } catch (e) { el.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px">Error carregant dades.</div>'; }
+      }
+
+      // ── UI HELPERS ──
+      function toggleHistDay(idx) {
+        const el = document.getElementById('hday-' + idx);
+        if (!el) return;
+        if (el.style.display === 'none' || el.style.display === '') {
+          el.style.display = 'block';
+        } else {
+          el.style.display = 'none';
+        }
+      }
+
+      async function marcarAvisResolt(id) {
+        try {
+          await supaFetch('absencies?id=eq.' + id, {
+            method: 'PATCH',
+            body: JSON.stringify({ estat: 'resolt' })
+          });
+          showToastApp('Avis marcat com a resolt');
+          loadAvisosData();
+        } catch (e) { console.error(e); }
+      }
+
+      async function arxivarAvis(id) {
+        try {
+          await supaFetch('absencies?id=eq.' + id, {
+            method: 'PATCH',
+            body: JSON.stringify({ estat: 'arxivat' })
+          });
+          showToastApp('Avis esborrat de la llista');
+          loadAvisosData();
+        } catch (e) { console.error(e); }
+      }
+
+      async function marcarTornat(id) {
+        try {
+          await sbMarcarDeuteTornat(id);
+          showToastApp('Deute marcat com a tornat');
+          loadTPData();
+        } catch (e) { console.error(e); }
+      }
+
+      function openDrawer() {
+        const d = document.getElementById('drawer');
+        const o = document.getElementById('drawer-ov');
+        if (d) d.classList.add('open');
+        if (o) o.classList.add('show');
+      }
+      function closeDrawer() {
+        const d = document.getElementById('drawer');
+        const o = document.getElementById('drawer-ov');
+        if (d) d.classList.remove('open');
+        if (o) o.classList.remove('show');
+      }
+
+      function showToastApp(msg) { toast(msg); }
+
+      function logout() {
+        if (!confirm('Vols tancar la sessió?')) return;
+        location.reload();
+      }
+
+      // ── FRANGES HELPERS ──
+      function clearFranjes() {
+        selectedFranjes = new Set();
+        document.querySelectorAll('.fc-item').forEach(function (el) { el.classList.remove('selected'); });
+      }
+      function selFranja(fid, el) {
+        if (selectedFranjes.has(fid)) {
+          selectedFranjes.delete(fid);
+          if (el) el.classList.remove('selected');
+        } else {
+          selectedFranjes.add(fid);
+          if (el) el.classList.add('selected');
+        }
+      }
+      function selectAllFranjes() {
+        FRANJES.forEach(function (f) {
+          if (!f.lliure) {
+            selectedFranjes.add(f.id);
+            const el = document.querySelector('[onclick*="selFranja(\'' + f.id + '\'"]');
+            if (el) el.classList.add('selected');
+          }
+        });
+      }
+      async function avisRapidAvui() {
+        selectAllFranjes();
+        enviarAvis();
+      }
+
+      function buildPage(id) {
+        const firstName = currentPerfil ? currentPerfil.nom.split(' ')[0] : 'Docent';
+        switch (id) {
+
+          // ── JEFA: AVUI ──
+          case 'jd': return buildAvui();
+          // ── JEFA: AVISOS ──
+          case 'javis': return buildAvisos();
+          // ── JEFA: TP ──
+          case 'jtp': return buildTP();
+          // ── JEFA: HISTORIAL ──
+          case 'jh': return buildHistorial();
+          // ── JEFA: HORARIS ──
+          case 'jhoraris': return buildHoraris();
+          // ── DOCENT: AVISAR ──
+          case 'ta': return buildAvisDocent(firstName);
+
+          // ── DOCENT: COBERTURES ──
+          case 'tc': return buildMevesCobertures(firstName);
+          // ── DOCENT: TP ──
+          case 'tt': return buildMeuTP(firstName);
+          // ── DIRECTOR ──
+          case 'di': return `
+      <div class="page-hdr"><h1>Resum del centre</h1><p>Vista de consulta</p></div>
+      <div class="alert alert-green">👁️ Vista de <strong>només lectura.</strong></div>
+      <div class="kpi-grid">
+        <div class="kpi k-red"><div class="kpi-label">Absències</div><div class="kpi-value">2</div><div class="kpi-sub">avui</div></div>
+        <div class="kpi k-green"><div class="kpi-label">Cobertura</div><div class="kpi-value">96%</div><div class="kpi-sub">aquest mes</div></div>
+        <div class="kpi k-amber"><div class="kpi-label">Deutes TP</div><div class="kpi-value">2</div><div class="kpi-sub">pendents</div></div>
+        <div class="kpi k-ink"><div class="kpi-label">Presents</div><div class="kpi-value">38</div><div class="kpi-sub">de 42</div></div>
+      </div>`;
+
+          case 'df': return `
+      <div class="page-hdr"><h1>Informes</h1></div>
+      <div class="card"><div class="card-head"><h3>Exportar</h3></div>
+      <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-ghost" style="justify-content:flex-start">📄 Absències per docent</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start">🕐 Historial TP</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start">📊 Estadístiques del curs</button>
+      </div></div>`;
+
+          case 'dv': return `
+      <div class="page-hdr"><h1>Administració</h1></div>
+      <div class="alert alert-amber">⚙️ Accés total al sistema.</div>
+      <div class="card"><div class="card-head"><h3>Usuaris</h3><button class="btn btn-primary btn-sm">+ Nou</button></div>
+      <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-ghost" style="justify-content:flex-start">👥 Gestionar docents</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start">📅 Configurar horaris TP</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start">📧 Configuració correu</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start">💾 Còpia de seguretat</button>
+      </div></div>`;
+
+          default: return '<div class="page-hdr"><h1>Pàgina</h1></div>';
+        }
+      }
+
+      // ── BUILD FUNCTIONS per a les pàgines que carreguen dades ──
+      function buildAvisos() {
+        return '<div class="page-hdr"><h1>Avisos rebuts</h1><p>Notificacions d\'absències pendents</p></div>' +
+          '<div id="avisos-list"><div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant avisos...</div></div>';
+      }
+
+      function buildTP() {
+        return '<div class="page-hdr"><h1>Treball Personal</h1><p>Deutes TP del centre</p></div>' +
+          '<div id="tp-list"><div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant...</div></div>';
+      }
+
+      function buildHistorial() {
+        return '<div class="page-hdr"><h1>Historial</h1><p>Registre d\'absències i cobertures</p></div>' +
+          '<div id="historial-list"><div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant historial...</div></div>';
+      }
+
+      function buildMevesCobertures(name) {
+        return '<div class="page-hdr"><h1>Les meves cobertures</h1><p>Hola, ' + name + '</p></div>' +
+          '<div class="card"><div id="cob-list"><div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant...</div></div></div>';
+      }
+
+      function buildMeuTP(name) {
+        return '<div class="page-hdr"><h1>El meu TP</h1><p>Hola, ' + name + '</p></div>' +
+          '<div class="card"><div id="meu-tp-list"><div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant...</div></div></div>';
+      }
+
+      // ── AVIS DOCENT ──
+      function buildAvisDocent(name) {
+        const avui = new Date().toISOString().split('T')[0];
+        const dies = ['Dg', 'Dl', 'Dt', 'Dc', 'Dj', 'Dv', 'Ds'];
+        const nomDia = dies[new Date().getDay()];
+        return `
+  <div style="background:var(--ink);border-radius:var(--r);padding:18px 18px 16px;margin-bottom:14px;color:#fff">
+    <div style="font-size:12px;color:rgba(255,255,255,.4);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Hola, ${name}</div>
+    <div style="font-family:Georgia,serif;font-size:22px;font-weight:300;margin-bottom:3px">Avisa la teva <em style="font-style:italic;color:#B8DFC8">absencia</em></div>
+    <div style="font-size:12.5px;color:rgba(255,255,255,.4)">Seràs notificat quan la cobertura estigui assignada</div>
+  </div>
+
+  <button onclick="avisRapidAvui()" style="width:100%;padding:18px 16px;background:var(--red);color:#fff;border:none;border-radius:var(--r);font-family:'Instrument Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px">
+    <span style="font-size:22px">🏥</span>
+    <div style="text-align:left">
+      <div>Falto avui tot el dia</div>
+      <div style="font-size:12px;font-weight:400;opacity:.75">${nomDia} - Totes les franges</div>
+    </div>
+  </button>
+
+  <div id="avis-form-wrap">
+    <div style="font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+      <span style="flex:1;height:1px;background:var(--border)"></span>
+      O personalitza
+      <span style="flex:1;height:1px;background:var(--border)"></span>
+    </div>
+    <div class="avis-form">
+      <div>
+        <label class="f-label" style="margin-bottom:8px">Quins dies faltaràs?</label>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <button class="btn btn-ghost" onclick="selectToday()" style="flex:1;padding:12px;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <span style="font-size:18px">📅</span>
+            <span style="font-size:12px;font-weight:600">Avui</span>
+          </button>
+          <button class="btn btn-ghost" onclick="document.getElementById('hidden-date-picker').showPicker()" style="flex:1;padding:12px;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <input type="date" id="hidden-date-picker" style="position:absolute;visibility:hidden;pointer-events:none" onchange="addDateFromInput(this)">
+            <span style="font-size:18px">➕</span>
+            <span style="font-size:12px;font-weight:600">Altre dia</span>
+          </button>
+        </div>
+        <div id="selected-dates-container" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+          <!-- Els badges s'inyecten aquí -->
+        </div>
+      </div>
+      <div>
+        <label class="f-label" style="margin-bottom:8px">Franges afectades</label>
+        <div class="sel-all-row">
+          <button class="btn btn-ghost btn-sm" onclick="selectAllFranjes()">Tot el dia</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearFranjes()">Cap</button>
+        </div>
+        <div class="franjes-grid" id="franjes-grid">
+          ${FRANJES.filter(f => !f.lliure).map(f => {
+          const cls = 'franja-btn' + (f.patio ? ' patio' : '');
+          return '<div class="' + cls + '" id="fb-' + f.id + '" data-franja-id="' + f.id + '">' +
+            '<p>' + f.label + '</p><span>' + f.time + '</span></div>';
+        }).join('')}
+        </div>
+      </div>
+      <div>
+        <label class="f-label" style="margin-bottom:8px">Motiu (opcional)</label>
+        <select class="f-ctrl" id="avis-motiu">
+          <option value="">Seleccionar...</option>
+          <option>Malaltia</option>
+          <option>Metge / Especialista</option>
+          <option>Formació</option>
+          <option>Assumpte personal</option>
+        </select>
+      </div>
+      <div>
+        <label class="f-label" style="margin-bottom:8px">Justificant medic (opcional)</label>
+        <div style="border:1.5px dashed var(--border-2);border-radius:var(--r-sm);padding:14px;text-align:center;cursor:pointer;background:var(--bg)" onclick="document.getElementById('justificant-input').click()">
+          <input type="file" id="justificant-input" accept="image/*" capture="environment" style="display:none" onchange="mostrarJustificant(this)">
+          <div id="justificant-preview" style="display:none;margin-bottom:8px">
+            <img id="justificant-img" style="max-width:100%;max-height:150px;border-radius:8px;object-fit:cover">
+          </div>
+          <div id="justificant-placeholder">
+            <div style="font-size:24px;margin-bottom:6px">📷</div>
+            <div style="font-size:13.5px;font-weight:500;margin-bottom:2px">Fes una foto del justificant</div>
+            <div style="font-size:12px;color:var(--ink-3)">Camara o galeria del movil</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label class="f-label" style="margin-bottom:8px">Notes per al substitut (opcional)</label>
+        <textarea class="f-ctrl" id="avis-notes" placeholder="Ex: Els alumnes estan fent la pagina 45..." rows="3"></textarea>
+      </div>
+      <button class="btn btn-red-soft btn-full" style="padding:15px;font-size:15px" onclick="enviarAvis()">Enviar avis</button>
+    </div>
+  </div>
+  </div>
+
+  <div class="avis-sent" id="avis-sent">
+    <div class="sent-icon">✅</div>
+    <div class="sent-title">Avis enviat</div>
+    <div class="sent-sub">La cap estudis ha rebut el teu avis i gestionara la cobertura.</div>
+    <div id="notif-cobertura" style="display:none;margin:14px 0;background:var(--green-bg);border:1px solid var(--green-mid);border-radius:var(--r-sm);padding:14px 16px;text-align:left">
+      <div style="font-size:11px;font-weight:600;color:var(--green);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px">Cobertura assignada</div>
+      <div id="notif-cobertura-text" style="font-size:14px;font-weight:500;color:var(--green)"></div>
+      <div id="notif-cobertura-sub" style="font-size:12.5px;color:var(--green);opacity:.75;margin-top:3px"></div>
+    </div>
+    <button class="btn btn-ghost" onclick="resetAvis()" style="margin-top:8px">Enviar un altre avis</button>
+  </div>`;
+      }
+
+      async function avisRapidAvui() {
+        selectAllFranjes();
+        var fw = document.getElementById('avis-form-wrap');
+        var as = document.getElementById('avis-sent');
+        if (fw) fw.style.display = 'none';
+        if (as) as.classList.add('show');
+        var nomDocent = currentPerfil ? currentPerfil.nom : 'Docent';
+        var escolaId = currentPerfil ? currentPerfil.escola_id : null;
+        var avui = new Date().toISOString().split('T')[0];
+        try {
+          await sbSaveAbsencia({
+            docent_nom: nomDocent,
+            data: avui,
+            franges: JSON.stringify(['f1a', 'f1b', 'f2a', 'patiA', 'patiB', 'f3a', 'f3b', 'f5a', 'f5b', 'f5c']),
+            motiu: 'Tot el dia',
+            notes: '',
+            estat: 'pendent',
+            escola_id: escolaId
+          });
+          showToastApp('Avis enviat correctament');
+        } catch (e) {
+          console.error('Error guardant absencia:', e);
+          showToastApp('Error enviant avis. Comprova la connexio.');
+        }
+      }
+
+      function mostrarJustificant(input) {
+        if (!input.files || !input.files[0]) return;
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var img = document.getElementById('justificant-img');
+          var prev = document.getElementById('justificant-preview');
+          var ph = document.getElementById('justificant-placeholder');
+          if (img) img.src = e.target.result;
+          if (prev) prev.style.display = 'block';
+          if (ph) ph.style.display = 'none';
+        };
+        reader.readAsDataURL(input.files[0]);
+      }
+
+      function mostrarNotifCobertura(docent, franja, dia) {
+        var el = document.getElementById('notif-cobertura');
+        if (!el) return;
+        var t = document.getElementById('notif-cobertura-text');
+        var s = document.getElementById('notif-cobertura-sub');
+        if (t) t.textContent = docent + ' cobrira les teves classes';
+        if (s) s.textContent = dia + ' - ' + franja;
+        el.style.display = 'block';
+      }
+
+      function toggleFranja(id) {
+        if (selectedFranjes.has(id)) selectedFranjes.delete(id);
+        else selectedFranjes.add(id);
+        var el = document.getElementById('fb-' + id);
+        if (el) el.classList.toggle('selected', selectedFranjes.has(id));
+      }
+
+      // ── TOUCH-SAFE FRANJA SELECTION ──
+      // Prevents scroll gestures from toggling franja buttons on mobile
+      (function () {
+        var touchStartY = 0;
+        var touchStartX = 0;
+        var touchMoved = false;
+        var MOVE_THRESHOLD = 10; // px – if finger moves more than this, it's a scroll
+
+        document.addEventListener('touchstart', function (e) {
+          var btn = e.target.closest('[data-franja-id]');
+          if (!btn) return;
+          touchStartY = e.touches[0].clientY;
+          touchStartX = e.touches[0].clientX;
+          touchMoved = false;
+        }, { passive: true });
+
+        document.addEventListener('touchmove', function (e) {
+          if (touchStartY === 0 && touchStartX === 0) return;
+          var dy = Math.abs(e.touches[0].clientY - touchStartY);
+          var dx = Math.abs(e.touches[0].clientX - touchStartX);
+          if (dy > MOVE_THRESHOLD || dx > MOVE_THRESHOLD) {
+            touchMoved = true;
+          }
+        }, { passive: true });
+
+        document.addEventListener('touchend', function (e) {
+          var btn = e.target.closest('[data-franja-id]');
+          if (!btn) { touchStartY = 0; touchStartX = 0; return; }
+          if (!touchMoved) {
+            e.preventDefault(); // prevent ghost click
+            var fid = btn.getAttribute('data-franja-id');
+            toggleFranja(fid);
+          }
+          touchStartY = 0;
+          touchStartX = 0;
+          touchMoved = false;
+        });
+
+        // Desktop fallback: click still works for non-touch devices
+        document.addEventListener('click', function (e) {
+          var btn = e.target.closest('[data-franja-id]');
+          if (!btn) return;
+          // On touch devices, touchend already handled it
+          if ('ontouchstart' in window) return;
+          var fid = btn.getAttribute('data-franja-id');
+          toggleFranja(fid);
+        });
+      })();
+      function selectAllFranjes() {
+        FRANJES.forEach(function (f) {
+          selectedFranjes.add(f.id);
+          var el = document.getElementById('fb-' + f.id);
+          if (el) el.classList.add('selected');
+        });
+      }
+      function clearFranjes() {
+        FRANJES.forEach(function (f) {
+          selectedFranjes.delete(f.id);
+          var el = document.getElementById('fb-' + f.id);
+          if (el) el.classList.remove('selected');
+        });
+      }
+      async function enviarAvis() {
+        if (selectedDates.size === 0) { showToastApp('Selecciona almenys un dia'); return; }
+        if (selectedFranjes.size === 0) { showToastApp('Selecciona almenys una franja'); return; }
+
+        const motiu = document.getElementById('avis-motiu');
+        const notes = document.getElementById('avis-notes');
+        const nomDocent = currentPerfil ? currentPerfil.nom : 'Docent';
+        const escolaId = currentPerfil ? currentPerfil.escola_id : null;
+
+        const total = selectedDates.size;
+        let enviats = 0;
+
+        showToastApp('Enviant ' + total + ' avisos...');
+
+        try {
+          const datesArr = Array.from(selectedDates).sort();
+          for (const d of datesArr) {
+            await sbSaveAbsencia({
+              docent_nom: nomDocent,
+              data: d,
+              franges: JSON.stringify(Array.from(selectedFranjes)),
+              motiu: motiu ? (motiu.value || 'No especificat') : 'No especificat',
+              notes: notes ? notes.value : '',
+              estat: 'pendent',
+              escola_id: escolaId
+            });
+            enviats++;
+          }
+
+          var fw = document.getElementById('avis-form-wrap');
+          var as = document.getElementById('avis-sent');
+          if (fw) fw.style.display = 'none';
+          if (as) as.classList.add('show');
+          showToastApp('Enviats correctament ' + total + ' avisos');
+        } catch (e) {
+          console.error('Error guardant absencies:', e);
+          showToastApp('Error enviant avisos. ' + (enviats ? 'Només se n\'han enviat ' + enviats : ''));
+        }
+      }
+
+      function resetAvis() {
+        selectedDates = new Set();
+        selectedFranjes = new Set();
+        updateSelectedDatesUI();
+        var fw = document.getElementById('avis-form-wrap');
+        var as = document.getElementById('avis-sent');
+        var nc = document.getElementById('notif-cobertura');
+        if (fw) fw.style.display = 'block';
+        if (as) as.classList.remove('show');
+        if (nc) nc.style.display = 'none';
+        clearFranjes();
+      }
+
+      // ── UTILS DENTRE DE LA PÀGINA DE DOCENT ──
+
+      function selectToday() {
+        const avui = new Date().toISOString().split('T')[0];
+        selectedDates.clear();
+        selectedDates.add(avui);
+        updateSelectedDatesUI();
+      }
+
+      function addDateFromInput(el) {
+        if (!el.value) return;
+        selectedDates.add(el.value);
+        updateSelectedDatesUI();
+        el.value = ''; // Reset per tornar a seleccionar si cal
+      }
+
+      function removeDate(date) {
+        selectedDates.delete(date);
+        updateSelectedDatesUI();
+      }
+
+      function updateSelectedDatesUI() {
+        const container = document.getElementById('selected-dates-container');
+        if (!container) return;
+
+        if (selectedDates.size === 0) {
+          container.innerHTML = '<div style="font-size:12px;color:var(--ink-3);padding:8px 12px;background:var(--bg-2);border-radius:6px;width:100%">Cap dia seleccionat</div>';
+          return;
+        }
+
+        const datesArr = Array.from(selectedDates).sort();
+        container.innerHTML = datesArr.map(d => {
+          const dataFmt = new Date(d).toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+          return `<div class="sp sp-ink" style="display:flex;align-items:center;gap:6px;padding:6px 12px;font-size:12.5px">
+      ${dataFmt}
+      <span onclick="removeDate('${d}')" style="cursor:pointer;opacity:.6;font-size:14px;font-weight:700">×</span>
+    </div>`;
+        }).join('');
+      }
+
+      // ── AVIS REBUT (JEFA) ──
+      function buildAvisos() {
+        return '<div class="page-hdr"><h1>Avisos rebuts</h1><p>Notificacions d\'absències pendents</p></div>' +
+          '<div id="avisos-list"><div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant avisos...</div></div>' +
+          '<div id="ia-section" style="margin-top:20px"></div>';
+      }
+
+      function buildTP() {
+        return '<div class="page-hdr"><h1>Treball Personal</h1><p>Deutes pendents de devolució</p></div>' +
+          '<div class="alert alert-blue">Quan un docent cobreix durant el seu TP, el sistema registra el deute.</div>' +
+          '<div class="card"><div class="card-head"><h3>Deutes pendents</h3></div><div id="tp-list"></div></div>';
+      }
+
+      function buildHistorial() {
+        return '<div class="page-hdr"><h1>Historial</h1><p>Registre d\'absències per dia</p></div>' +
+          '<div id="historial-list"><div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Carregant...</div></div>';
+      }
+
+      function buildMevesCobertures(name) {
+        return '<div class="page-hdr"><h1>Les meves cobertures</h1></div>' +
+          '<div class="card"><div class="card-head"><h3>Assignades</h3></div>' +
+          '<div id="cob-list"></div></div>';
+      }
+
+      function buildMeuTP(name) {
+        return '<div class="page-hdr"><h1>El meu Treball Personal</h1></div>' +
+          '<div class="alert alert-blue">Quan cobreixes durant el teu TP, es registra un deute.</div>' +
+          '<div class="card"><div class="card-head"><h3>Deutes pendents</h3></div>' +
+          '<div id="meu-tp-list"></div></div>';
+      }
+
+      function buildAvisRebutCard() {
+        return ''; // Avisos carregats des de Supabase via loadAvisosData()
+      }
+
+      // ── IA REAL (Claude API) ──
+      async function maybeGenerateIA() {
+        const section = document.getElementById('ia-section');
+        if (!section || iaGenerated) return;
+        iaGenerated = true;
+
+        const content = document.getElementById('ia-content');
+        if (!content) return;
+
+        // Show spinner
+        content.innerHTML = `<div class="ia-generating" style="padding:20px;text-align:center"><div class="spinner" style="margin:0 auto 10px;width:24px;height:24px;border:3.3px solid var(--bg-3);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite"></div><p style="font-size:13px;color:var(--ink-3)">La IA està analitzant la disponibilitat...</p></div>`;
+
+        // Fix: Get actual teacher name
+        const absentDocent = currentPerfil ? currentPerfil.nom : 'Docent';
+
+        // Fix: Get only selected franges
+        const frangesAbsents = Array.from(selectedFranjes).map(fid => {
+          const f = FRANJES.find(x => x.id === fid);
+          return f ? `${f.label} (${f.time})` : fid;
+        }).join(', ');
+
+        const disponibles = docentsCargats.length > 0 ? docentsCargats.map(function (d) {
+          return { name: d.nom, grup: d.grup_principal || '', tp: d.tp_franges || [], cobertures_mes: d.cobertures_mes || 0 };
+        }) : [{ name: 'Docent disponible', grup: '', tp: [], cobertures_mes: 0 }];
+
+        const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària. Has de proposar una cobertura per a les absències del dia.
+
+DOCENT ABSENT: ${absentDocent}
+FRANGES AFECTADES: ${frangesAbsents}
+
+DOCENTS DISPONIBLES (i el seu Treball Personal -TP- avui):
+${disponibles.map(d => `- ${d.name} (${d.grup}): TP a ${d.tp.join(', ') || 'cap franja'}, cobertures aquest mes: ${d.cobertures_mes}`).join('\n')}
+
+REGLES:
+1. Cap grup pot quedar sense cobrir
+2. Prioritza docents sense TP en aquella franja (si uses el TP d'algú, marca-ho clarament)
+3. Intenta repartir equitativament
+4. Per cada franja, assigna UN docent
+
+Respon NOMÉS amb un JSON vàlid:
+{"proposta":[{"franja":"1a hora","docent":"Nom Cognom","grup_origen":"Xè Y","tp_afectat":false,"motiu":"raó breu"},...],"resum":"frase curta explicant la proposta"}`;
+
+        try {
+          const res = await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'claude-3-5-sonnet-20241022',
+              max_tokens: 1000,
+              messages: [{ role: 'user', content: prompt }]
+            })
+          });
+
+          if (!res.ok) throw new Error('Error al Worker: ' + res.status);
+
+          const data = await res.json();
+
+          // Flexible parsing of worker response
+          let rawText = "";
+          if (data.content && Array.isArray(data.content)) {
+            rawText = data.content.map(b => b.text || "").join("").trim();
+          } else if (typeof data.content === 'string') {
+            rawText = data.content.trim();
+          } else if (data.choices && data.choices[0] && data.choices[0].message) {
+            rawText = data.choices[0].message.content.trim();
+          } else {
+            throw new Error("Format de resposta IA no reconegut");
+          }
+
+          const clean = rawText.replace(/```json|```/g, '').trim();
+          const parsed = JSON.parse(clean);
+
+          if (!content) return;
+
+          const rows = parsed.proposta.map(p => `
+      <div class="ia-row" style="display:flex;align-items:center;gap:10px;padding:12px 10px;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-size:11px;font-weight:700;color:var(--ink-4);text-transform:uppercase">${p.franja}</div>
+          <div style="font-size:14px;font-weight:600">${p.docent} <span style="font-size:12.5px;color:var(--ink-3);font-weight:400">· ${p.grup_origen}</span></div>
+          <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">${p.motiu}</div>
+        </div>
+        ${p.tp_afectat ? '<span class="sp sp-amber" style="font-size:10px">⚠ TP</span>' : ''}
+      </div>`).join('');
+
+          content.innerHTML = `
+      <div style="font-size:12.5px;color:var(--ink-2);margin-bottom:12px;padding:10px 12px;background:var(--green-bg);border-radius:8px;border:1px solid var(--green-mid)">
+        💡 ${parsed.resum}
+      </div>
+      <div class="card" style="margin-bottom:16px;border:1px solid var(--border-2)">${rows}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-green btn-full" onclick="confirmarCobertura()">✓ Confirmar i enviar notificacions</button>
+        <button class="btn btn-ghost btn-full" onclick="regenerarIA()">↺ Generar una altra proposta</button>
+      </div>`;
+
+        } catch (err) {
+          console.error('IA Error:', err);
+          if (!content) return;
+          content.innerHTML = `
+      <div class="alert alert-red" style="margin-bottom:12px">
+        ⚠ <strong>No s'ha pogut generar la proposta</strong><br>
+        <span style="font-size:12px;opacity:0.8">${err.message}</span>
+      </div>
+      <button class="btn btn-ghost btn-full" onclick="regenerarIA()">↺ Tornar-ho a intentar</button>`;
+        }
+      }
+
+      function regenerarIA() {
+        iaGenerated = false;
+        maybeGenerateIA();
+      }
+
+      // ── HORARIS PAGE ──
+      function buildHoraris() {
+        // Reload from Supabase each time
+        sbGetDocents().then(function (data) {
+          if (data && data.length > 0) {
+            docentsCargats = data;
+            const section = document.getElementById('docents-section');
+            const list = document.getElementById('docents-list-app');
+            const count_el = document.getElementById('docents-count');
+            const exportSec = document.getElementById('export-section');
+            if (section) section.style.display = 'block';
+            if (count_el) count_el.textContent = '(' + data.length + ' docents)';
+            if (exportSec) exportSec.style.display = 'block';
+            if (list) list.innerHTML = renderDocentsList();
+          }
+        }).catch(function (e) { console.error('Error carregant docents:', e); });
+        const count = docentsCargats.length;
+        return `<div class="page-wrap" id="horaris-page">
+    <div class="page-hdr"><h1>Horaris del centre</h1><p>Gestiona els horaris de tots els docents</p></div>
+
+    <div class="alert alert-blue">ℹ️ <div>Puja el PDF de l'horari de cada docent. La IA llegirà l'horari automàticament. Fes-ho una vegada al principi de curs o quan canviï algun horari.</div></div>
+
+    ${count === 0 ? `
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:32px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px">
+        <div style="font-size:40px">📅</div>
+        <div style="font-size:15px;font-weight:500;color:var(--ink)">Encara no hi ha horaris carregats</div>
+        <div style="font-size:13px;color:var(--ink-3);max-width:280px;line-height:1.6">Puja els PDFs dels horaris per activar la generació intel·ligent de cobertures</div>
+      </div>
+    </div>` : `
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-head"><h3>✅ Docents carregats</h3><span class="sp sp-green">${count} docents</span></div>
+      <div id="docents-list-app">${renderDocentsList()}</div>
+    </div>`}
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-head"><h3>📄 Afegir / Actualitzar horari</h3></div>
+      <div style="padding:16px">
+        <div style="border:2px dashed var(--border-2);border-radius:var(--r);padding:24px 16px;text-align:center;cursor:pointer;background:var(--bg);margin-bottom:12px" onclick="document.getElementById('pdf-input-app').click()">
+          <input type="file" id="pdf-input-app" accept=".pdf" multiple style="display:none" onchange="handlePDFsApp(this.files)">
+          <div style="font-size:28px;margin-bottom:8px">📄</div>
+          <div style="font-size:14px;font-weight:500;margin-bottom:4px">Puja un PDF d'horari</div>
+          <div style="font-size:12.5px;color:var(--ink-3)">Fes clic aquí · Pots pujar-ne diversos alhora</div>
+        </div>
+        <div id="upload-progress-app"></div>
+      </div>
+    </div>
+
+    ${count > 0 ? `
+    <div class="card">
+      <div class="card-head"><h3>💾 Desar configuració</h3></div>
+      <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:13px;color:var(--ink-3);line-height:1.5">Els horaris queden guardats en aquesta sessió. Per conservar-los permanentment, exporta el JSON i guarda'l.</div>
+        <button class="btn btn-primary btn-full" onclick="exportarHorarisApp()">📋 Exportar JSON dels horaris</button>
+      </div>
+    </div>` : ''}
+  </div>`;
+      }
+
+      function renderDocentsList() {
+        const COLORS_LIST = ['var(--green)', 'var(--blue)', 'var(--amber)', 'var(--red)', 'var(--purple)', 'var(--ink)'];
+
+        // Group by level based on grup_principal
+        const NIVELLS = [
+          { key: 'infantil', label: 'Infantil', match: function (g) { return g && /^I/i.test(g.trim()); } },
+          { key: 'p1', label: '1r', match: function (g) { return g && /^1/i.test(g.trim()); } },
+          { key: 'p2', label: '2n', match: function (g) { return g && /^2/i.test(g.trim()); } },
+          { key: 'p3', label: '3r', match: function (g) { return g && /^3/i.test(g.trim()); } },
+          { key: 'p4', label: '4t', match: function (g) { return g && /^4/i.test(g.trim()); } },
+          { key: 'p5', label: '5è', match: function (g) { return g && /^5/i.test(g.trim()); } },
+          { key: 'p6', label: '6è', match: function (g) { return g && /^6/i.test(g.trim()); } },
+          { key: 'ee', label: 'Ed. Especial / Especialistes', match: function (g) { return true; } },
+        ];
+
+        // Assign each docent to a nivell
+        var groups = {};
+        NIVELLS.forEach(function (n) { groups[n.key] = []; });
+
+        docentsCargats.forEach(function (d, i) {
+          var g = d.grup_principal || '';
+          var assigned = false;
+          for (var ni = 0; ni < NIVELLS.length - 1; ni++) {
+            if (NIVELLS[ni].match(g)) {
+              groups[NIVELLS[ni].key].push({ d: d, i: i });
+              assigned = true;
+              break;
+            }
+          }
+          if (!assigned) groups['ee'].push({ d: d, i: i });
+        });
+
+        var html = '';
+        NIVELLS.forEach(function (n) {
+          var items = groups[n.key];
+          if (items.length === 0) return;
+          html += '<div style="padding:8px 16px 4px;font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;background:var(--bg-2);border-bottom:1px solid var(--border)">' + n.label + '</div>';
+          items.forEach(function (entry) {
+            var d = entry.d, i = entry.i;
+            const initials = d.nom.split(' ').map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
+            const color = COLORS_LIST[i % COLORS_LIST.length];
+            const rolLabel = { tutor: 'Tutor/a', especialista: 'Especialista', ee: 'Ed. Especial', directiu: 'Equip Directiu' }[d.rol] || d.rol;
+            html += '<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border)">' +
+              '<div style="width:34px;height:34px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">' + initials + '</div>' +
+              '<div style="flex:1">' +
+              '<div style="font-size:13.5px;font-weight:500">' + d.nom + '</div>' +
+              '<div style="font-size:12px;color:var(--ink-3)">' + rolLabel + (d.grup_principal ? ' · ' + d.grup_principal : '') + ' · ' + d.tp_franges.length + ' trams TP</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:6px;align-items:center">' +
+              '<button class="btn btn-sm" onclick="editarDocentApp(' + i + ')" style="padding:5px 10px;font-size:12px;background:var(--blue-bg);color:var(--blue);border-color:var(--blue)" title="Editar horari">✏️ Editar</button>' +
+              '<button class="btn btn-sm btn-ghost" onclick="eliminarDocentApp(' + i + ')" style="padding:4px 8px;font-size:12px" title="Eliminar docent">✕</button>' +
+              '</div></div>';
+          });
+        });
+
+        return html + '<div style="height:1px"></div>';
+      }
+
+      function editarDocentApp(i) {
+        var d = docentsCargats[i];
+        if (!d) return;
+        // Use showHorariConfirmModal with existing data
+        showHorariConfirmModal(d, d.nom).then(function () {
+          showPage('jhoraris');
+        });
+      }
+
+      async function handlePDFsApp(fileList) {
+        const files = Array.from(fileList).filter(f => f.type === 'application/pdf');
+        if (!files.length) return;
+
+        const progressEl = document.getElementById('upload-progress-app');
+        if (!progressEl) return;
+
+        for (const file of files) {
+          const rowId = 'prog-' + Date.now();
+          const row = document.createElement('div');
+          row.id = rowId;
+          row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-2);border-radius:var(--r-sm);margin-bottom:8px';
+          row.innerHTML = `<div style="width:20px;height:20px;border:2.5px solid var(--bg-3);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>
+      <div style="flex:1"><div style="font-size:13px;font-weight:500">${file.name}</div><div style="font-size:11.5px;color:var(--ink-3)" id="msg-${rowId}">Llegint el PDF...</div></div>`;
+          progressEl.appendChild(row);
+
+          try {
+            const base64 = await fileToBase64App(file);
+            document.getElementById('msg-' + rowId).textContent = 'La IA analitzant...';
+
+            const result = await extractHorariApp(base64, file.name);
+
+            document.getElementById('msg-' + rowId).textContent = 'Llest — Confirmant...';
+            row.querySelector('div').outerHTML = '<div style="width:20px;height:20px;border-radius:50%;background:var(--green-bg);border:1.5px solid var(--green-mid);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">✓</div>';
+
+            await showHorariConfirmModal(result, file.name);
+
+          } catch (err) {
+            console.error(err);
+            document.getElementById('msg-' + rowId).textContent = '⚠ Error en processar';
+          }
+        }
+        // Refresh horaris page after all modals are closed
+        setTimeout(function () { showPage('jhoraris'); }, 300);
+      }
+
+      function fileToBase64App(file) {
+        return new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result.split(',')[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function extractHorariApp(base64, filename) {
+        const prompt = `Ets un assistent que extreu horaris de documents PDF d'un centre educatiu de primària.
+Analitza aquest PDF i extreu l'horari del docent.
+
+Les franges del centre (cada 30 minuts):
+f1a=9:00-9:30, f1b=9:30-10:00 (1a hora)
+f2a=10:00-10:30 (2a hora)
+patiA=10:30-11:00 (Pati A, grups 1r-2n-3r)
+patiB=11:00-11:30 (Pati B, Infantil-4t-5e-6e)
+f3a=11:30-12:00, f3b=12:00-12:30 (3a hora)
+f4=12:30-15:00 (Dinar, sempre Lliure)
+f5a=15:00-15:30, f5b=15:30-16:00, f5c=16:00-16:30 (5a hora)
+Per cada franja i dia indica:
+- Si és Treball Personal: "TP"
+- Si no té classe: "Lliure"
+- Si vigila pati: "Pati"
+- Si és TUTOR/A i té classe amb el seu grup: posa el grup seguit de l'activitat (ex: "1r A · Lectura", "1r A · Innovamat", "1r A · Tutoria"). Sempre inclou el grup primer.
+- Si és especialista o EE: posa el grup que atén seguit de l'especialitat (ex: "3r B · Música", "2n A · Ed.Física").
+Rol possibles: tutor, especialista, ee (educació especial), directiu.
+
+Respon ÚNICAMENT amb JSON vàlid:
+{"nom":"Nom Cognom","rol":"tutor","grup_principal":"1r A","horari":{"dilluns":{"f1a":"","f1b":"","f2a":"","patiA":"","patiB":"","f3a":"","f3b":"","f4":"Lliure","f5a":"","f5b":"","f5c":""},"dimarts":{"f1a":"","f1b":"","f2a":"","patiA":"","patiB":"","f3a":"","f3b":"","f4":"Lliure","f5a":"","f5b":"","f5c":""},"dimecres":{"f1a":"","f1b":"","f2a":"","patiA":"","patiB":"","f3a":"","f3b":"","f4":"Lliure","f5a":"","f5b":"","f5c":""},"dijous":{"f1a":"","f1b":"","f2a":"","patiA":"","patiB":"","f3a":"","f3b":"","f4":"Lliure","f5a":"","f5b":"","f5c":""},"divendres":{"f1a":"","f1b":"","f2a":"","patiA":"","patiB":"","f3a":"","f3b":"","f4":"Lliure","f5a":"","f5b":"","f5c":""}},"tp_franges":["divendres-f5a"],"observacions":""}`;
+
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 2000,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+                { type: 'text', text: prompt }
+              ]
+            }]
+          })
+        });
+        const data = await res.json();
+        const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+        return JSON.parse(raw);
+      }
+
+      function getCellBg(val) {
+        if (!val) return 'background:var(--green-bg)';
+        var v = val.toLowerCase().trim();
+        if (v === 'tp' || v === 'treball personal') return 'background:var(--amber-bg)';
+        if (v === 'lliure' || v === 'libre' || v === '') return 'background:var(--green-bg)';
+        if (v === 'pati' || v.startsWith('pati')) return 'background:var(--bg-3)';
+        // Any value with content (grup · activitat, grup name, activitat) = blue
+        return 'background:var(--blue-bg)';
+      }
+
+      function updateCellColor(input) {
+        var td = input.parentElement;
+        var val = input.value.trim();
+        var v = val.toLowerCase();
+        if (v === 'tp' || v === 'treball personal') {
+          td.style.background = 'var(--amber-bg)';
+        } else if (v === '' || v === 'lliure' || v === 'libre') {
+          td.style.background = 'var(--green-bg)';
+        } else if (v === 'pati' || v.startsWith('pati')) {
+          td.style.background = 'var(--bg-3)';
+        } else {
+          td.style.background = 'var(--blue-bg)';
+        }
+      }
+
+      function quickFillRow(franjaId, value) {
+        var inputs = document.querySelectorAll('#hm-tbody input[data-franja="' + franjaId + '"]');
+        inputs.forEach(function (inp) {
+          inp.value = value;
+          updateCellColor(inp);
+        });
+      }
+
+      function quickFillCol(dia, value) {
+        var inputs = document.querySelectorAll('#hm-tbody input[data-dia="' + dia + '"]');
+        inputs.forEach(function (inp) {
+          inp.value = value;
+          updateCellColor(inp);
+        });
+      }
+
+      function showHorariConfirmModal(data, filename) {
+        return new Promise(function (resolve) {
+          horariPendingResolve = resolve;
+          // Show confirm UI inline inside the page - no modal needed
+          var confirmHTML = buildHorariConfirmUI(data, filename);
+          var mob = document.getElementById('mob-page');
+          var desk = document.getElementById('desk-content');
+          if (mob) mob.innerHTML = confirmHTML;
+          if (desk) desk.innerHTML = confirmHTML;
+          // Scroll to top
+          window.scrollTo(0, 0);
+          // Re-init the table cells
+          setTimeout(function () {
+            var FL = [
+              { id: 'f1a', label: '1a hora', sub: '9:00-9:30', hora: '1a hora' },
+              { id: 'f1b', label: '1a hora', sub: '9:30-10:00', hora: '1a hora' },
+              { id: 'f2a', label: '2a hora', sub: '10:00-10:30', hora: '2a hora' },
+              { id: 'patiA', label: 'Pati A', sub: '10:30-11:00', hora: 'Pati A', patio: true },
+              { id: 'patiB', label: 'Pati B', sub: '11:00-11:30', hora: 'Pati B', patio: true },
+              { id: 'f3a', label: '3a hora', sub: '11:30-12:00', hora: '3a hora' },
+              { id: 'f3b', label: '3a hora', sub: '12:00-12:30', hora: '3a hora' },
+              { id: 'f4', label: 'Dinar', sub: '12:30-15:00', hora: 'Dinar', lliure: true },
+              { id: 'f5a', label: '5a hora', sub: '15:00-15:30', hora: '5a hora' },
+              { id: 'f5b', label: '5a hora', sub: '15:30-16:00', hora: '5a hora' },
+              { id: 'f5c', label: '5a hora', sub: '16:00-16:30', hora: '5a hora' },
+            ];
+            var DL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+            var tbody = document.getElementById('inline-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            // Group FL by hora for rowspan display
+            var horaGroups = {};
+            FL.forEach(function (f) { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
+            FL.forEach(function (f) {
+              var tr = document.createElement('tr');
+              var sameHora = horaGroups[f.hora];
+              var isFirst = sameHora[0].id === f.id;
+              var rowspan = sameHora.length;
+              var html = '';
+              // Col 1: hora label with rowspan (only first sub-slot)
+              if (isFirst) {
+                html += '<td rowspan="' + rowspan + '" style="font-size:11px;font-weight:600;color:var(--ink-3);white-space:nowrap;padding:5px 6px;border:1px solid var(--border);background:var(--bg-2);vertical-align:middle;width:60px">' + f.label + '</td>';
+              }
+              // Col 2: sub-slot time
+              html += '<td style="font-size:10px;color:var(--ink-4);white-space:nowrap;padding:4px 6px;border:1px solid var(--border);background:var(--bg-2);width:72px">' + (f.sub || f.time || '') + '</td>';
+              DL.forEach(function (dia) {
+                if (f.lliure) {
+                  html += '<td style="padding:3px;border:1px solid var(--border);min-width:75px;background:var(--green-bg)"><input disabled style="width:100%;border:none;background:transparent;font-family:inherit;font-size:10px;text-align:center;padding:2px 2px;color:var(--green);font-weight:600" value="Lliure" data-dia="' + dia + '" data-franja="' + f.id + '"></td>';
+                  return;
+                }
+                var val = (data.horari && data.horari[dia] && data.horari[dia][f.id]) ? data.horari[dia][f.id] : '';
+                var v = val.toLowerCase().trim();
+                var bg = '';
+                if (v === 'tp' || v === 'treball personal') bg = 'background:var(--amber-bg)';
+                else if (v === 'lliure' || v === 'libre') bg = 'background:var(--green-bg)';
+                else if (v === 'pati' || v === 'patia' || v === 'patib') bg = 'background:var(--bg-3)';
+                else if (val) bg = 'background:var(--blue-bg)';
+                html += '<td style="padding:3px;border:1px solid var(--border);min-width:75px;' + bg + ';transition:background .15s"><input oninput="updateCellColor(this)" style="width:100%;border:none;background:transparent;font-family:inherit;font-size:10px;text-align:center;padding:2px 2px;color:var(--ink);border-radius:3px" value="' + val.replace(/"/g, '&quot;') + '" data-dia="' + dia + '" data-franja="' + f.id + '"></td>';
+              });
+              tr.innerHTML = html;
+              tbody.appendChild(tr);
+            });
+          }, 50);
+        });
+      }
+
+      function buildHorariConfirmUI(data, filename) {
+        var nom = data.nom || filename;
+        return '<div class="page-hdr"><h1>Confirma l\'horari</h1><p>Revisa que la IA ha llegit correctament l\'horari de <strong>' + nom + '</strong></p></div>' +
+          '<div class="card" style="margin-bottom:14px">' +
+          '<div class="card-head"><h3>Dades del docent</h3></div>' +
+          '<div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+          '<div><label class="f-label">Nom</label><input type="text" class="f-ctrl" id="hm-nom" value="' + nom.replace(/"/g, '&quot;') + '"></div>' +
+          '<div><label class="f-label">Rol</label><select class="f-ctrl" id="hm-rol"><option value="tutor"' + (data.rol === 'tutor' ? ' selected' : '') + '>Tutor/a</option><option value="especialista"' + (data.rol === 'especialista' ? ' selected' : '') + '>Especialista</option><option value="ee"' + (data.rol === 'ee' ? ' selected' : '') + '>Ed. Especial</option><option value="directiu"' + (data.rol === 'directiu' ? ' selected' : '') + '>Equip Directiu</option></select></div>' +
+          '<div style="grid-column:span 2"><label class="f-label">Grup principal</label><input type="text" class="f-ctrl" id="hm-grup" value="' + (data.grup_principal || '').replace(/"/g, '&quot;') + '"></div>' +
+          '</div></div>' +
+          '<div class="card" style="margin-bottom:14px">' +
+          '<div class="card-head"><h3>Horari extret per la IA <span style="font-size:12px;font-weight:400;color:var(--ink-3)">(pots editar)</span></h3></div>' +
+          '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px">' +
+          '<table style="border-collapse:collapse;width:100%;min-width:500px">' +
+          '<thead><tr>' +
+          '<th colspan="2" style="padding:6px 8px;border:1px solid var(--border);background:var(--bg-2);font-size:10px;font-weight:600;color:var(--ink-3);text-align:left;text-transform:uppercase;white-space:nowrap">Horari</th>' +
+          '<th style="padding:7px 6px;border:1px solid var(--border);background:var(--bg-2);font-size:10px;font-weight:600;color:var(--ink-2);text-align:center">Dll</th>' +
+          '<th style="padding:7px 6px;border:1px solid var(--border);background:var(--bg-2);font-size:10px;font-weight:600;color:var(--ink-2);text-align:center">Dm</th>' +
+          '<th style="padding:7px 6px;border:1px solid var(--border);background:var(--bg-2);font-size:10px;font-weight:600;color:var(--ink-2);text-align:center">Dc</th>' +
+          '<th style="padding:7px 6px;border:1px solid var(--border);background:var(--bg-2);font-size:10px;font-weight:600;color:var(--ink-2);text-align:center">Dj</th>' +
+          '<th style="padding:7px 6px;border:1px solid var(--border);background:var(--bg-2);font-size:10px;font-weight:600;color:var(--ink-2);text-align:center">Dv</th>' +
+          '</tr></thead>' +
+          '<tbody id="inline-tbody"></tbody>' +
+          '</table></div></div>' +
+          '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:60px">' +
+          '<button class="btn btn-full" style="padding:14px;background:var(--green);color:#fff;border:none;font-size:14px;font-weight:600;border-radius:var(--r)" onclick="saveHorariApp()">✓ Confirmar i guardar</button>' +
+          '<button class="btn btn-ghost btn-full" style="padding:13px" onclick="cancelarConfirm()">Cancel·lar</button>' +
+          '</div>';
+      }
+
+      function goAvisos() { showPage('javis'); }
+
+      function cancelarConfirm() {
+        if (horariPendingResolve) { horariPendingResolve(); horariPendingResolve = null; }
+        showPage('jhoraris');
+      }
+
+
+      function saveHorariApp() {
+        const inputs = document.querySelectorAll('#hm-tbody input, #inline-tbody input');
+        const DIES_LIST = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+        const horari = {};
+        DIES_LIST.forEach(d => horari[d] = {});
+        inputs.forEach(inp => { horari[inp.dataset.dia][inp.dataset.franja] = inp.value.trim(); });
+
+        const tpFranges = [];
+        Object.entries(horari).forEach(([dia, franjes]) => {
+          Object.entries(franjes).forEach(([franja, val]) => {
+            if (val.toLowerCase() === 'tp' || val.toLowerCase() === 'treball personal') tpFranges.push(dia + '-' + franja);
+          });
+        });
+
+        const nom = document.getElementById('hm-nom').value.trim();
+        const existingIdx = docentsCargats.findIndex(d => d.nom.toLowerCase() === nom.toLowerCase());
+
+        const isNew = existingIdx < 0;
+        const docent = {
+          nom: nom,
+          rol: document.getElementById('hm-rol').value,
+          grup_principal: document.getElementById('hm-grup').value.trim(),
+          horari: horari,
+          tp_franges: tpFranges,
+          cobertures_mes: isNew ? 0 : (docentsCargats[existingIdx].cobertures_mes || 0),
+          actiu: true,
+        };
+        if (!isNew && docentsCargats[existingIdx].id) {
+          docent.id = docentsCargats[existingIdx].id;
+        }
+
+        if (!isNew) {
+          docentsCargats[existingIdx] = Object.assign({}, docentsCargats[existingIdx], docent);
+          sbSaveDocent(docent).then(function () {
+            showToastApp('Horari de ' + nom + ' actualitzat');
+            showPage('jhoraris');
+          }).catch(function (e) {
+            console.error('Error guardant:', e);
+            showToastApp('Error guardant. Comprova la connexió.');
+          });
+        } else {
+          sbSaveDocent(docent).then(function (saved) {
+            if (saved && saved[0]) {
+              docent.id = saved[0].id;
+              docentsCargats.push(docent);
+              showToastApp('Horari de ' + nom + ' afegit correctament');
+              showPage('jhoraris');
+            }
+          }).catch(function (e) {
+            console.error('Error guardant:', e);
+            showToastApp('Error guardant. Comprova la connexió.');
+          });
+        }
+
+        document.getElementById('modal-horari-app').classList.remove('open');
+        if (horariPendingResolve) { horariPendingResolve(); horariPendingResolve = null; }
+      }
+
+      function eliminarDocentApp(i) {
+        const nom = docentsCargats[i].nom;
+        const id = docentsCargats[i].id;
+        docentsCargats.splice(i, 1);
+        if (id) sbDeleteDocent(id).catch(function (e) { console.error('Error eliminant docent:', e); });
+        showPage('jhoraris');
+        showToastApp('Docent ' + nom + ' eliminat');
+      }
+
+      function exportarHorarisApp() {
+        const json = JSON.stringify(docentsCargats, null, 2);
+        navigator.clipboard.writeText(json).then(() => {
+          showToastApp('✅ JSON copiat al porta-retalls');
+        }).catch(() => {
+          const ta = document.createElement('textarea');
+          ta.value = json;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showToastApp('✅ JSON copiat al porta-retalls');
+        });
+      }
+
+      function showToastApp(msg) {
+        const el = document.getElementById('toast-el');
+        document.getElementById('toast-msg').textContent = msg;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 3000);
+      }
+
+
+      function buildAvui() {
+        // Load real data and update grid
+        setTimeout(async function () {
+          try {
+            // Load TP deutes
+            var deutes = await sbGetDeutesTP();
+            var kpiTpNum = document.getElementById('kpi-tp-num');
+            var kpiTpSubs = document.getElementById('kpi-tp-subs');
+            if (kpiTpNum) kpiTpNum.textContent = deutes ? deutes.length : 0;
+            if (kpiTpSubs && deutes) {
+              var sensData = deutes.filter(function (d) { return !d.data_devolucio; }).length;
+              var ambData = deutes.filter(function (d) { return d.data_devolucio; }).length;
+              kpiTpSubs.innerHTML = (sensData > 0 ? '<span class="sp sp-red" style="font-size:10px">' + sensData + ' sense data</span>' : '') +
+                (ambData > 0 ? '<span class="sp sp-amber" style="font-size:10px">' + ambData + ' programat</span>' : '') +
+                (deutes.length === 0 ? '<span class="sp sp-green" style="font-size:10px">Tot al dia</span>' : '');
+            }
+
+            var absencies = await sbGetAbsenciesAvui();
+            var avuiDateStr = new Date().toISOString().split('T')[0];
+            var cobertures = await supaFetch('cobertures?data=eq.' + avuiDateStr);
+            var pendentsTotal = (absencies || []).filter(function (a) { return a.estat === 'pendent'; });
+            var resoltesTotal = (absencies || []).filter(function (a) { return a.estat === 'resolt'; });
+
+            var kpiAbs = document.getElementById('kpi-abs');
+            var kpiAbsP = kpiAbs ? kpiAbs.nextElementSibling : null;
+
+            if (kpiAbs) {
+              if (pendentsTotal.length === 0) {
+                kpiAbs.innerHTML = '0';
+                kpiAbs.style.color = 'var(--green)';
+                if (kpiAbsP) kpiAbsP.innerHTML = '<span class="sp sp-green" style="font-size:10px">Tot cobert</span>' + (resoltesTotal.length > 0 ? '<span class="sp sp-amber" style="font-size:10px;margin-left:5px">' + resoltesTotal.length + ' resolt</span>' : '');
+              } else {
+                kpiAbs.innerHTML = pendentsTotal.length;
+                kpiAbs.style.color = 'var(--red)';
+                if (kpiAbsP) kpiAbsP.innerHTML = pendentsTotal.map(function (a) { return '<span class="sp sp-red" style="font-size:10px;margin-right:2px">' + a.docent_nom.split(' ')[0] + '</span>'; }).join('') + (resoltesTotal.length > 0 ? '<span class="sp sp-amber" style="font-size:10px;margin-left:5px">' + resoltesTotal.length + ' resolt</span>' : '');
+              }
+            }
+
+            // Update grid - find col index by grup name
+            var table = document.getElementById('avui-table');
+            if (!table) return;
+            var ths = table.querySelectorAll('thead th');
+            var colMap = {};
+            // Store both original and normalized keys
+            ths.forEach(function (th, i) {
+              var txt = th.textContent.trim();
+              colMap[txt] = i;
+              // Also store normalized version
+              var norm = txt.toLowerCase().replace(/[\s\-\.]/g, '').replace(/è|é/g, 'e').replace(/à/g, 'a').replace(/ò|ó/g, 'o').replace(/ú|ü/g, 'u').replace(/í|ï/g, 'i');
+              colMap['__norm__' + norm] = i;
+            });
+
+            absencies.forEach(function (a) {
+              if (a.estat === 'arxivat') return;
+              var isPendent = (a.estat === 'pendent');
+              var isResolt = (a.estat === 'resolt');
+              if (!isPendent && !isResolt) return;
+
+              var franges = [];
+              try { franges = JSON.parse(a.franges || '[]'); } catch (e) { }
+              var docent = docentsCargats.find(function (d) { return d.nom === a.docent_nom; });
+              if (!docent || !docent.grup_principal) return;
+
+              var grupRaw = docent.grup_principal || '';
+              var grupNorm = normGrup(grupRaw);
+              var colIdx;
+              if (colMap[grupRaw] !== undefined) colIdx = colMap[grupRaw];
+              if (colIdx === undefined) colIdx = colMap['__norm__' + grupNorm];
+              if (colIdx === undefined) {
+                Object.keys(colMap).forEach(function (k) {
+                  if (!k.startsWith('__norm__') && normGrup(k) === grupNorm) colIdx = colMap[k];
+                });
+              }
+              if (colIdx === undefined) return;
+              var grup = grupRaw;
+
+              franges.forEach(function (franjaId) {
+                var franja = FRANJES.find(function (f) { return f.id === franjaId; });
+                if (!franja) return;
+                var rows = table.querySelectorAll('tbody tr');
+                var currentBloc = '';
+                rows.forEach(function (row) {
+                  if (row.cells[0] && row.cells[0].rowSpan > 1) {
+                    currentBloc = row.cells[0].textContent.trim().split('\n')[0].trim();
+                  } else if (row.cells[0] && row.cells[0].textContent.trim()) {
+                    currentBloc = row.cells[0].textContent.trim().split('\n')[0].trim();
+                  }
+
+                  var matches = currentBloc === franja.label || currentBloc.toLowerCase() === franja.label.toLowerCase();
+                  if (matches) {
+                    var cell = row.cells[colIdx];
+                    if (cell && !cell.dataset.absent) {
+                      cell.dataset.absent = '1';
+
+                      if (isPendent) {
+                        cell.style.background = 'var(--red-bg)';
+                        cell.style.borderColor = '#F0C0B8';
+                        cell.style.cursor = 'pointer';
+                        cell.innerHTML = '<span style="font-size:10px;font-weight:700;color:var(--red)">!</span>';
+                        var g = grup, fl = franja.label, ft = franja.time, aid = a.id;
+                        cell.onclick = function () { cobrimDesdeCella(g, fl, ft, aid); };
+                      } else if (isResolt) {
+                        // Find matching cobertura
+                        var myCob = (cobertures || []).find(function (c) {
+                          return c.absencia_id === a.id && (c.franja === franjaId || c.franja === franja.label || c.franja === franja.hora);
+                        });
+
+                        cell.style.background = 'var(--amber-bg)';
+                        cell.style.borderColor = '#F0D5A8';
+                        cell.style.cursor = 'default';
+                        cell.onclick = null;
+
+                        var txt = myCob ? myCob.docent_cobrint_nom.split(' ')[0] : 'Cobert';
+                        cell.innerHTML = '<span style="font-size:9.5px;font-weight:700;color:var(--amber)">' + txt + '</span>';
+                      }
+                    }
+                  }
+                });
+              });
+            });
+          } catch (e) { console.log('Error carregant dades avui:', e); }
+        }, 200);
+
+        // Original static build continues below
+        var _orig = function () {
+          var GRUPS = ['I3A', 'I3B', 'I4A', 'I4B', 'I5A', 'I5B', '1rA', '1rB', '2nA', '2nB', '3rA', '3rB', '4tA', '4tB', '5eA', '5eB', '6eA', '6eB'];
+          var BLOCS = [
+            { hora: '1a hora', slots: [{ t: '9:00-9:30', cels: {} }, { t: '9:30-10:00', cels: {} }] },
+            { hora: '2a hora', slots: [{ t: '10:00-10:30', cels: {} }, { t: '10:30-11:00', cels: {} }] },
+            { hora: 'Pati A', slots: [{ t: '10:30-11:00', cels: {} }] },
+            { hora: 'Pati B', slots: [{ t: '11:00-11:30', cels: {} }] },
+            { hora: '3a hora', slots: [{ t: '11:30-12:00', cels: {} }, { t: '12:00-12:30', cels: {} }] },
+            { hora: 'Dinar', slots: [{ t: '12:30-15:00', cels: {} }] },
+            { hora: '5a hora', slots: [{ t: '15:00-15:30', cels: {} }, { t: '15:30-16:00', cels: {} }, { t: '16:00-16:30', cels: {} }] },
+          ];
+          var CS = {
+            ok: { bg: 'var(--green-bg)', bc: 'var(--green-mid)', color: 'var(--green)', txt: '&#10003;', click: false },
+            cobert: { bg: 'var(--amber-bg)', bc: '#F0D5A8', color: 'var(--amber)', txt: '&#10003;', click: false },
+            pendent: { bg: 'var(--red-bg)', bc: '#F0C0B8', color: 'var(--red)', txt: '!', click: true },
+          };
+
+          // Build thead - 2 sticky cols: hora name + time slot
+          var thead = '<tr>';
+          thead += '<th style="position:sticky;left:0;z-index:2;background:var(--bg-2);padding:5px 6px;border:1px solid var(--border);font-size:9px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;text-align:left;min-width:58px;max-width:58px">Hora</th>';
+          thead += '<th style="position:sticky;left:58px;z-index:2;background:var(--bg-2);padding:5px 5px;border:1px solid var(--border);font-size:9px;font-weight:600;color:var(--ink-3);text-align:left;min-width:60px;max-width:60px;white-space:nowrap">Tram</th>';
+          GRUPS.forEach(function (g) {
+            thead += '<th style="padding:5px 3px;border:1px solid var(--border);background:var(--bg-2);font-size:9px;font-weight:600;color:var(--ink-2);text-align:center;white-space:nowrap">' + g + '</th>';
+          });
+          thead += '</tr>';
+
+          // Build tbody
+          var tbody = '';
+          BLOCS.forEach(function (bloc) {
+            var rowspan = bloc.slots.length;
+            bloc.slots.forEach(function (slot, si) {
+              var row = '<tr>';
+
+              // Col 1: hora name (rowspan)
+              if (si === 0) {
+                row += '<td rowspan="' + rowspan + '" style="position:sticky;left:0;z-index:1;background:var(--bg-2);padding:4px 6px;border:1px solid var(--border);vertical-align:middle;white-space:nowrap;min-width:58px;max-width:58px;font-size:10px;font-weight:700;color:var(--ink-2)">' + bloc.hora + '</td>';
+              }
+              // Col 2: time slot
+              row += '<td style="position:sticky;left:58px;z-index:1;background:var(--bg-2);padding:4px 5px;border:1px solid var(--border);white-space:nowrap;font-size:9px;color:var(--ink-3);min-width:60px;max-width:60px">' + slot.t + '</td>';
+
+              // Group cells
+              GRUPS.forEach(function (g) {
+                var estat = (slot.cels && slot.cels[g]) ? slot.cels[g] : 'ok';
+                var s = CS[estat] || CS.ok;
+                if (s.click) {
+                  row += '<td onclick="cobrimDesdeCella(\'' + g + '\',\'' + bloc.hora + '\',\'' + slot.t + '\')" style="padding:4px 2px;border:1px solid ' + s.bc + ';text-align:center;background:' + s.bg + ';cursor:pointer"><span style="font-size:10px;font-weight:700;color:' + s.color + '">!</span></td>';
+                } else {
+                  row += '<td style="padding:3px 1px;border:1px solid ' + s.bc + ';text-align:center;background:' + s.bg + '"><span style="font-size:10px;font-weight:700;color:' + s.color + '">' + s.txt + '</span></td>';
+                }
+              });
+
+              row += '</tr>';
+              tbody += row;
+            });
+          });
+
+          var d = new Date();
+          var dtStr = ['Diumenge', 'Dilluns', 'Dimarts', 'Dimecres', 'Dijous', 'Divendres', 'Dissabte'][d.getDay()] + ', ' + d.getDate() + ' de ' + ['gener', 'febrer', 'març', 'abril', 'maig', 'juny', 'juliol', 'agost', 'setembre', 'octubre', 'novembre', 'desembre'][d.getMonth()] + ' de ' + d.getFullYear();
+          var html = '';
+          html += '<div class="page-hdr" style="margin-bottom:12px"><h1>Avui</h1><p>' + dtStr + '</p></div>';
+
+          html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+          html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px 14px;box-shadow:var(--sh);position:relative;overflow:hidden">';
+          html += '<div style="position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red)"></div>';
+          html += '<div style="font-size:10px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px">Absencies avui</div>';
+          html += '<div id="kpi-abs" style="font-family:Georgia,serif;font-size:36px;font-weight:400;line-height:1;color:var(--red);margin-bottom:5px">...</div>';
+          html += '<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="sp sp-red" style="font-size:10px">1 sense cobrir</span><span class="sp sp-amber" style="font-size:10px">1 pendent just.</span></div>';
+          html += '</div>';
+          html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px 14px;box-shadow:var(--sh);position:relative;overflow:hidden">';
+          html += '<div style="position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--amber)"></div>';
+          html += '<div style="font-size:10px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px">Deutes TP</div>';
+          html += '<div id="kpi-tp-num" style="font-family:Georgia,serif;font-size:36px;font-weight:400;line-height:1;color:var(--amber);margin-bottom:5px">...</div>';
+          html += '<div id="kpi-tp-subs" style="display:flex;gap:5px;flex-wrap:wrap"></div>';
+          html += '</div></div>';
+
+          html += '<div class="alert alert-amber" style="cursor:pointer;padding:9px 12px;font-size:12.5px" onclick="goAvisos()">&#128276; <div>Consulta els <strong>Avisos rebuts</strong> per veure les absencies del dia. <span style="text-decoration:underline">Veure &rarr;</span></div></div>';
+
+          html += '<div class="card">';
+          html += '<div class="card-head" style="padding:10px 14px">';
+          html += '<h3 style="font-size:13px">Estat dels grups</h3>';
+          html += '<div style="display:flex;gap:8px;align-items:center;font-size:10.5px;color:var(--ink-3)">';
+          html += '<span style="display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;border-radius:2px;background:var(--green-bg);border:1px solid var(--green-mid);display:inline-block"></span>OK</span>';
+          html += '<span style="display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;border-radius:2px;background:var(--amber-bg);border:1px solid #F0D5A8;display:inline-block"></span>Cobert</span>';
+          html += '<span style="display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;border-radius:2px;background:var(--red-bg);border:1px solid #F0C0B8;display:inline-block"></span>Pendent</span>';
+          html += '</div></div>';
+          html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">';
+          html += '<table id="avui-table" style="border-collapse:collapse;width:100%;min-width:620px">';
+          html += '<thead>' + thead + '</thead>';
+          html += '<tbody>' + tbody + '</tbody>';
+          html += '</table></div></div>';
+
+          return html;
+        }; return _orig();
+      }
+      function cobrimDesdeCella(grup, hora, temps, avisId) {
+        iaGenerated = false;
+        currentCellaGrup = grup;
+        currentCellaHora = hora;
+        currentCellaTemps = temps;
+        currentAvisId = avisId || null;
+        var mob = document.getElementById('mob-page');
+        var desk = document.getElementById('desk-content');
+        var html = buildCoberturaIA(grup, hora, temps);
+        if (mob) mob.innerHTML = html;
+        if (desk) desk.innerHTML = html;
+        window.scrollTo(0, 0);
+        setTimeout(function () { generarIACella(grup, hora, temps); }, 150);
+      }
+
+      var currentCellaGrup = '', currentCellaHora = '', currentCellaTemps = '', currentAvisId = null;
+
+      function buildCoberturaIA(grup, hora, temps) {
+        return '<div class="page-hdr"><h1>Cobrir ' + grup + '</h1><p>' + hora + ' · ' + temps + '</p></div>' +
+          '<div class="card">' +
+          '<div style="background:var(--ink);padding:14px 16px;display:flex;align-items:center;gap:10px">' +
+          '<div style="flex:1"><div style="font-size:14px;font-weight:500;color:#fff">Generant proposta amb IA</div>' +
+          '<div style="font-size:12px;color:rgba(255,255,255,.4)">La IA analitza la disponibilitat...</div></div>' +
+          '</div>' +
+          '<div id="ia-content" style="padding:16px">' +
+          '<div class="ia-generating"><div class="spinner"></div><p>La IA buscant el millor docent...</p></div>' +
+          '</div></div>' +
+          '<button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="showPage(&quot;jd&quot;)">&#8592; Tornar a Avui</button>';
+      }
+
+      async function generarIACella(grup, hora, temps) {
+        const iaContent = document.getElementById('ia-content');
+        if (iaContent) iaContent.innerHTML = '<div class="ia-generating"><div class="spinner"></div><p>La IA buscant docent per ' + grup + ' · ' + hora + '...</p></div>';
+        const dl = docentsCargats.length > 0 ? docentsCargats.map(function (d) {
+          return { name: d.nom, grup: d.grup_principal || '', tp: d.tp_franges && d.tp_franges.length > 0 ? d.tp_franges[0] : null, cob: d.cobertures_mes || 0 };
+        }) : [{ name: 'Docent disponible', grup: '', tp: null, cob: 0 }];
+        const prompt = 'Ets l\'assistent de gestió d\'un centre educatiu de primària. Proposa UN docent per cobrir el grup ' + grup + ' a la franja de ' + hora + ' (' + temps + '). Docent absent. Docents: ' + dl.map(d => d.name + ' (' + d.grup + '): TP a ' + (d.tp || 'cap') + ', cob:' + d.cob).join(', ') + '. Regles: 1)Prioritza sense TP 2)Menys cobertures=prioritat. Respon ÚNICAMENT JSON: {"proposta":[{"franja":"' + hora + '","docent":"Nom","grup_origen":"' + grup + '","tp_afectat":false,"motiu":"raó breu"}],"resum":"frase breu"}';
+        try {
+          const res = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }) });
+          const data = await res.json();
+          const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+          const parsed = JSON.parse(raw);
+          window._currentIAProposta = parsed; // store for confirmarCobertura
+          const el = document.getElementById('ia-content');
+          if (!el) return;
+          const rows = parsed.proposta.map(p => '<div class="ia-row"><span class="ia-franja">' + p.franja + '</span><span class="ia-docent">' + p.docent + ' <span style="font-size:12px;color:var(--ink-3)">· ' + p.motiu + '</span></span>' + (p.tp_afectat ? '<span class="ia-tp-warn">TP</span>' : '') + '<button class="ia-edit-btn" onclick="openModal(\'modal-edit-cob\')">editar</button></div>').join('');
+          el.innerHTML = '<div style="background:var(--green-bg);border:1px solid var(--green-mid);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--green);margin-bottom:10px;line-height:1.5">Proposta: ' + parsed.resum + '</div><div class="ia-proposal">' + rows + '</div><div class="arc-actions"><button class="btn btn-green btn-full" onclick="confirmarCobertura()">Confirmar i notificar</button><button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="cobrimDesdeCella(\'' + grup + '\',\'' + hora + '\',\'' + temps + '\')">Altra proposta</button></div>';
+        } catch (e) {
+          const el = document.getElementById('ia-content');
+          if (el) el.innerHTML = '<div class="f-warn">Error. Comprova la connexió.</div><button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="cobrimDesdeCella(\'' + grup + '\',\'' + hora + '\',\'' + temps + '\')">Tornar a intentar</button>';
+        }
+      }
+
+      function regenerarIA() {
+        iaGenerated = false;
+        const content = document.getElementById('ia-content');
+        if (content) content.innerHTML = `<div class="ia-generating"><div class="spinner"></div><p>La IA està analitzant la disponibilitat...</p></div>`;
+        maybeGenerateIA();
+      }
+
+      async function confirmarCobertura() {
+        var avui = new Date().toISOString().split('T')[0];
+        // Save cobertura(es) to Supabase
+        if (window._currentIAProposta && window._currentIAProposta.proposta) {
+          var proposta = window._currentIAProposta.proposta;
+          // Get absent docent name from currentAvisId
+          var absentNom = '';
+          if (currentAvisId && window._avisMap) {
+            var found = Object.keys(window._avisMap).find(function (k) { return window._avisMap[k] === currentAvisId; });
+            if (found) absentNom = found;
+          }
+          var escolaId = currentPerfil ? currentPerfil.escola_id : null;
+          for (var i = 0; i < proposta.length; i++) {
+            var p = proposta[i];
+            try {
+              await sbSaveCobertura({
+                absencia_id: currentAvisId || null,
+                docent_cobrint_nom: p.docent,
+                franja: p.franja,
+                docent_absent_nom: absentNom || currentCellaGrup,
+                grup: p.grup_origen || currentCellaGrup,
+                data: avui,
+                tp_afectat: p.tp_afectat || false,
+                motiu: p.motiu || '',
+                escola_id: escolaId
+              });
+
+              if (p.tp_afectat) {
+                await sbSaveDeuteTP({
+                  docent_nom: p.docent,
+                  data_deute: avui,
+                  motiu: 'Cobertura ' + p.franja + ' (' + (absentNom || currentCellaGrup) + ')',
+                  retornat: false,
+                  escola_id: escolaId
+                });
+              }
+            } catch (e) { console.log('Error guardant cobertura:', e); }
+          }
+          window._currentIAProposta = null;
+        }
+        // Mark absencia as resolved
+        if (currentAvisId) {
+          try {
+            await supaFetch('absencies?id=eq.' + currentAvisId, { method: 'PATCH', body: JSON.stringify({ estat: 'resolt' }) });
+          } catch (e) { console.log('Error resolent absencia:', e); }
+          currentAvisId = null;
+        }
+        closeModal('modal-ia');
+        closeModal('modal-edit-cob');
+        toast('✓ Cobertures confirmades · Notificacions enviades');
+        setTimeout(() => showPage('jd'), 400);
+      }
+
+      // ── HISTORIAL ROW ──
+      function histRow(name, date, franjes, motiu, spCls, spLabel) {
+        return `<div class="cob-row">
+    <div class="cob-info" style="padding:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <p>${name}</p><span class="sp ${spCls}">${spLabel}</span>
+      </div>
+      <span>${date} · ${franjes} · ${motiu}</span>
+    </div>
+  </div>`;
+      }
+
+      function deskActions(id) {
+        const acts = { javis: '<button class="btn btn-ghost btn-sm" onclick="openModal(\'modal-devolucion\')">+ Programar TP</button>', ta: '' };
+        return acts[id] || '';
+      }
+
+      // ── DRAWER / MODAL ──
+      function openDrawer() { document.getElementById('drawer').classList.add('open'); document.getElementById('drawer-ov').classList.add('open'); }
+      function closeDrawer() { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawer-ov').classList.remove('open'); }
+      function openModal(id) { document.getElementById(id).classList.add('open'); }
+      function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+      function saveToast(id, msg) { closeModal(id); toast(msg); }
+      function toast(msg) {
+        const el = document.getElementById('toast-el');
+        document.getElementById('toast-msg').textContent = msg;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 3000);
+      }
+
+
+      document.querySelectorAll('.modal-overlay').forEach(m => {
+        m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+      });
+
+      // MutationObserver removed - was causing duplicate saves
+
+      // Track last layout mode to avoid re-rendering on mobile address bar resize
+      let _lastDesktopMode = null;
+      window.addEventListener('resize', () => {
+        if (!currentRole) return;
+        const nowDesktop = isDesktop();
+        if (nowDesktop) { document.getElementById('desk-shell').classList.remove('hidden'); document.getElementById('mob-content').style.display = 'none'; }
+        else { document.getElementById('desk-shell').classList.add('hidden'); document.getElementById('mob-content').style.display = 'block'; }
+        // Only re-render page if layout mode actually changed (mobile ↔ desktop)
+        if (_lastDesktopMode !== null && _lastDesktopMode !== nowDesktop && currentPage) {
+          showPage(currentPage);
+        }
+        _lastDesktopMode = nowDesktop;
+      });
+    </script>
+</body>
+
+</html>
