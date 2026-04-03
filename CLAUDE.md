@@ -5,7 +5,7 @@ SPA de gestió d'absències i cobertures per a centres educatius de primària. D
 ## Stack
 
 - **Frontend**: React 18 + Vite, CSS global (`src/index.css`), routing per estat (sense React Router)
-- **Backend**: Supabase (PostgreSQL + REST API v1)
+- **Backend**: Supabase (PostgreSQL + REST API v1) Tu accederás para consultas con el MCP oficial (ya instalado)
 - **IA**: Claude Sonnet via Cloudflare Worker proxy (evita exposar la API key)
 - **Desplegament**: Vite build estàtic
 
