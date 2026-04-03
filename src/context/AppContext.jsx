@@ -11,6 +11,7 @@ export function AppProvider({ children }) {
   const [role, setRole]       = useState(null);
   const [page, setPage]       = useState(null);
   const [docents, setDocents] = useState([]);
+  const [normes,  setNormes]  = useState('');
   const [toast, setToast]     = useState(null);
 
   const api = useMemo(() => escola ? makeApi(escola.id) : null, [escola?.id]);
@@ -21,7 +22,9 @@ export function AppProvider({ children }) {
     setRole(r);
     setPage(DEFAULT_PAGE[r] || 'jd');
     document.title = `Gestió Docent — ${e.nom}`;
-    makeApi(e.id).getDocents().then(data => { if (data) setDocents(data); });
+    const api = makeApi(e.id);
+    api.getDocents().then(data => { if (data) setDocents(data); });
+    api.getNormesIA().then(data => { if (data?.[0]?.normes_ia) setNormes(data[0].normes_ia); });
   }, []);
 
   const logout = useCallback(() => window.location.reload(), []);
@@ -33,9 +36,9 @@ export function AppProvider({ children }) {
   }, []);
 
   const value = useMemo(() => ({
-    perfil, escola, role, page, docents, toast, api,
-    setPage, setDocents, login, logout, showToast,
-  }), [perfil, escola, role, page, docents, toast, api, login, logout, showToast]);
+    perfil, escola, role, page, docents, normes, toast, api,
+    setPage, setDocents, setNormes, login, logout, showToast,
+  }), [perfil, escola, role, page, docents, normes, toast, api, login, logout, showToast]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

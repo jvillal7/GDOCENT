@@ -18,7 +18,7 @@ const BLOCS = [
 ];
 
 export default function AvuiPage() {
-  const { api, docents, setPage, showToast } = useApp();
+  const { api, docents, normes, setPage, showToast } = useApp();
   const [kpiAbs, setKpiAbs] = useState(null);
   const [kpiTP,  setKpiTP]  = useState(null);
   const [cells,  setCells]  = useState({});
@@ -86,7 +86,7 @@ export default function AvuiPage() {
     setIaError('');
     setIaLoading(true);
     try {
-      const result = await proposarCoberturaCella(grup, hora, temps, docents);
+      const result = await proposarCoberturaCella(grup, hora, temps, docents, normes);
       setIaResult(result);
     } catch (e) {
       setIaError(e.message || 'Error generant proposta.');

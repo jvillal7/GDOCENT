@@ -53,5 +53,7 @@ export function makeApi(escolaId) {
     getMeusDeutesTP:     nom   => f(`deutes_tp?docent_nom=eq.${encodeURIComponent(nom)}&retornat=eq.false`),
     saveDeuteTP:         d     => f('deutes_tp', { method: 'POST', body: JSON.stringify(d) }),
     marcarDeuteTornat:   id    => f(`deutes_tp?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ retornat: true }) }),
+    getNormesIA:         ()    => f(`escoles?id=eq.${escolaId}&select=normes_ia`, { bypassSchoolId: true }),
+    saveNormesIA:        txt   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ normes_ia: txt }), bypassSchoolId: true }),
   };
 }

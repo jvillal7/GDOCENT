@@ -7,7 +7,8 @@ import HorarisPage   from './jefa/HorarisPage';
 import AvisarPage    from './teacher/AvisarPage';
 import CoberturasPage from './teacher/CoberturasPage';
 import MeuTPPage     from './teacher/MeuTPPage';
-import { ResumPage, InformesPage, AdminPage } from './StaticPages';
+import { ResumPage, InformesPage } from './StaticPages';
+import AdminPage from './admin/AdminPage';
 
 const PAGES = {
   jd: AvuiPage,   javis: AvisosPage,  jtp: TPPage,

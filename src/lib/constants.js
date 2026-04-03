@@ -70,7 +70,8 @@ export const MANAGEMENT_USERS = {
     { id: 'm_dev',  nom: 'Administrador',rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
   ],
   oriol: [
-    { id: 'm_jefa_oriol', nom: 'Mireia', rol: 'jefa', grup_principal: "Cap d'Estudis", pin: '1234' },
+    { id: 'm_jefa_oriol', nom: 'Mireia',         rol: 'jefa', grup_principal: "Cap d'Estudis",     pin: '1234' },
+    { id: 'm_dev_oriol',  nom: 'Administrador',  rol: 'dev',  grup_principal: 'Accés tècnic total', pin: '1234' },
   ],
 };
 

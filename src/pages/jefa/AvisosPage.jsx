@@ -15,7 +15,7 @@ function frangesChips(frangesJson) {
 }
 
 export default function AvisosPage() {
-  const { api, docents, showToast } = useApp();
+  const { api, docents, normes, showToast } = useApp();
   const [absencies, setAbsencies] = useState(null);
   const [iaState,   setIaState]   = useState('idle'); // idle | loading | done | error
   const [iaResult,  setIaResult]  = useState(null);
@@ -54,7 +54,7 @@ export default function AvisosPage() {
     setIaError('');
     try {
       const frangesIds = (() => { try { return JSON.parse(avis.franges || '[]'); } catch { return []; } })();
-      const result = await proposarCobertura(avis.docent_nom, frangesIds, docents);
+      const result = await proposarCobertura(avis.docent_nom, frangesIds, docents, normes);
       setIaResult(result);
       setIaState('done');
     } catch (e) {

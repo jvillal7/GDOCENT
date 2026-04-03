@@ -16,26 +16,35 @@ async function callClaude(messages, maxTokens = 1000) {
   return JSON.parse(raw.replace(/```json|```/g, '').trim());
 }
 
-export async function proposarCobertura(absentNom, frangesIds, docents) {
+const REGLES_DEFAULT = `1) Cap grup sense cobrir
+2) Prioritza docents sense TP en aquella franja
+3) Reparteix cobertures equitativament
+4) Un docent per franja`;
+
+export async function proposarCobertura(absentNom, frangesIds, docents, normes) {
   const frangesStr = frangesIds.map(fid => {
     const f = FRANJES.find(x => x.id === fid);
     return f ? `${f.label} (${f.sub})` : fid;
   }).join(', ');
+
+  const regles = (normes || '').trim() || REGLES_DEFAULT;
 
   const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària.
 DOCENT ABSENT: ${absentNom}
 FRANGES AFECTADES: ${frangesStr}
 DOCENTS DISPONIBLES:
 ${docents.map(d => `- ${d.nom} (${d.grup_principal || ''}): TP a ${(d.tp_franges || []).join(', ') || 'cap'}, cobertures aquest mes: ${d.cobertures_mes || 0}`).join('\n')}
-REGLES: 1)Cap grup sense cobrir 2)Prioritza sense TP en aquella franja 3)Reparteix equitativament 4)Un docent per franja
+NORMES DEL CENTRE:
+${regles}
 Respon NOMÉS JSON: {"proposta":[{"franja":"1a hora","docent":"Nom Cognom","grup_origen":"Xè Y","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
 
   return callClaude([{ role: 'user', content: prompt }], 1000);
 }
 
-export async function proposarCoberturaCella(grup, hora, temps, docents) {
+export async function proposarCoberturaCella(grup, hora, temps, docents, normes) {
+  const regles = (normes || '').trim() || REGLES_DEFAULT;
   const dl = docents.map(d => `${d.nom} (${d.grup_principal || ''}): TP ${d.tp_franges?.[0] || 'cap'}, cob:${d.cobertures_mes || 0}`).join(', ');
-  const prompt = `Proposa UN docent per cobrir ${grup} a ${hora} (${temps}). Docents: ${dl}. Prioritza sense TP i menys cobertures. JSON: {"proposta":[{"franja":"${hora}","docent":"Nom","grup_origen":"${grup}","tp_afectat":false,"motiu":"raó"}],"resum":"frase"}`;
+  const prompt = `Proposa UN docent per cobrir ${grup} a ${hora} (${temps}). Docents: ${dl}. Normes: ${regles}. JSON: {"proposta":[{"franja":"${hora}","docent":"Nom","grup_origen":"${grup}","tp_afectat":false,"motiu":"raó"}],"resum":"frase"}`;
   return callClaude([{ role: 'user', content: prompt }], 400);
 }
 
