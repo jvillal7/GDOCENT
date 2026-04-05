@@ -18,7 +18,7 @@ const BLOCS = [
 ];
 
 export default function AvuiPage() {
-  const { api, docents, normes, setPage, showToast } = useApp();
+  const { api, docents, normes, escola, setPage, showToast } = useApp();
   const [kpiAbs, setKpiAbs] = useState(null);
   const [kpiTP,  setKpiTP]  = useState(null);
   const [cells,  setCells]  = useState({});
@@ -56,7 +56,6 @@ export default function AvuiPage() {
 
       const newCells = {};
       (absencies || []).forEach(a => {
-        if (a.estat === 'arxivat') return;
         const docent = docents.find(d => d.nom === a.docent_nom);
         if (!docent?.grup_principal) return;
         const grupNorm = normGrup(docent.grup_principal);
@@ -67,12 +66,19 @@ export default function AvuiPage() {
         franges.forEach(fid => {
           const key = `${colGrup}__${fid}`;
           if (a.estat === 'pendent') {
-            newCells[key] = { estat: 'pendent', avisId: a.id, grup: colGrup };
-          } else if (a.estat === 'resolt') {
-            const cob = (cobertures || []).find(c =>
-              c.absencia_id === a.id && (c.franja === fid || c.franja === FRANJES.find(f => f.id === fid)?.label)
-            );
-            newCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || 'Cobert' };
+            newCells[key] = { estat: 'pendent', avisId: a.id, grup: colGrup, fid };
+          } else if (a.estat === 'resolt' || a.estat === 'arxivat') {
+            const franjaLabel = FRANJES.find(f => f.id === fid)?.label || '';
+            const franjaSub   = FRANJES.find(f => f.id === fid)?.sub   || '';
+            const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
+            const matchFn = cf =>
+              cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
+            const fallbackFn = cf =>
+              cf === franjaLabel.toLowerCase() || cf.startsWith(franjaLabel.toLowerCase());
+            const cob =
+              (cobertures || []).find(c => c.absencia_id === a.id && matchFn((c.franja || '').toLowerCase())) ||
+              (cobertures || []).find(c => c.absencia_id === a.id && fallbackFn((c.franja || '').toLowerCase()));
+            newCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
           }
         });
       });
@@ -80,8 +86,8 @@ export default function AvuiPage() {
     } catch (e) { console.error('loadAvuiData:', e); }
   }
 
-  async function cobrimCella(grup, hora, temps, avisId) {
-    setCobrirData({ grup, hora, temps, avisId });
+  async function cobrimCella(grup, hora, temps, avisId, fid) {
+    setCobrirData({ grup, hora, temps, avisId, fid });
     setIaResult(null);
     setIaError('');
     setIaLoading(true);
@@ -101,14 +107,15 @@ export default function AvuiPage() {
     try {
       for (const p of iaResult.proposta) {
         await api.saveCobertura({
-          absencia_id:       cobrirData.avisId || null,
+          escola_id:          escola.id,
+          absencia_id:        cobrirData.avisId || null,
           docent_cobrint_nom: p.docent,
-          franja:            p.franja,
-          docent_absent_nom: cobrirData.grup,
-          grup:              p.grup_origen || cobrirData.grup,
-          data:              avui,
-          tp_afectat:        p.tp_afectat || false,
-          motiu:             p.motiu || '',
+          franja:             cobrirData.fid || p.franja,
+          docent_absent_nom:  cobrirData.grup,
+          grup:               p.grup_origen || cobrirData.grup,
+          data:               avui,
+          tp_afectat:         p.tp_afectat || false,
+          motiu:              p.motiu || '',
         });
         if (p.tp_afectat) {
           await api.saveDeuteTP({
@@ -263,11 +270,11 @@ export default function AvuiPage() {
                       const bc   = cell?.estat === 'pendent' ? '#F0C0B8'         : cell?.estat === 'resolt' ? '#F0D5A8'         : 'var(--green-mid)';
                       return (
                         <td key={g}
-                          style={{ padding: '3px 1px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 28 }}
-                          onClick={() => cell?.estat === 'pendent' && cobrimCella(cell.grup, franja.hora, franja.sub, cell.avisId)}
+                          style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48 }}
+                          onClick={() => cell?.estat === 'pendent' && cobrimCella(cell.grup, franja.hora, franja.sub, cell.avisId, fid)}
                         >
                           {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!</span>}
-                          {cell?.estat === 'resolt'  && <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--amber)' }}>{cell.cobrint}</span>}
+                          {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                           {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
                         </td>
                       );

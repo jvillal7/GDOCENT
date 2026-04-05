@@ -15,7 +15,7 @@ function frangesChips(frangesJson) {
 }
 
 export default function AvisosPage() {
-  const { api, docents, normes, showToast } = useApp();
+  const { api, docents, normes, escola, showToast } = useApp();
   const [absencies, setAbsencies] = useState(null);
   const [iaState,   setIaState]   = useState('idle'); // idle | loading | done | error
   const [iaResult,  setIaResult]  = useState(null);
@@ -69,6 +69,7 @@ export default function AvisosPage() {
     try {
       for (const p of iaResult.proposta) {
         await api.saveCobertura({
+          escola_id:          escola.id,
           absencia_id:        iaTarget.id,
           docent_cobrint_nom: p.docent,
           franja:             p.franja,
@@ -107,6 +108,51 @@ export default function AvisosPage() {
         <h1>Avisos rebuts</h1>
         <p>Notificacions d'absències pendents</p>
       </div>
+
+      {/* IA Section — just below header */}
+      {iaTarget && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-head">
+            <h3>🤖 Proposta IA — {iaTarget.docent_nom}</h3>
+          </div>
+          <div style={{ padding: 16 }}>
+            {iaState === 'loading' && (
+              <div style={{ textAlign: 'center', padding: 20 }}>
+                <Spinner />
+                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 10 }}>La IA analitzant disponibilitat...</p>
+              </div>
+            )}
+            {iaState === 'error' && (
+              <>
+                <div className="f-warn" style={{ marginBottom: 12 }}>⚠ {iaError}</div>
+                <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Tornar a intentar</button>
+              </>
+            )}
+            {iaState === 'done' && iaResult && (
+              <>
+                <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>
+                  💡 {iaResult.resum}
+                </div>
+                <div className="card" style={{ marginBottom: 12 }}>
+                  {iaResult.proposta.map((p, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 10px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase' }}>{p.franja}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{p.docent} <span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 400 }}>· {p.motiu}</span></div>
+                      </div>
+                      {p.tp_afectat && <span className="sp sp-amber" style={{ fontSize: 10 }}>⚠ TP</span>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button className="btn btn-green btn-full" onClick={confirmarCobertura}>✓ Confirmar i enviar notificacions</button>
+                  <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Generar una altra proposta</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {absencies.length === 0 && (
         <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 14 }}>
@@ -156,50 +202,6 @@ export default function AvisosPage() {
         );
       })}
 
-      {/* IA Section */}
-      {iaTarget && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <div className="card-head">
-            <h3>🤖 Proposta IA — {iaTarget.docent_nom}</h3>
-          </div>
-          <div style={{ padding: 16 }}>
-            {iaState === 'loading' && (
-              <div style={{ textAlign: 'center', padding: 20 }}>
-                <Spinner />
-                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 10 }}>La IA analitzant disponibilitat...</p>
-              </div>
-            )}
-            {iaState === 'error' && (
-              <>
-                <div className="f-warn" style={{ marginBottom: 12 }}>⚠ {iaError}</div>
-                <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Tornar a intentar</button>
-              </>
-            )}
-            {iaState === 'done' && iaResult && (
-              <>
-                <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>
-                  💡 {iaResult.resum}
-                </div>
-                <div className="card" style={{ marginBottom: 12 }}>
-                  {iaResult.proposta.map((p, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 10px', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase' }}>{p.franja}</div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{p.docent} <span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 400 }}>· {p.motiu}</span></div>
-                      </div>
-                      {p.tp_afectat && <span className="sp sp-amber" style={{ fontSize: 10 }}>⚠ TP</span>}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button className="btn btn-green btn-full" onClick={confirmarCobertura}>✓ Confirmar i enviar notificacions</button>
-                  <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Generar una altra proposta</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </>
   );
 }
