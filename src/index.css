@@ -267,4 +267,7 @@ textarea.f-ctrl{resize:vertical;min-height:80px}
   .main-content{padding-top:0;padding-bottom:0}
   .page-wrap{padding:0}
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  #login{flex-direction:row;min-height:100vh}
+  .login-hero{width:38%;flex-shrink:0;padding:64px 40px;min-height:100vh;display:flex;align-items:flex-start}
+  .login-body{flex:1;padding:60px 48px;justify-content:center}
 }

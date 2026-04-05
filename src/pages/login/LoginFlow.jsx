@@ -16,6 +16,8 @@ export default function LoginFlow() {
   const [search, setSearch]           = useState('');
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
+  const [pendingKey, setPendingKey]   = useState(null);
   const pinRef = useRef(null);
 
   useEffect(() => {
@@ -34,10 +36,27 @@ export default function LoginFlow() {
     if (!schools.length) return setError('Carregant escoles, espera un moment...');
     const matched = schools.find(e => e.nom.toLowerCase().includes(key));
     if (!matched) return setError("No s'ha trobat la configuració per aquest centre.");
+    setError('');
+    if (!localStorage.getItem('gd_consent_accepted')) {
+      setPendingKey(key);
+      setShowConsent(true);
+      return;
+    }
     localStorage.setItem('gd_last_escola_key', key);
     setSchool(matched);
-    setError('');
     setStep('role');
+  }
+
+  function handleConsentAccept() {
+    localStorage.setItem('gd_consent_accepted', '1');
+    setShowConsent(false);
+    const matched = schools.find(e => e.nom.toLowerCase().includes(pendingKey));
+    if (matched) {
+      localStorage.setItem('gd_last_escola_key', pendingKey);
+      setSchool(matched);
+      setStep('role');
+    }
+    setPendingKey(null);
   }
 
   async function selectRoleGroup(group) {
@@ -83,6 +102,7 @@ export default function LoginFlow() {
 
   return (
     <div id="login">
+      {showConsent && <ConsentModal onAccept={handleConsentAccept} />}
       <div className="login-hero">
         <div className="hero-text">
           <h1>Gestió<br /><em>Docent</em></h1>
@@ -214,6 +234,59 @@ export default function LoginFlow() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ConsentModal({ onAccept }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      zIndex: 9999, padding: '0 0 env(safe-area-inset-bottom)',
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540,
+        padding: '24px 24px 32px', boxShadow: '0 -4px 32px rgba(0,0,0,.15)',
+        animation: 'fadeUp .25s ease-out',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 24 }}>🔐</span>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>Consentiment de tractament de dades</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>Protecció de Dades — RGPD</div>
+          </div>
+        </div>
+
+        <p style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.6, marginBottom: 12 }}>
+          En accedir a aquesta aplicació, el centre educatiu tractarà les dades personals següents amb finalitats organitzatives internes:
+        </p>
+        <ul style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7, paddingLeft: 18, marginBottom: 14 }}>
+          <li><strong>Nom i cognoms</strong> del docent</li>
+          <li><strong>Horari lectiu setmanal</strong> i franges de Treball Personal</li>
+          <li><strong>Registre d'absències i cobertures</strong></li>
+        </ul>
+        <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6, marginBottom: 16 }}>
+          Aquestes dades s'utilitzen exclusivament per a la <strong>gestió interna d'absències i cobertures</strong> del centre.
+          No es cediran a tercers ni s'usaran amb cap altra finalitat.
+          Podeu exercir els vostres drets d'accés, rectificació, supressió i portabilitat adreçant-vos a la direcció del centre,
+          d'acord amb el <strong>Reglament (UE) 2016/679 (RGPD)</strong> i la <strong>Llei Orgànica 3/2018 (LOPDGDD)</strong>.
+        </p>
+        <div style={{ background: 'var(--blue-bg)', borderRadius: 'var(--r-sm)', padding: '10px 14px', marginBottom: 20, fontSize: 12, color: 'var(--blue)' }}>
+          Aquest avís apareix <strong>una sola vegada</strong> per dispositiu. Un cop acceptat, no tornarà a aparèixer.
+        </div>
+
+        <button
+          onClick={onAccept}
+          style={{
+            width: '100%', padding: 16, background: '#000', color: '#fff',
+            border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          Accepto i continuo →
+        </button>
       </div>
     </div>
   );
