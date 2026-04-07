@@ -26,7 +26,7 @@ function cellBg(val) {
 }
 
 export default function HorarisPage() {
-  const { api, docents, setDocents, showToast } = useApp();
+  const { api, escola, docents, setDocents, showToast } = useApp();
   const [confirm, setConfirm]   = useState(null); // horari data to confirm
   const [uploads, setUploads]   = useState([]);   // [{ name, status, msg }]
   const fileRef = useRef(null);
@@ -75,8 +75,9 @@ export default function HorarisPage() {
 
     const existing = docents.find(d => d.nom.toLowerCase() === nom.toLowerCase());
     const docent = {
-      nom, rol: data.rol, grup_principal: data.grup_principal, horari, tp_franges: tpFranges, actiu: true,
+      nom, escola_id: escola.id, rol: data.rol, grup_principal: data.grup_principal, horari, tp_franges: tpFranges, actiu: true,
       cobertures_mes: existing?.cobertures_mes || 0,
+      pin: data.pin,
       ...(existing?.id ? { id: existing.id } : {}),
     };
     try {
@@ -87,11 +88,11 @@ export default function HorarisPage() {
         setDocents(prev => prev.map(d => d.nom.toLowerCase() === nom.toLowerCase() ? { ...d, ...docent } : d));
       }
       showToast(`Horari de ${nom} ${existing ? 'actualitzat' : 'afegit'}`);
+      setConfirm(null);
+      if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; }
     } catch (e) {
       showToast('Error guardant: ' + e.message);
     }
-    setConfirm(null);
-    if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; }
   }
 
   async function eliminar(id, nom) {
@@ -221,6 +222,7 @@ function ConfirmHorari({ data, onSave, onCancel }) {
   const [nom,   setNom]   = useState(data.nom || '');
   const [rol,   setRol]   = useState(data.rol || 'tutor');
   const [grup,  setGrup]  = useState(data.grup_principal || '');
+  const [pin,   setPin]   = useState(data.pin || '1234');
   const [horari, setHorari] = useState(() => {
     const h = {};
     DIES.forEach(d => {
@@ -236,7 +238,8 @@ function ConfirmHorari({ data, onSave, onCancel }) {
 
   function handleSave() {
     if (!nom.trim()) return alert('Introdueix el nom del docent.');
-    onSave({ nom, rol, grup_principal: grup, horari });
+    if (!pin.trim() || pin.length !== 4 || !/^\d{4}$/.test(pin)) return alert('El PIN ha de ser de 4 dígits.');
+    onSave({ nom, rol, grup_principal: grup, horari, pin });
   }
 
   // Group FRANJES by hora for rowspan
@@ -261,11 +264,24 @@ function ConfirmHorari({ data, onSave, onCancel }) {
               <option value="especialista">Especialista</option>
               <option value="ee">Ed. Especial</option>
               <option value="directiu">Equip Directiu</option>
+              <option value="educador">Educador/a</option>
+              <option value="vetllador">Vetllador/a</option>
             </select>
           </div>
           <div style={{ gridColumn: 'span 2' }}>
             <label className="f-label">Grup principal</label>
             <input type="text" className="f-ctrl" value={grup} onChange={e => setGrup(e.target.value)} />
+          </div>
+          <div>
+            <label className="f-label">PIN d'accés (4 dígits)</label>
+            <input
+              type="text"
+              className="f-ctrl"
+              maxLength={4}
+              placeholder="1234"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+            />
           </div>
         </div>
       </div>

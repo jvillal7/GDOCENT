@@ -54,7 +54,7 @@ export default function AvisosPage() {
     setIaError('');
     try {
       const frangesIds = (() => { try { return JSON.parse(avis.franges || '[]'); } catch { return []; } })();
-      const result = await proposarCobertura(avis.docent_nom, frangesIds, docents, normes);
+      const result = await proposarCobertura(avis.docent_nom, frangesIds, docents, normes, avis.data);
       setIaResult(result);
       setIaState('done');
     } catch (e) {

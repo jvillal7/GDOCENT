@@ -27,6 +27,7 @@ export function rolLabel(rol) {
     jefa: "Cap d'Estudis", director: 'Director', secretaria: 'Secretaria',
     dev: 'Administrador', teacher: 'Docent',
     tutor: 'Tutor/a', especialista: 'Especialista', ee: 'Ed. Especial', directiu: 'Equip Directiu',
+    educador: 'Educador/a', vetllador: 'Vetllador/a',
   };
   return map[rol] || rol;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES } from '../../lib/constants';
+import { FRANJES, SIEI_ALUMNES } from '../../lib/constants';
 import { normGrup } from '../../lib/utils';
 import { proposarCoberturaCella } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
@@ -21,7 +21,8 @@ export default function AvuiPage() {
   const { api, docents, normes, escola, setPage, showToast } = useApp();
   const [kpiAbs, setKpiAbs] = useState(null);
   const [kpiTP,  setKpiTP]  = useState(null);
-  const [cells,  setCells]  = useState({});
+  const [cells,     setCells]     = useState({});
+  const [sieiCells, setSieiCells] = useState({});
   // Cobrir sub-view
   const [cobrirData, setCobrirData] = useState(null); // { grup, hora, temps, avisId }
   const [iaResult,   setIaResult]   = useState(null);
@@ -83,6 +84,40 @@ export default function AvuiPage() {
         });
       });
       setCells(newCells);
+
+      // Graella SIEI (només Rivo Rubeo)
+      const sieiStudents = escola?.nom?.toLowerCase().includes('rivo') ? SIEI_ALUMNES.rivo : [];
+      const newSieiCells = {};
+      if (sieiStudents.length > 0) {
+        const todayDia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][today.getDay()];
+        (absencies || []).forEach(a => {
+          const docent = docents.find(d => d.nom === a.docent_nom);
+          if (!docent?.horari) return;
+          let franges = [];
+          try { franges = JSON.parse(a.franges || '[]'); } catch {}
+          franges.forEach(fid => {
+            const val = (docent.horari?.[todayDia]?.[fid] || '').toUpperCase();
+            const matched = sieiStudents.find(s => val.includes(s));
+            if (!matched) return;
+            const key = `${matched}__${fid}`;
+            if (a.estat === 'pendent') {
+              newSieiCells[key] = { estat: 'pendent', avisId: a.id, student: matched, fid };
+            } else {
+              const franjaLabel = FRANJES.find(f => f.id === fid)?.label || '';
+              const franjaSub   = FRANJES.find(f => f.id === fid)?.sub   || '';
+              const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
+              const matchFn  = cf => cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
+              const fallbackFn = cf => cf === franjaLabel.toLowerCase() || cf.startsWith(franjaLabel.toLowerCase());
+              const cob =
+                (cobertures || []).find(c => c.absencia_id === a.id && matchFn((c.franja || '').toLowerCase())) ||
+                (cobertures || []).find(c => c.absencia_id === a.id && fallbackFn((c.franja || '').toLowerCase()));
+              newSieiCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
+            }
+          });
+        });
+      }
+      setSieiCells(newSieiCells);
+
     } catch (e) { console.error('loadAvuiData:', e); }
   }
 
@@ -92,7 +127,7 @@ export default function AvuiPage() {
     setIaError('');
     setIaLoading(true);
     try {
-      const result = await proposarCoberturaCella(grup, hora, temps, docents, normes);
+      const result = await proposarCoberturaCella(grup, hora, fid, temps, docents, normes);
       setIaResult(result);
     } catch (e) {
       setIaError(e.message || 'Error generant proposta.');
@@ -178,12 +213,12 @@ export default function AvuiPage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <button className="btn btn-green btn-full" onClick={confirmarCobertura}>✓ Confirmar i notificar</button>
-                  <button className="btn btn-ghost btn-full" onClick={() => cobrimCella(cobrirData.grup, cobrirData.hora, cobrirData.temps, cobrirData.avisId)}>↺ Altra proposta</button>
+                  <button className="btn btn-ghost btn-full" onClick={() => cobrimCella(cobrirData.grup, cobrirData.hora, cobrirData.temps, cobrirData.avisId, cobrirData.fid)}>↺ Altra proposta</button>
                 </div>
               </>
             )}
             {iaError && (
-              <button className="btn btn-ghost btn-full" style={{ marginTop: 8 }} onClick={() => cobrimCella(cobrirData.grup, cobrirData.hora, cobrirData.temps, cobrirData.avisId)}>↺ Tornar a intentar</button>
+              <button className="btn btn-ghost btn-full" style={{ marginTop: 8 }} onClick={() => cobrimCella(cobrirData.grup, cobrirData.hora, cobrirData.temps, cobrirData.avisId, cobrirData.fid)}>↺ Tornar a intentar</button>
             )}
           </div>
         </div>
@@ -286,6 +321,65 @@ export default function AvuiPage() {
           </table>
         </div>
       </div>
+
+      {/* Graella SIEI — només Rivo Rubeo */}
+      {escola?.nom?.toLowerCase().includes('rivo') && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="card-head" style={{ padding: '10px 14px' }}>
+            <h3 style={{ fontSize: 13 }}>SIEI · Alumnes</h3>
+            <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--ink-3)' }}>
+              {[['var(--green-bg)','var(--green-mid)','OK'],['var(--amber-bg)','#F0D5A8','Cobert'],['var(--red-bg)','#F0C0B8','Sense suport']].map(([bg,bc,lbl]) => (
+                <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />
+                  {lbl}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 620 }}>
+              <thead>
+                <tr>
+                  <Th sticky left={0}  minW={58} zIdx={2}>Hora</Th>
+                  <Th sticky left={58} minW={60} zIdx={2}>Tram</Th>
+                  {SIEI_ALUMNES.rivo.map(s => <Th key={s}>{s}</Th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {BLOCS.map(bloc => bloc.slots.map((fid, si) => {
+                  const franja = FRANJES.find(f => f.id === fid);
+                  return (
+                    <tr key={fid}>
+                      {si === 0 && (
+                        <Td rowSpan={bloc.slots.length} sticky left={0} minW={58} zIdx={1} style={{ fontWeight: 700, verticalAlign: 'middle' }}>
+                          {bloc.hora}
+                        </Td>
+                      )}
+                      <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{franja?.sub}</Td>
+                      {SIEI_ALUMNES.rivo.map(student => {
+                        const cell = sieiCells[`${student}__${fid}`];
+                        const bg = cell?.estat === 'pendent' ? 'var(--red-bg)'   : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
+                        const bc = cell?.estat === 'pendent' ? '#F0C0B8'         : cell?.estat === 'resolt' ? '#F0D5A8'         : 'var(--green-mid)';
+                        return (
+                          <td
+                            key={student}
+                            style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48 }}
+                            onClick={() => cell?.estat === 'pendent' && cobrimCella(`SIEI·${student}`, franja.hora, franja.sub, cell.avisId, fid)}
+                          >
+                            {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!</span>}
+                            {cell?.estat === 'resolt'  && <span style={{ fontSize: 9,  fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
+                            {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                }))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </>
   );
 }

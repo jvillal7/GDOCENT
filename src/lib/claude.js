@@ -25,31 +25,51 @@ const REGLES_DEFAULT = `1) Cap grup sense cobrir
 3) Reparteix cobertures equitativament
 4) Un docent per franja`;
 
-export async function proposarCobertura(absentNom, frangesIds, docents, normes) {
-  const frangesStr = frangesIds.map(fid => {
-    const f = FRANJES.find(x => x.id === fid);
-    return f ? `${f.label} (${f.sub})` : fid;
-  }).join(', ');
+function estatHorari(val) {
+  const v = (val || '').toLowerCase().trim();
+  if (!v || v === 'lliure' || v === 'libre') return { lliure: true,  text: 'lliure' };
+  if (v === 'tp' || v === 'treball personal') return { lliure: false, text: 'TP' };
+  return { lliure: false, text: `ocupat: ${val}` };
+}
+
+export async function proposarCobertura(absentNom, frangesIds, docents, normes, data) {
+  const dia = data
+    ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date(data + 'T12:00:00').getDay()]
+    : null;
 
   const regles = (normes || '').trim() || REGLES_DEFAULT;
+
+  const disponibilitatPerFranja = frangesIds.map(fid => {
+    const f = FRANJES.find(x => x.id === fid);
+    const label = f ? `${f.label} (${f.sub})` : fid;
+    const linies = docents.map(d => {
+      const { text } = dia ? estatHorari(d.horari?.[dia]?.[fid]) : { text: 'horari desconegut' };
+      return `  · ${d.nom} (${d.grup_principal || '?'}): ${text}, cobertures mes: ${d.cobertures_mes || 0}`;
+    }).join('\n');
+    return `${label}:\n${linies}`;
+  }).join('\n\n');
 
   const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària.
 DOCENT ABSENT: ${absentNom}
-FRANGES AFECTADES: ${frangesStr}
-DOCENTS DISPONIBLES:
-${docents.map(d => `- ${d.nom} (${d.grup_principal || ''}): TP a ${(d.tp_franges || []).join(', ') || 'cap'}, cobertures aquest mes: ${d.cobertures_mes || 0}`).join('\n')}
 NORMES DEL CENTRE:
 ${regles}
+DISPONIBILITAT REAL PER FRANJA (extreta dels horaris individuals):
+${disponibilitatPerFranja}
+INSTRUCCIONS: Per a cada franja, tria el docent marcat com "lliure" amb menys cobertures aquest mes. Evita els marcats com "ocupat" (ja tenen alumnes). Usa "TP" només si no hi ha cap "lliure".
 Respon NOMÉS JSON: {"proposta":[{"franja":"1a hora","docent":"Nom Cognom","grup_origen":"Xè Y","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
 
-  return callClaude([{ role: 'user', content: prompt }], 1000);
+  return callClaude([{ role: 'user', content: prompt }], 1200);
 }
 
-export async function proposarCoberturaCella(grup, hora, temps, docents, normes) {
+export async function proposarCoberturaCella(grup, hora, fid, temps, docents, normes) {
   const regles = (normes || '').trim() || REGLES_DEFAULT;
-  const dl = docents.map(d => `${d.nom} (${d.grup_principal || ''}): TP ${d.tp_franges?.[0] || 'cap'}, cob:${d.cobertures_mes || 0}`).join(', ');
-  const prompt = `Proposa UN docent per cobrir ${grup} a ${hora} (${temps}). Docents: ${dl}. Normes: ${regles}. JSON: {"proposta":[{"franja":"${hora}","docent":"Nom","grup_origen":"${grup}","tp_afectat":false,"motiu":"raó"}],"resum":"frase"}`;
-  return callClaude([{ role: 'user', content: prompt }], 400);
+  const dia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date().getDay()];
+  const dl = docents.map(d => {
+    const { text } = estatHorari(d.horari?.[dia]?.[fid]);
+    return `${d.nom} (${d.grup_principal || '?'}): ${text}, cob:${d.cobertures_mes || 0}`;
+  }).join(' | ');
+  const prompt = `Proposa UN docent per cobrir el grup ${grup} a ${hora} (${temps}). Tria preferentment els marcats com "lliure". Evita els marcats com "ocupat". Normes: ${regles}. Docents avui: ${dl}. JSON: {"proposta":[{"franja":"${hora}","docent":"Nom","grup_origen":"${grup}","tp_afectat":false,"motiu":"raó"}],"resum":"frase"}`;
+  return callClaude([{ role: 'user', content: prompt }], 500);
 }
 
 export async function extractHorariFromPDF(base64) {

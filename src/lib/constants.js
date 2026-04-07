@@ -38,6 +38,18 @@ export const NAV_CFG = {
       { id: 'tt', icon: '🕐', label: 'El meu TP' },
     ]},
   ],
+  educador: [
+    { sec: 'El meu espai', items: [
+      { id: 'ta', icon: '🏥', label: 'Avisar absència' },
+      { id: 'tc', icon: '🔄', label: 'Les meves cobertures' },
+    ]},
+  ],
+  vetllador: [
+    { sec: 'El meu espai', items: [
+      { id: 'ta', icon: '🏥', label: 'Avisar absència' },
+      { id: 'tc', icon: '🔄', label: 'Les meves cobertures' },
+    ]},
+  ],
   director:  [{ sec: 'Direcció',  items: [{ id: 'di', icon: '📊', label: 'Resum' }, { id: 'df', icon: '📋', label: 'Informes' }] }],
   secretaria:[{ sec: 'Secretaria',items: [{ id: 'di', icon: '📊', label: 'Resum' }] }],
   dev:       [{ sec: 'Sistema',   items: [{ id: 'dv', icon: '⚙️', label: 'Administració' }] }],
@@ -46,12 +58,14 @@ export const NAV_CFG = {
 export const BNAV = {
   jefa:      [{ id: 'jd', icon: '📊', label: 'Avui' }, { id: 'javis', icon: '🔔', label: 'Avisos' }, { id: 'jtp', icon: '🕐', label: 'TP' }, { id: 'jhoraris', icon: '📅', label: 'Horaris' }, { id: 'jh', icon: '📋', label: 'Historial' }],
   teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }, { id: 'tt', icon: '🕐', label: 'TP' }],
+  educador:  [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
+  vetllador: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   director:  [{ id: 'di', icon: '📊', label: 'Resum' }, { id: 'df', icon: '📋', label: 'Informes' }],
   secretaria:[{ id: 'di', icon: '📊', label: 'Resum' }],
   dev:       [{ id: 'dv', icon: '⚙️', label: 'Admin' }],
 };
 
-export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', director: 'di', secretaria: 'di', dev: 'dv' };
+export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', educador: 'ta', vetllador: 'ta', director: 'di', secretaria: 'di', dev: 'dv' };
 
 export const PAGE_TITLES = {
   jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal',
@@ -76,3 +90,7 @@ export const MANAGEMENT_USERS = {
 };
 
 export const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+
+export const SIEI_ALUMNES = {
+  rivo: ['THEO','SEBAS','TYLER','POL','AARON','MOHAMED','CLAUDIA','MAXIM','MIRANDA','ADAM'],
+};

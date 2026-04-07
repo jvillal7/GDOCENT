@@ -69,7 +69,10 @@ export default function LoginFlow() {
     setSearch('');
     try {
       if (group === 'teacher') {
-        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}`);
+        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=not.in.(educador,vetllador)`);
+        setUsers(data || []);
+      } else if (group === 'educador' || group === 'vetllador') {
+        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=eq.${group}`);
         setUsers(data || []);
       } else {
         const key = school.nom.toLowerCase().includes('rivo') ? 'rivo' : 'oriol';
@@ -92,9 +95,12 @@ export default function LoginFlow() {
   function doLogin() {
     if (!selected) return setError('Selecciona el teu nom a la llista.');
     if (pin !== selected.pin) return setError('PIN incorrecte. Torna-ho a provar.');
-    const perfil = roleGroup === 'teacher'
-      ? { id: selected.id, escola_id: school.id, nom: selected.nom, rol: 'teacher' }
-      : selected;
+    let perfil;
+    if (roleGroup === 'teacher' || roleGroup === 'educador' || roleGroup === 'vetllador') {
+      perfil = { id: selected.id, escola_id: school.id, nom: selected.nom, rol: roleGroup };
+    } else {
+      perfil = selected;
+    }
     login(perfil, school, perfil.rol);
   }
 
@@ -160,6 +166,22 @@ export default function LoginFlow() {
                 </div>
                 <div className="role-card-arrow">→</div>
               </button>
+              <button className="role-card" onClick={() => selectRoleGroup('educador')}>
+                <div className="role-card-icon" style={{ background: '#F0FFF4' }}>🧑‍🤝‍🧑</div>
+                <div className="role-card-text">
+                  <h3>Educador/a</h3>
+                  <p>Accés al teu perfil i avís d'absències</p>
+                </div>
+                <div className="role-card-arrow">→</div>
+              </button>
+              <button className="role-card" onClick={() => selectRoleGroup('vetllador')}>
+                <div className="role-card-icon" style={{ background: '#FFF8E7' }}>👁️</div>
+                <div className="role-card-text">
+                  <h3>Vetllador/a</h3>
+                  <p>Accés al teu perfil i avís d'absències</p>
+                </div>
+                <div className="role-card-arrow">→</div>
+              </button>
             </div>
             <button className="back-btn" onClick={() => setStep('school')}>← Canviar d'escola</button>
           </div>
@@ -170,10 +192,12 @@ export default function LoginFlow() {
           <div className="login-step active">
             <div className="detail-header">
               <div className="icon-wrap">
-                <span style={{ fontSize: 18 }}>{roleGroup === 'teacher' ? '👩‍🏫' : '🏛️'}</span>
+                <span style={{ fontSize: 18 }}>
+                  {roleGroup === 'teacher' ? '👩‍🏫' : roleGroup === 'educador' ? '🧑‍🤝‍🧑' : roleGroup === 'vetllador' ? '👁️' : '🏛️'}
+                </span>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span style={{ fontSize: 14, fontWeight: 600 }}>
-                    {roleGroup === 'teacher' ? 'Docent' : 'Equip Directiu'}
+                    {roleGroup === 'teacher' ? 'Docent' : roleGroup === 'educador' ? 'Educador/a' : roleGroup === 'vetllador' ? 'Vetllador/a' : 'Equip Directiu'}
                   </span>
                   <span style={{ fontSize: 10, color: 'var(--ink-4)' }}>Selecciona el teu nom</span>
                 </div>
