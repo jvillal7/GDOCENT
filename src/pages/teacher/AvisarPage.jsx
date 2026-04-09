@@ -1,10 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES } from '../../lib/constants';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
 import { todayISO } from '../../lib/utils';
 
 export default function AvisarPage() {
   const { api, perfil, escola, showToast } = useApp();
+  const isOriol = escola?.nom?.toLowerCase().includes('oriol');
+  const franjesActives    = isOriol ? FRANJES_ORIOL    : FRANJES;
+  const schoolFranjesAct  = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
   const [selectedFranjes, setSelectedFranjes] = useState(new Set());
   const [selectedDates,   setSelectedDates]   = useState(new Set([todayISO()]));
   const [motiu,   setMotiu]   = useState('');
@@ -12,6 +15,7 @@ export default function AvisarPage() {
   const [sent,    setSent]    = useState(false);
   const [sending, setSending] = useState(false);
   const [imgSrc,  setImgSrc]  = useState(null);
+  const [meusAvisos, setMeusAvisos] = useState([]);
   const dateRef  = useRef(null);
   const fileRef  = useRef(null);
   const touchRef = useRef({ y: 0, x: 0, moved: false });
@@ -21,6 +25,26 @@ export default function AvisarPage() {
   const nomDia = dies[today.getDay()];
   const firstName = perfil?.nom?.split(' ')[0] || 'Docent';
 
+  useEffect(() => { if (api && perfil) loadMeusAvisos(); }, [api, perfil]);
+
+  async function loadMeusAvisos() {
+    try {
+      const [abs, cobs] = await Promise.all([
+        api.getAbsencies(),
+        api.getCobertures(),
+      ]);
+      const meves = (abs || []).filter(a => a.docent_nom === perfil.nom && a.estat !== 'arxivat');
+      const cobsMap = {};
+      (cobs || []).forEach(c => {
+        if (c.absencia_id) {
+          if (!cobsMap[c.absencia_id]) cobsMap[c.absencia_id] = [];
+          cobsMap[c.absencia_id].push(c.docent_cobrint_nom);
+        }
+      });
+      setMeusAvisos(meves.slice(0, 6).map(a => ({ ...a, cobrants: cobsMap[a.id] || [] })));
+    } catch { setMeusAvisos([]); }
+  }
+
   function toggleFranja(fid) {
     setSelectedFranjes(prev => {
       const next = new Set(prev);
@@ -29,7 +53,7 @@ export default function AvisarPage() {
     });
   }
 
-  function selectAll()  { setSelectedFranjes(new Set(SCHOOL_FRANJES.map(f => f.id))); }
+  function selectAll()  { setSelectedFranjes(new Set(schoolFranjesAct.map(f => f.id))); }
   function clearAll()   { setSelectedFranjes(new Set()); }
   function selectToday(){ setSelectedDates(new Set([todayISO()])); }
   function addDate(d)   { if (d) setSelectedDates(prev => new Set([...prev, d])); }
@@ -54,6 +78,7 @@ export default function AvisarPage() {
       }
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
+      loadMeusAvisos();
     } catch (e) {
       showToast('Error enviant avisos: ' + e.message);
     } finally {
@@ -69,7 +94,7 @@ export default function AvisarPage() {
         docent_id:  perfil.id,
         escola_id:  escola.id,
         data:       todayISO(),
-        franges:    JSON.stringify(SCHOOL_FRANJES.map(f => f.id)),
+        franges:    JSON.stringify(schoolFranjesAct.map(f => f.id)),
         motiu:      'Tot el dia',
         notes:      '',
         estat:      'pendent',
@@ -131,6 +156,7 @@ export default function AvisarPage() {
           <div className="sent-sub">La cap d'estudis ha rebut el teu avis i gestionarà la cobertura.</div>
           <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={reset}>Enviar un altre avis</button>
         </div>
+        <MeusAvisosCard avisos={meusAvisos} franjesAct={franjesActives} schoolFranjesAct={schoolFranjesAct} />
       </>
     );
   }
@@ -142,6 +168,8 @@ export default function AvisarPage() {
         <div style={{ fontFamily: 'Georgia,serif', fontSize: 22, fontWeight: 300, marginBottom: 3 }}>Avisa la teva <em style={{ fontStyle: 'italic', color: '#B8DFC8' }}>absència</em></div>
         <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.4)' }}>Seràs notificat quan la cobertura estigui assignada</div>
       </div>
+
+      <MeusAvisosCard avisos={meusAvisos} franjesAct={franjesActives} schoolFranjesAct={schoolFranjesAct} />
 
       <button
         disabled={sending}
@@ -197,7 +225,7 @@ export default function AvisarPage() {
             <button className="btn btn-ghost btn-sm" onClick={clearAll}>Cap</button>
           </div>
           <div className="franjes-grid">
-            {SCHOOL_FRANJES.map(f => (
+            {schoolFranjesAct.map(f => (
               <div
                 key={f.id}
                 className={`franja-btn${f.patio ? ' patio' : ''}${selectedFranjes.has(f.id) ? ' selected' : ''}`}
@@ -257,5 +285,53 @@ export default function AvisarPage() {
         </button>
       </div>
     </>
+  );
+}
+
+function MeusAvisosCard({ avisos, franjesAct, schoolFranjesAct }) {
+  if (!avisos || avisos.length === 0) return null;
+
+  function frangesResum(frangesJson) {
+    const ids = (() => { try { return JSON.parse(frangesJson || '[]'); } catch { return []; } })();
+    if (ids.length >= schoolFranjesAct.length) return <span className="slot-chip all-day">Tot el dia</span>;
+    const selected = franjesAct.filter(f => ids.includes(f.id));
+    const seen = new Set();
+    return selected
+      .filter(f => { if (seen.has(f.label)) return false; seen.add(f.label); return true; })
+      .map(f => <span key={f.label} className={`slot-chip${f.patio ? ' patio' : ''}`}>{f.label}</span>);
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-head" style={{ padding: '10px 14px' }}>
+        <h3 style={{ fontSize: 13 }}>Les teves absències recents</h3>
+      </div>
+      {avisos.map(a => {
+        const dataFmt = a.data
+          ? new Date(a.data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+          : '—';
+        const cobert  = a.estat === 'resolt' || a.estat === 'arxivat';
+        const pendent = a.estat === 'pendent';
+        return (
+          <div key={a.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, color: 'var(--ink)' }}>{dataFmt}</span>
+              {pendent
+                ? <span className="sp sp-red" style={{ fontSize: 10 }}>Pendent</span>
+                : <span className="sp sp-green" style={{ fontSize: 10 }}>Cobert</span>
+              }
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {frangesResum(a.franges)}
+            </div>
+            {cobert && a.cobrants.length > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 500 }}>
+                Cobert per: {a.cobrants.slice(0, 3).map(n => n.split(' ')[0]).join(', ')}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

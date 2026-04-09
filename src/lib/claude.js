@@ -72,11 +72,19 @@ export async function proposarCoberturaCella(grup, hora, fid, temps, docents, no
   return callClaude([{ role: 'user', content: prompt }], 500);
 }
 
-export async function extractHorariFromPDF(base64) {
+export async function extractHorariFromPDF(base64, franjes) {
+  const franjesDesc = franjes
+    .map(f => `${f.id}=${f.sub}${f.lliure ? '(Lliure)' : ''}`)
+    .join(', ');
+  const diaTemplate = JSON.stringify(
+    franjes.reduce((acc, f) => ({ ...acc, [f.id]: f.lliure ? 'Lliure' : '' }), {})
+  );
+  const tpExId = franjes.filter(f => !f.lliure && !f.patio).slice(-1)[0]?.id || franjes[0]?.id;
+
   const prompt = `Extreu l'horari del docent d'aquest PDF.
-Franges: f1a=9:00-9:30, f1b=9:30-10:00, f2a=10:00-10:30, patiA=10:30-11:00, patiB=11:00-11:30, f3a=11:30-12:00, f3b=12:00-12:30, f4=12:30-15:00(Lliure), f5a=15:00-15:30, f5b=15:30-16:00, f5c=16:00-16:30
-Valors: "TP", "Lliure", "Pati", o grup+activitat ("1r A · Lectura")
-JSON: {"nom":"Nom","rol":"tutor","grup_principal":"1r A","horari":{"dilluns":{"f1a":"","f1b":"","f2a":"","patiA":"","patiB":"","f3a":"","f3b":"","f4":"Lliure","f5a":"","f5b":"","f5c":""},"dimarts":{},"dimecres":{},"dijous":{},"divendres":{}},"tp_franges":["divendres-f5a"]}`;
+Franges: ${franjesDesc}
+Valors: "TP", "Lliure", "Pati", o grup+activitat ("G3 · Lectura")
+JSON: {"nom":"Nom","rol":"tutor","grup_principal":"G1","horari":{"dilluns":${diaTemplate},"dimarts":${diaTemplate},"dimecres":${diaTemplate},"dijous":${diaTemplate},"divendres":${diaTemplate}},"tp_franges":["divendres-${tpExId}"]}`;
   return callClaude([{
     role: 'user',
     content: [

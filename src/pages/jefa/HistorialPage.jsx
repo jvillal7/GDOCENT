@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES } from '../../lib/constants';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
 import Spinner from '../../components/Spinner';
 
-function frangesChips(frangesJson) {
+function frangesChips(frangesJson, isOriol) {
   const ids = (() => { try { return JSON.parse(frangesJson || '[]'); } catch { return []; } })();
-  const selected = FRANJES.filter(f => ids.includes(f.id));
-  const isAllDay = ids.length >= SCHOOL_FRANJES.length;
+  const franjesAct = isOriol ? FRANJES_ORIOL : FRANJES;
+  const schoolAct  = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+  const selected = franjesAct.filter(f => ids.includes(f.id));
+  const isAllDay = ids.length >= schoolAct.length;
   if (isAllDay) return <span className="slot-chip all-day">✨ Tot el dia</span>;
   const seen = new Set();
   return selected.filter(f => { if (seen.has(f.label)) return false; seen.add(f.label); return true; })
@@ -14,7 +16,8 @@ function frangesChips(frangesJson) {
 }
 
 export default function HistorialPage() {
-  const { api } = useApp();
+  const { api, escola } = useApp();
+  const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const [data,    setData]    = useState(null);
   const [openIdx, setOpenIdx] = useState(new Set([0]));
 
@@ -38,6 +41,27 @@ export default function HistorialPage() {
   const total      = absencies.length;
   const gestionades = absencies.filter(a => a.estat !== 'pendent').length;
   const cobTotal   = cobertures.length;
+
+  // Estadístiques: absències per docent
+  const absByDocent = {};
+  absencies.forEach(a => {
+    if (!absByDocent[a.docent_nom]) absByDocent[a.docent_nom] = { total: 0, pendents: 0 };
+    absByDocent[a.docent_nom].total++;
+    if (a.estat === 'pendent') absByDocent[a.docent_nom].pendents++;
+  });
+  const topAbsents = Object.entries(absByDocent)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 8);
+
+  // Estadístiques: cobertures per docent (qui cobreix més)
+  const cobByDocent = {};
+  cobertures.forEach(c => {
+    if (!c.docent_cobrint_nom) return;
+    cobByDocent[c.docent_cobrint_nom] = (cobByDocent[c.docent_cobrint_nom] || 0) + 1;
+  });
+  const topCobridors = Object.entries(cobByDocent)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
 
   // Group by day
   const byDay = {};
@@ -70,6 +94,43 @@ export default function HistorialPage() {
         <div className="kpi k-green"><div className="kpi-label">Gestionades</div><div className="kpi-value">{gestionades}</div></div>
         <div className="kpi k-amber"><div className="kpi-label">Cobertures</div><div className="kpi-value">{cobTotal}</div></div>
       </div>
+
+      {(topAbsents.length > 0 || topCobridors.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          {topAbsents.length > 0 && (
+            <div className="card">
+              <div className="card-head" style={{ padding: '9px 12px' }}>
+                <h3 style={{ fontSize: 12 }}>Absències per docent</h3>
+              </div>
+              {topAbsents.map(([nom, s]) => (
+                <div key={nom} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom.split(' ')[0]}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <div style={{ height: 6, borderRadius: 3, background: 'var(--red)', width: Math.max(8, s.total * 10) }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', minWidth: 16, textAlign: 'right' }}>{s.total}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {topCobridors.length > 0 && (
+            <div className="card">
+              <div className="card-head" style={{ padding: '9px 12px' }}>
+                <h3 style={{ fontSize: 12 }}>Qui cobreix més</h3>
+              </div>
+              {topCobridors.map(([nom, cnt]) => (
+                <div key={nom} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom.split(' ')[0]}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <div style={{ height: 6, borderRadius: 3, background: 'var(--green)', width: Math.max(8, cnt * 10) }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', minWidth: 16, textAlign: 'right' }}>{cnt}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {dies.length === 0 && (
         <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 14 }}>Cap absència registrada.</div>
@@ -114,7 +175,7 @@ export default function HistorialPage() {
                     </div>
                   </div>
                   <div style={{ padding: '0 12px 10px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {frangesChips(a.franges)}
+                    {frangesChips(a.franges, isOriol)}
                     {myCobs.length > 0 && (
                       <div className="ac-coverage">✓ Cobert per: {myCobs.map(c => c.docent_cobrint_nom).join(', ')}</div>
                     )}

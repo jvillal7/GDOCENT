@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES } from '../../lib/constants';
+import { FRANJES, FRANJES_ORIOL } from '../../lib/constants';
 import Spinner from '../../components/Spinner';
 
 export default function CoberturasPage() {
-  const { api, perfil } = useApp();
+  const { api, perfil, escola } = useApp();
+  const isOriol = escola?.nom?.toLowerCase().includes('oriol');
+  const FRANJES_ACT = isOriol ? FRANJES_ORIOL : FRANJES;
   const [data,    setData]    = useState(null);
   const [notesFn, setNotesFn] = useState(null); // { absenciaId, absent, grup }
   const [notes,   setNotes]   = useState(null);
@@ -94,7 +96,7 @@ export default function CoberturasPage() {
       </div>
 
       <div className="agenda-wrap">
-        {FRANJES.map(f => {
+        {FRANJES_ACT.map(f => {
           const originalVal = myHorari[f.id] || '';
           const cob = cobertures.find(c =>
             c.franja === f.id || c.franja === f.label || c.franja === f.hora

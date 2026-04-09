@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, DIES } from '../../lib/constants';
+import { FRANJES, FRANJES_ORIOL, DIES } from '../../lib/constants';
 import { initials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
@@ -27,6 +27,8 @@ function cellBg(val) {
 
 export default function HorarisPage() {
   const { api, escola, docents, setDocents, showToast } = useApp();
+  const isOriol  = escola?.nom?.toLowerCase().includes('oriol');
+  const franjes   = isOriol ? FRANJES_ORIOL : FRANJES;
   const [confirm, setConfirm]   = useState(null); // horari data to confirm
   const [uploads, setUploads]   = useState([]);   // [{ name, status, msg }]
   const fileRef = useRef(null);
@@ -47,7 +49,7 @@ export default function HorarisPage() {
       try {
         const base64 = await fileToBase64(file);
         setUploads(prev => prev.map(u => u.id === id ? { ...u, msg: 'IA analitzant...' } : u));
-        const result = await extractHorariFromPDF(base64);
+        const result = await extractHorariFromPDF(base64, franjes);
         setUploads(prev => prev.map(u => u.id === id ? { ...u, status: 'done', msg: 'Llest' } : u));
         setConfirm(result);
         // Wait for user to confirm before processing next file
@@ -102,7 +104,7 @@ export default function HorarisPage() {
     catch (e) { showToast('Error eliminant: ' + e.message); reload(); }
   }
 
-  if (confirm) return <ConfirmHorari data={confirm} onSave={saveHorari} onCancel={() => { setConfirm(null); if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; } }} />;
+  if (confirm) return <ConfirmHorari data={confirm} franjes={franjes} onSave={saveHorari} onCancel={() => { setConfirm(null); if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; } }} />;
 
   // Group docents by nivell
   const groups = {};
@@ -218,7 +220,7 @@ function fileToBase64(file) {
 }
 
 // Inline confirm/edit view for a docent horari
-function ConfirmHorari({ data, onSave, onCancel }) {
+function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   const [nom,   setNom]   = useState(data.nom || '');
   const [rol,   setRol]   = useState(data.rol || 'tutor');
   const [grup,  setGrup]  = useState(data.grup_principal || '');
@@ -227,7 +229,7 @@ function ConfirmHorari({ data, onSave, onCancel }) {
     const h = {};
     DIES.forEach(d => {
       h[d] = {};
-      FRANJES.forEach(f => { h[d][f.id] = data.horari?.[d]?.[f.id] || ''; });
+      franjes.forEach(f => { h[d][f.id] = data.horari?.[d]?.[f.id] || ''; });
     });
     return h;
   });
@@ -242,9 +244,9 @@ function ConfirmHorari({ data, onSave, onCancel }) {
     onSave({ nom, rol, grup_principal: grup, horari, pin });
   }
 
-  // Group FRANJES by hora for rowspan
+  // Group franjes by hora for rowspan
   const horaGroups = {};
-  FRANJES.forEach(f => { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
+  franjes.forEach(f => { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
 
   return (
     <>
@@ -297,7 +299,7 @@ function ConfirmHorari({ data, onSave, onCancel }) {
               </tr>
             </thead>
             <tbody>
-              {FRANJES.map(f => {
+              {franjes.map(f => {
                 const grp    = horaGroups[f.hora];
                 const isFirst = grp[0].id === f.id;
                 return (

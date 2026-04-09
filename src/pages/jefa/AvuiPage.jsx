@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SIEI_ALUMNES } from '../../lib/constants';
+import { FRANJES, SIEI_ALUMNES, FRANJES_ORIOL, GRUPS_ORIOL, BLOCS_ORIOL } from '../../lib/constants';
 import { normGrup } from '../../lib/utils';
 import { proposarCoberturaCella } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
 
-const GRUPS = ['I3A','I3B','I4A','I4B','I5A','I5B','1rA','1rB','2nA','2nB','3rA','3rB','4tA','4tB','5eA','5eB','6eA','6eB'];
+const GRUPS_RIVO = ['I3A','I3B','I4A','I4B','I5A','I5B','1rA','1rB','2nA','2nB','3rA','3rB','4tA','4tB','5eA','5eB','6eA','6eB'];
 
-const BLOCS = [
+const BLOCS_RIVO = [
   { hora: '1a hora', slots: ['f1a','f1b'] },
   { hora: '2a hora', slots: ['f2a'] },
   { hora: 'Pati A',  slots: ['patiA'] },
@@ -19,10 +19,16 @@ const BLOCS = [
 
 export default function AvuiPage() {
   const { api, docents, normes, escola, setPage, showToast } = useApp();
+  const isOriol = escola?.nom?.toLowerCase().includes('oriol');
+  const GRUPS   = isOriol ? GRUPS_ORIOL : GRUPS_RIVO;
+  const BLOCS   = isOriol ? BLOCS_ORIOL : BLOCS_RIVO;
+  const FRANJES_ACT = isOriol ? FRANJES_ORIOL : FRANJES;
+
   const [kpiAbs, setKpiAbs] = useState(null);
   const [kpiTP,  setKpiTP]  = useState(null);
   const [cells,     setCells]     = useState({});
   const [sieiCells, setSieiCells] = useState({});
+  const [provisionals, setProvisionals] = useState([]);
   // Cobrir sub-view
   const [cobrirData, setCobrirData] = useState(null); // { grup, hora, temps, avisId }
   const [iaResult,   setIaResult]   = useState(null);
@@ -39,11 +45,13 @@ export default function AvuiPage() {
 
   async function loadData() {
     try {
-      const [deutes, absencies, cobertures] = await Promise.all([
+      const [deutes, absencies, cobertures, provsDeuma] = await Promise.all([
         api.getDeutesTP(),
         api.getAbsenciesAvui(),
         api.getCoberturasAvui(),
+        api.getAbsenciesProvisionals().catch(() => []),
       ]);
+      setProvisionals(provsDeuma || []);
 
       setKpiTP({
         count:    deutes?.length || 0,
@@ -69,8 +77,8 @@ export default function AvuiPage() {
           if (a.estat === 'pendent') {
             newCells[key] = { estat: 'pendent', avisId: a.id, grup: colGrup, fid };
           } else if (a.estat === 'resolt' || a.estat === 'arxivat') {
-            const franjaLabel = FRANJES.find(f => f.id === fid)?.label || '';
-            const franjaSub   = FRANJES.find(f => f.id === fid)?.sub   || '';
+            const franjaLabel = FRANJES_ACT.find(f => f.id === fid)?.label || '';
+            const franjaSub   = FRANJES_ACT.find(f => f.id === fid)?.sub   || '';
             const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
             const matchFn = cf =>
               cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
@@ -103,8 +111,8 @@ export default function AvuiPage() {
             if (a.estat === 'pendent') {
               newSieiCells[key] = { estat: 'pendent', avisId: a.id, student: matched, fid };
             } else {
-              const franjaLabel = FRANJES.find(f => f.id === fid)?.label || '';
-              const franjaSub   = FRANJES.find(f => f.id === fid)?.sub   || '';
+              const franjaLabel = FRANJES_ACT.find(f => f.id === fid)?.label || '';
+              const franjaSub   = FRANJES_ACT.find(f => f.id === fid)?.sub   || '';
               const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
               const matchFn  = cf => cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
               const fallbackFn = cf => cf === franjaLabel.toLowerCase() || cf.startsWith(franjaLabel.toLowerCase());
@@ -158,6 +166,7 @@ export default function AvuiPage() {
             data_deute:  avui,
             motiu:       `Cobertura ${p.franja} (${cobrirData.grup})`,
             retornat:    false,
+            minuts:      30,
           });
         }
       }
@@ -263,6 +272,14 @@ export default function AvuiPage() {
         </KPICard>
       </div>
 
+      {provisionals.length > 0 && (
+        <div className="alert alert-amber" style={{ cursor: 'pointer', padding: '9px 12px', fontSize: 12.5, marginBottom: 8 }} onClick={() => setPage('javis')}>
+          📅 <div>
+            <strong>Demà tens {provisionals.length} cobertura{provisionals.length > 1 ? 's' : ''} provisional{provisionals.length > 1 ? 's' : ''}</strong> per confirmar: {provisionals.map(a => a.docent_nom.split(' ')[0]).join(', ')}. <span style={{ textDecoration: 'underline' }}>Confirmar →</span>
+          </div>
+        </div>
+      )}
+
       <div className="alert alert-amber" style={{ cursor: 'pointer', padding: '9px 12px', fontSize: 12.5 }} onClick={() => setPage('javis')}>
         🔔 <div>Consulta els <strong>Avisos rebuts</strong> per veure les absències del dia. <span style={{ textDecoration: 'underline' }}>Veure →</span></div>
       </div>
@@ -290,7 +307,7 @@ export default function AvuiPage() {
             </thead>
             <tbody>
               {BLOCS.map(bloc => bloc.slots.map((fid, si) => {
-                const franja = FRANJES.find(f => f.id === fid);
+                const franja = FRANJES_ACT.find(f => f.id === fid);
                 return (
                   <tr key={fid}>
                     {si === 0 && (
@@ -347,7 +364,7 @@ export default function AvuiPage() {
               </thead>
               <tbody>
                 {BLOCS.map(bloc => bloc.slots.map((fid, si) => {
-                  const franja = FRANJES.find(f => f.id === fid);
+                  const franja = FRANJES_ACT.find(f => f.id === fid);
                   return (
                     <tr key={fid}>
                       {si === 0 && (

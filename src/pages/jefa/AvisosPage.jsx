@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES } from '../../lib/constants';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
 import { proposarCobertura } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
 
-function frangesChips(frangesJson) {
+function frangesChips(frangesJson, isOriol) {
   const ids = (() => { try { return JSON.parse(frangesJson || '[]'); } catch { return []; } })();
-  const selected = FRANJES.filter(f => ids.includes(f.id));
-  const isAllDay = ids.length >= SCHOOL_FRANJES.length;
+  const franjesAct = isOriol ? FRANJES_ORIOL : FRANJES;
+  const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+  const selected = franjesAct.filter(f => ids.includes(f.id));
+  const isAllDay = ids.length >= schoolFranjesAct.length;
   if (isAllDay) return <span className="slot-chip all-day">✨ Tot el dia</span>;
   const seen = new Set();
   return selected.filter(f => { if (seen.has(f.label)) return false; seen.add(f.label); return true; })
@@ -16,6 +18,7 @@ function frangesChips(frangesJson) {
 
 export default function AvisosPage() {
   const { api, docents, normes, escola, showToast } = useApp();
+  const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const [absencies, setAbsencies] = useState(null);
   const [iaState,   setIaState]   = useState('idle'); // idle | loading | done | error
   const [iaResult,  setIaResult]  = useState(null);
@@ -65,7 +68,10 @@ export default function AvisosPage() {
 
   async function confirmarCobertura() {
     if (!iaResult?.proposta || !iaTarget) return;
-    const avui = new Date().toISOString().split('T')[0];
+    const avui     = new Date().toISOString().split('T')[0];
+    const absData  = iaTarget.data || avui;
+    const esFutura = absData > avui;
+    const nouEstat = esFutura ? 'provisional' : 'resolt';
     try {
       for (const p of iaResult.proposta) {
         await api.saveCobertura({
@@ -75,23 +81,32 @@ export default function AvisosPage() {
           franja:             p.franja,
           docent_absent_nom:  iaTarget.docent_nom,
           grup:               p.grup_origen || '',
-          data:               avui,
+          data:               absData,
           tp_afectat:         p.tp_afectat || false,
           motiu:              p.motiu || '',
         });
-        if (p.tp_afectat) {
+        if (p.tp_afectat && !esFutura) {
           await api.saveDeuteTP({
             docent_nom:  p.docent,
-            data_deute:  avui,
+            data_deute:  absData,
             motiu:       `Cobertura ${p.franja} (${iaTarget.docent_nom})`,
             retornat:    false,
+            minuts:      30,
           });
         }
       }
-      await api.patchAbsencia(iaTarget.id, { estat: 'resolt' });
-      showToast('✓ Cobertures confirmades');
+      await api.patchAbsencia(iaTarget.id, { estat: nouEstat });
+      showToast(esFutura ? '📅 Cobertura provisional guardada' : '✓ Cobertures confirmades');
       setIaState('idle');
       setIaTarget(null);
+      load();
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
+  async function confirmarProvisional(id) {
+    try {
+      await api.patchAbsencia(id, { estat: 'resolt' });
+      showToast('✓ Cobertura confirmada per avui');
       load();
     } catch (e) { showToast('Error: ' + e.message); }
   }
@@ -161,11 +176,15 @@ export default function AvisosPage() {
       )}
 
       {absencies.map(a => {
+        const avui  = new Date().toISOString().split('T')[0];
         const dObj  = a.data ? new Date(a.data + 'T12:00:00') : new Date();
         const day   = dObj.getDate();
         const month = dObj.toLocaleDateString('ca-ES', { month: 'short' }).replace('.','').toUpperCase();
+        const esProvisional = a.estat === 'provisional';
+        const esPendent     = a.estat === 'pendent';
+        const esAvui        = a.data === avui;
         return (
-          <div key={a.id} className={`avis-card${a.estat === 'pendent' ? ' pendent' : ''}`}>
+          <div key={a.id} className={`avis-card${esPendent ? ' pendent' : ''}`}>
             <div className="ac-top">
               <div className="date-badge">
                 <div className="db-day">{day}</div>
@@ -176,26 +195,35 @@ export default function AvisosPage() {
                 <div className="ac-motiu">{a.motiu || 'Sense motiu'}</div>
               </div>
               <div className="ac-side">
-                {a.estat === 'pendent'
-                  ? <span className="sp sp-red">Pendent</span>
-                  : <span className="sp sp-green">Resolt</span>
-                }
-                {a.estat === 'pendent'
-                  ? <button className="btn btn-green btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => marcarResolt(a.id)}>✓ Resolt</button>
-                  : <button className="btn btn-red-soft btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar</button>
-                }
+                {esPendent     && <span className="sp sp-red">Pendent</span>}
+                {esProvisional && <span className="sp sp-amber">Provisional</span>}
+                {!esPendent && !esProvisional && <span className="sp sp-green">Resolt</span>}
+
+                {esPendent     && <button className="btn btn-green btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => marcarResolt(a.id)}>✓ Resolt</button>}
+                {esProvisional && esAvui && <button className="btn btn-green btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => confirmarProvisional(a.id)}>✓ Confirmar</button>}
+                {!esPendent && !esProvisional && <button className="btn btn-red-soft btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar</button>}
               </div>
             </div>
-            <div className="ac-bottom">{frangesChips(a.franges)}</div>
-            {a.estat === 'pendent' && (
+            <div className="ac-bottom">{frangesChips(a.franges, isOriol)}</div>
+            {esProvisional && (
+              <div style={{ padding: '4px 16px 10px', fontSize: 11.5, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                📅 Cobertura provisional — {esAvui ? 'confirma avui' : `prevista per al ${dObj.toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })}`}
+              </div>
+            )}
+            {(esPendent || esProvisional) && (
               <div style={{ padding: '0 16px 14px' }}>
                 <button
                   className="btn btn-ghost btn-sm btn-full"
                   style={{ fontSize: 12 }}
                   onClick={() => generarIA(a)}
                 >
-                  🤖 Generar proposta IA
+                  {esProvisional ? '↺ Canviar proposta IA' : '🤖 Generar proposta IA'}
                 </button>
+              </div>
+            )}
+            {!esPendent && !esProvisional && (
+              <div style={{ padding: '0 16px 14px' }}>
+                <button className="btn btn-ghost btn-sm btn-full" style={{ fontSize: 12 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar del registre</button>
               </div>
             )}
           </div>

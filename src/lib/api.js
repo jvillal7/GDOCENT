@@ -55,5 +55,9 @@ export function makeApi(escolaId) {
     marcarDeuteTornat:   id    => f(`deutes_tp?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ retornat: true }) }),
     getNormesIA:         ()    => f(`escoles?id=eq.${escolaId}&select=normes_ia`, { bypassSchoolId: true }),
     saveNormesIA:        txt   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ normes_ia: txt }), bypassSchoolId: true }),
+    getAbsenciesProvisionals: () => {
+      const tom = new Date(); tom.setDate(tom.getDate() + 1);
+      return f(`absencies?estat=eq.provisional&data=eq.${tom.toISOString().split('T')[0]}&order=creat_el.desc`);
+    },
   };
 }
