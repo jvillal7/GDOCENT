@@ -174,14 +174,38 @@ export default function HistorialPage() {
                         : <span className="sp sp-green">Resolt</span>}
                     </div>
                   </div>
-                  <div style={{ padding: '0 12px 10px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {frangesChips(a.franges, isOriol)}
-                    {myCobs.length > 0 && (
-                      <div className="ac-coverage">✓ Cobert per: {myCobs.map(c => c.docent_cobrint_nom).join(', ')}</div>
-                    )}
-                    {myCobs.length === 0 && a.estat !== 'pendent' && (
-                      <div className="ac-coverage">✓ Marcat com a resolt</div>
-                    )}
+                  <div style={{ padding: '0 12px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {frangesChips(a.franges, isOriol)}
+                    </div>
+                    {(() => {
+                      const nomsUnics = [...new Set(myCobs.map(c => c.docent_cobrint_nom).filter(Boolean))];
+                      if (nomsUnics.length > 0) return (
+                        <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 10, padding: '8px 10px' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Cobert per</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {nomsUnics.slice(0, 4).map(nom => {
+                              const parts = nom.trim().split(' ');
+                              const ini = (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
+                              return (
+                                <div key={nom} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 20, padding: '4px 10px 4px 4px', border: '1px solid var(--green-mid)' }}>
+                                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--green)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    {ini.toUpperCase()}
+                                  </div>
+                                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{parts[0]}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                      if (a.estat !== 'pendent') return (
+                        <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, color: 'var(--green)', fontWeight: 600 }}>
+                          ✓ Marcat com a resolt
+                        </div>
+                      );
+                      return null;
+                    })()}
                   </div>
                 </div>
               );

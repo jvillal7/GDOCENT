@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
 import { todayISO } from '../../lib/utils';
+import { uploadFitxer, sendEmail } from '../../lib/api';
+import { JEFA_EMAIL, APP_URL } from '../../lib/constants';
 
 export default function AvisarPage() {
   const { api, perfil, escola, showToast } = useApp();
@@ -12,12 +14,14 @@ export default function AvisarPage() {
   const [selectedDates,   setSelectedDates]   = useState(new Set([todayISO()]));
   const [motiu,   setMotiu]   = useState('');
   const [notes,   setNotes]   = useState('');
-  const [sent,    setSent]    = useState(false);
-  const [sending, setSending] = useState(false);
-  const [imgSrc,  setImgSrc]  = useState(null);
-  const [meusAvisos, setMeusAvisos] = useState([]);
-  const dateRef  = useRef(null);
-  const fileRef  = useRef(null);
+  const [sent,        setSent]        = useState(false);
+  const [sending,     setSending]     = useState(false);
+  const [imgSrc,      setImgSrc]      = useState(null);
+  const [fitxers,     setFitxers]     = useState([]);
+  const [meusAvisos,  setMeusAvisos]  = useState([]);
+  const dateRef    = useRef(null);
+  const fileRef    = useRef(null);
+  const fitxerRef  = useRef(null);
   const touchRef = useRef({ y: 0, x: 0, moved: false });
 
   const today = new Date();
@@ -65,7 +69,7 @@ export default function AvisarPage() {
     setSending(true);
     try {
       for (const d of Array.from(selectedDates).sort()) {
-        await api.saveAbsencia({
+        const abs = await api.saveAbsencia({
           docent_nom: perfil.nom,
           docent_id:  perfil.id,
           escola_id:  escola.id,
@@ -74,10 +78,31 @@ export default function AvisarPage() {
           motiu:      motiu || 'No especificat',
           notes,
           estat:      'pendent',
+          fitxers:    [],
         });
+        // Pujar fitxers adjunts si n'hi ha
+        if (fitxers.length > 0 && abs?.[0]?.id) {
+          const absId = abs[0].id;
+          const uploaded = [];
+          for (const f of fitxers) {
+            try {
+              const info = await uploadFitxer(f, absId);
+              uploaded.push(info);
+            } catch { /* si falla un fitxer, continua */ }
+          }
+          if (uploaded.length > 0) {
+            await api.patchAbsencia(absId, { fitxers: uploaded });
+          }
+        }
       }
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
+      // Notificar la cap d'estudis per correu
+      sendEmail(
+        JEFA_EMAIL,
+        `🔔 Nova absència — ${perfil.nom}`,
+        emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu })
+      );
       loadMeusAvisos();
     } catch (e) {
       showToast('Error enviant avisos: ' + e.message);
@@ -101,6 +126,11 @@ export default function AvisarPage() {
       });
       setSent(true);
       showToast('Avis enviat correctament');
+      sendEmail(
+        JEFA_EMAIL,
+        `🔔 Nova absència — ${perfil.nom}`,
+        emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia' })
+      );
     } catch (e) {
       showToast('Error: ' + e.message);
     } finally {
@@ -114,7 +144,21 @@ export default function AvisarPage() {
     setMotiu('');
     setNotes('');
     setImgSrc(null);
+    setFitxers([]);
     setSent(false);
+  }
+
+  function handleFitxers(e) {
+    const nous = Array.from(e.target.files || []);
+    setFitxers(prev => {
+      const noms = new Set(prev.map(f => f.name));
+      return [...prev, ...nous.filter(f => !noms.has(f.name))];
+    });
+    e.target.value = '';
+  }
+
+  function removeFitxer(nom) {
+    setFitxers(prev => prev.filter(f => f.name !== nom));
   }
 
   function handleFile(e) {
@@ -280,12 +324,67 @@ export default function AvisarPage() {
           <textarea className="f-ctrl" rows={3} placeholder="Ex: Els alumnes estan fent la pàgina 45..." value={notes} onChange={e => setNotes(e.target.value)} />
         </div>
 
+        {/* Fitxers adjunts */}
+        <div>
+          <label className="f-label" style={{ marginBottom: 8 }}>Fitxers per al substitut (opcional)</label>
+          <div
+            style={{ border: '1.5px dashed var(--border-2)', borderRadius: 'var(--r-sm)', padding: 14, textAlign: 'center', cursor: 'pointer', background: 'var(--bg)' }}
+            onClick={() => fitxerRef.current?.click()}
+          >
+            <input
+              ref={fitxerRef}
+              type="file"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleFitxers}
+            />
+            <div style={{ fontSize: 24, marginBottom: 6 }}>📎</div>
+            <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 2 }}>Adjunta PDF o Word</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>Programació, fitxes de feina, activitats... (màx. 10 MB per fitxer)</div>
+          </div>
+          {fitxers.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {fitxers.map(f => (
+                <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-2)', borderRadius: 8, padding: '8px 12px' }}>
+                  <span style={{ fontSize: 18 }}>{f.name.endsWith('.pdf') ? '📄' : '📝'}</span>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{(f.size / 1024).toFixed(0)} KB</span>
+                  <span onClick={() => removeFitxer(f.name)} style={{ cursor: 'pointer', fontSize: 16, color: 'var(--ink-3)', fontWeight: 700, padding: '0 4px' }}>×</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button className="btn btn-red-soft btn-full" style={{ padding: 15, fontSize: 15 }} disabled={sending} onClick={enviar}>
           {sending ? 'Enviant...' : 'Enviar avis'}
         </button>
       </div>
     </>
   );
+}
+
+function emailAbsencia({ nom, dates, motiu }) {
+  const datesHtml = dates.map(d =>
+    `<li>${new Date(d + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</li>`
+  ).join('');
+  return `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
+      <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+        <h2 style="margin:0 0 16px;color:#1a1a1a;font-size:18px">🔔 Nova absència registrada</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <tr><td style="padding:8px 0;color:#666;width:110px">Docent</td><td style="padding:8px 0;font-weight:600">${nom}</td></tr>
+          <tr><td style="padding:8px 0;color:#666">Motiu</td><td style="padding:8px 0">${motiu || 'No especificat'}</td></tr>
+          <tr><td style="padding:8px 0;color:#666;vertical-align:top">Dies</td><td style="padding:8px 0"><ul style="margin:0;padding-left:16px">${datesHtml}</ul></td></tr>
+        </table>
+        <div style="margin-top:24px;text-align:center">
+          <a href="${APP_URL}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
+            Gestionar cobertura a GDOCENT →
+          </a>
+        </div>
+      </div>
+    </div>`;
 }
 
 function MeusAvisosCard({ avisos, franjesAct, schoolFranjesAct }) {
@@ -312,21 +411,42 @@ function MeusAvisosCard({ avisos, franjesAct, schoolFranjesAct }) {
           : '—';
         const cobert  = a.estat === 'resolt' || a.estat === 'arxivat';
         const pendent = a.estat === 'pendent';
+        // Deduplicar cobrants (pot haver-hi múltiples registres per al mateix mestre)
+        const cobrantsUnics = [...new Set(a.cobrants)];
         return (
-          <div key={a.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div key={a.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, color: 'var(--ink)' }}>{dataFmt}</span>
               {pendent
                 ? <span className="sp sp-red" style={{ fontSize: 10 }}>Pendent</span>
-                : <span className="sp sp-green" style={{ fontSize: 10 }}>Cobert</span>
+                : <span className="sp sp-green" style={{ fontSize: 10 }}>✓ Cobert</span>
               }
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {frangesResum(a.franges)}
             </div>
-            {cobert && a.cobrants.length > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 500 }}>
-                Cobert per: {a.cobrants.slice(0, 3).map(n => n.split(' ')[0]).join(', ')}
+            {cobert && cobrantsUnics.length > 0 && (
+              <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 10, padding: '8px 10px', marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Cobert per</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {cobrantsUnics.slice(0, 4).map(nom => {
+                    const parts = nom.trim().split(' ');
+                    const ini = (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
+                    return (
+                      <div key={nom} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 20, padding: '4px 10px 4px 4px', border: '1px solid var(--green-mid)' }}>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--green)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {ini.toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{parts[0]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {cobert && cobrantsUnics.length === 0 && (
+              <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, color: 'var(--green)', fontWeight: 600 }}>
+                ✓ Marcat com a resolt
               </div>
             )}
           </div>

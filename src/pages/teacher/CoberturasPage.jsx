@@ -10,6 +10,7 @@ export default function CoberturasPage() {
   const [data,    setData]    = useState(null);
   const [notesFn, setNotesFn] = useState(null); // { absenciaId, absent, grup }
   const [notes,   setNotes]   = useState(null);
+  const [fitxers, setFitxers] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { if (api && perfil) load(); }, [api, perfil]);
@@ -34,11 +35,13 @@ export default function CoberturasPage() {
   async function openNotes(absenciaId, absent, grup) {
     setNotesFn({ absenciaId, absent, grup });
     setNotes(null);
+    setFitxers([]);
     setLoading(true);
     try {
       const abs = await api.getAbsenciaById(absenciaId);
       setNotes(abs?.[0]?.notes || '');
-    } catch { setNotes(''); }
+      setFitxers(abs?.[0]?.fitxers || []);
+    } catch { setNotes(''); setFitxers([]); }
     finally { setLoading(false); }
   }
 
@@ -76,9 +79,30 @@ export default function CoberturasPage() {
             <div className="m-body">
               {loading
                 ? <div style={{ textAlign: 'center' }}><Spinner /></div>
-                : notes
-                  ? <p style={{ lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: notes.replace(/\n/g, '<br>') }} />
-                  : <div style={{ color: 'var(--ink-4)', fontStyle: 'italic' }}>No s'ha deixat cap nota específica.</div>
+                : <>
+                    {notes
+                      ? <p style={{ lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: notes.replace(/\n/g, '<br>') }} />
+                      : <div style={{ color: 'var(--ink-4)', fontStyle: 'italic' }}>No s'ha deixat cap nota específica.</div>
+                    }
+                    {fitxers.length > 0 && (
+                      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Fitxers adjunts</div>
+                        {fitxers.map((f, i) => (
+                          <a
+                            key={i}
+                            href={f.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-2)', borderRadius: 8, padding: '10px 12px', textDecoration: 'none', color: 'inherit' }}
+                          >
+                            <span style={{ fontSize: 22 }}>{f.tipus === 'pdf' ? '📄' : '📝'}</span>
+                            <span style={{ flex: 1, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nom}</span>
+                            <span style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 600 }}>Obrir →</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </>
               }
             </div>
             <div className="m-foot">

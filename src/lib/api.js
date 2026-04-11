@@ -1,5 +1,15 @@
 import { SUPA_URL, SUPA_KEY } from './constants';
 
+export async function sendEmail(to, subject, html) {
+  try {
+    await fetch(`${SUPA_URL}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY },
+      body: JSON.stringify({ to, subject, html }),
+    });
+  } catch { /* silenci: el correu no ha de bloquejar el flux principal */ }
+}
+
 export async function supaFetch(path, opts = {}, escolaId = null) {
   if (escolaId && !path.includes('escola_id=eq.') && !opts.bypassSchoolId) {
     path += (path.includes('?') ? '&' : '?') + `escola_id=eq.${escolaId}`;
@@ -30,6 +40,27 @@ export async function supaFetch(path, opts = {}, escolaId = null) {
   }
 }
 
+export async function uploadFitxer(file, absenciaId) {
+  const ext  = file.name.split('.').pop();
+  const path = `${absenciaId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+  const res  = await fetch(`${SUPA_URL}/storage/v1/object/fitxers-absencies/${path}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPA_KEY,
+      Authorization: `Bearer ${SUPA_KEY}`,
+      'Content-Type': file.type || 'application/octet-stream',
+      'x-upsert': 'true',
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`Error pujant fitxer: ${await res.text()}`);
+  return {
+    nom:  file.name,
+    url:  `${SUPA_URL}/storage/v1/object/public/fitxers-absencies/${path}`,
+    tipus: ext.toLowerCase(),
+  };
+}
+
 // Returns all API methods scoped to a school
 export function makeApi(escolaId) {
   const f = (path, opts) => supaFetch(path, opts, escolaId);
@@ -55,6 +86,8 @@ export function makeApi(escolaId) {
     marcarDeuteTornat:   id    => f(`deutes_tp?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ retornat: true }) }),
     getNormesIA:         ()    => f(`escoles?id=eq.${escolaId}&select=normes_ia`, { bypassSchoolId: true }),
     saveNormesIA:        txt   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ normes_ia: txt }), bypassSchoolId: true }),
+    getInfoExtra:        ()    => f(`escoles?id=eq.${escolaId}&select=info_extra`, { bypassSchoolId: true }),
+    saveInfoExtra:       d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ info_extra: d }), bypassSchoolId: true }),
     getAbsenciesProvisionals: () => {
       const tom = new Date(); tom.setDate(tom.getDate() + 1);
       return f(`absencies?estat=eq.provisional&data=eq.${tom.toISOString().split('T')[0]}&order=creat_el.desc`);

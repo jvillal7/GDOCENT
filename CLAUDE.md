@@ -3,7 +3,7 @@
 SPA de gestió d'absències i cobertures per a centres educatius de primària. Desenvolupat per Jorge Villalba (jvillal7@xtec.cat).
 
 ## Stack
-
+D
 - **Frontend**: React 18 + Vite, CSS global (`src/index.css`), routing per estat (sense React Router)
 - **Backend**: Supabase (PostgreSQL + REST API v1) Tu accederás para consultas con el MCP oficial (ya instalado)
 - **IA**: Claude Sonnet via Cloudflare Worker proxy (evita exposar la API key)
@@ -65,11 +65,13 @@ Totes les taules (excepte `escoles`) tenen `escola_id` per multi-tenancy. `makeA
 
 | Escola | Nom | Rol | PIN |
 |--------|-----|-----|-----|
-| CEIP Rivo Rubeo | Veronica | jefa | 1234 |
 | CEIP Rivo Rubeo | Cristina | director | 1234 |
+| CEIP Rivo Rubeo | Veronica | jefa | 1234 |
 | CEIP Rivo Rubeo | Patricia | secretaria | 1234 |
 | CEIP Rivo Rubeo | Administrador | dev | 1234 |
+| CEE Ca N'Oriol | Yolanda | director | 1234 |
 | CEE Ca N'Oriol | Mireia | jefa | 1234 |
+| CEE Ca N'Oriol | Agnès | secretaria | 1234 |
 | CEE Ca N'Oriol | Administrador | dev | 1234 |
 
 ### Docents (carregats de Supabase)

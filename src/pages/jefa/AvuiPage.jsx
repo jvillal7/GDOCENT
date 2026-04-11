@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SIEI_ALUMNES, FRANJES_ORIOL, GRUPS_ORIOL, BLOCS_ORIOL } from '../../lib/constants';
 import { normGrup } from '../../lib/utils';
-import { proposarCoberturaCella } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
 
 const GRUPS_RIVO = ['I3A','I3B','I4A','I4B','I5A','I5B','1rA','1rB','2nA','2nB','3rA','3rB','4tA','4tB','5eA','5eB','6eA','6eB'];
@@ -18,7 +17,7 @@ const BLOCS_RIVO = [
 ];
 
 export default function AvuiPage() {
-  const { api, docents, normes, escola, setPage, showToast } = useApp();
+  const { api, docents, escola, setPage } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const GRUPS   = isOriol ? GRUPS_ORIOL : GRUPS_RIVO;
   const BLOCS   = isOriol ? BLOCS_ORIOL : BLOCS_RIVO;
@@ -29,11 +28,6 @@ export default function AvuiPage() {
   const [cells,     setCells]     = useState({});
   const [sieiCells, setSieiCells] = useState({});
   const [provisionals, setProvisionals] = useState([]);
-  // Cobrir sub-view
-  const [cobrirData, setCobrirData] = useState(null); // { grup, hora, temps, avisId }
-  const [iaResult,   setIaResult]   = useState(null);
-  const [iaLoading,  setIaLoading]  = useState(false);
-  const [iaError,    setIaError]    = useState('');
 
   const today = new Date();
   const dtStr = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'][today.getDay()] +
@@ -129,112 +123,49 @@ export default function AvuiPage() {
     } catch (e) { console.error('loadAvuiData:', e); }
   }
 
-  async function cobrimCella(grup, hora, temps, avisId, fid) {
-    setCobrirData({ grup, hora, temps, avisId, fid });
-    setIaResult(null);
-    setIaError('');
-    setIaLoading(true);
-    try {
-      const result = await proposarCoberturaCella(grup, hora, fid, temps, docents, normes);
-      setIaResult(result);
-    } catch (e) {
-      setIaError(e.message || 'Error generant proposta.');
-    } finally {
-      setIaLoading(false);
-    }
-  }
-
-  async function confirmarCobertura() {
-    if (!iaResult?.proposta) return;
-    const avui = new Date().toISOString().split('T')[0];
-    try {
-      for (const p of iaResult.proposta) {
-        await api.saveCobertura({
-          escola_id:          escola.id,
-          absencia_id:        cobrirData.avisId || null,
-          docent_cobrint_nom: p.docent,
-          franja:             cobrirData.fid || p.franja,
-          docent_absent_nom:  cobrirData.grup,
-          grup:               p.grup_origen || cobrirData.grup,
-          data:               avui,
-          tp_afectat:         p.tp_afectat || false,
-          motiu:              p.motiu || '',
-        });
-        if (p.tp_afectat) {
-          await api.saveDeuteTP({
-            docent_nom:  p.docent,
-            data_deute:  avui,
-            motiu:       `Cobertura ${p.franja} (${cobrirData.grup})`,
-            retornat:    false,
-            minuts:      30,
-          });
+  // Pre-calcula fusió de cel·les: cel·les consecutives del mateix cobrint → rowSpan
+  function computeSpans(items, cellsMap) {
+    const allSlots = BLOCS.flatMap(b => b.slots);
+    const spans = {};
+    for (const item of items) {
+      spans[item] = {};
+      let i = 0;
+      while (i < allSlots.length) {
+        const fid = allSlots[i];
+        const cell = cellsMap[`${item}__${fid}`];
+        if (cell?.estat === 'resolt' && cell.cobrint) {
+          // Fusionar cel·les resoltes consecutives del mateix mestre
+          let span = 1;
+          while (i + span < allSlots.length) {
+            const next = cellsMap[`${item}__${allSlots[i + span]}`];
+            if (next?.estat === 'resolt' && next.cobrint === cell.cobrint) span++;
+            else break;
+          }
+          spans[item][fid] = { rowSpan: span };
+          for (let j = 1; j < span; j++) spans[item][allSlots[i + j]] = { skip: true };
+          i += span;
+        } else if (cell?.estat === 'pendent') {
+          // Fusionar cel·les pendents consecutives de la mateixa absència
+          let span = 1;
+          while (i + span < allSlots.length) {
+            const next = cellsMap[`${item}__${allSlots[i + span]}`];
+            if (next?.estat === 'pendent' && next.avisId === cell.avisId) span++;
+            else break;
+          }
+          spans[item][fid] = { rowSpan: span };
+          for (let j = 1; j < span; j++) spans[item][allSlots[i + j]] = { skip: true };
+          i += span;
+        } else {
+          spans[item][fid] = { rowSpan: 1 };
+          i++;
         }
       }
-      if (cobrirData.avisId) {
-        await api.patchAbsencia(cobrirData.avisId, { estat: 'resolt' });
-      }
-      showToast('✓ Cobertures confirmades');
-      setCobrirData(null);
-      loadData();
-    } catch (e) {
-      showToast('Error guardant cobertura: ' + e.message);
     }
+    return spans;
   }
 
-  // Sub-view: Cobrir
-  if (cobrirData) {
-    return (
-      <>
-        <div className="page-hdr">
-          <h1>Cobrir {cobrirData.grup}</h1>
-          <p>{cobrirData.hora} · {cobrirData.temps}</p>
-        </div>
-        <div className="card">
-          <div style={{ background: 'var(--ink)', padding: '14px 16px' }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#fff' }}>Proposta IA</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)' }}>La IA analitza la disponibilitat...</div>
-          </div>
-          <div style={{ padding: 16 }}>
-            {iaLoading && (
-              <div style={{ textAlign: 'center', padding: 20 }}>
-                <Spinner />
-                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 10 }}>Buscant docent per {cobrirData.grup}...</p>
-              </div>
-            )}
-            {iaError && (
-              <div className="f-warn" style={{ marginBottom: 12 }}>⚠ {iaError}</div>
-            )}
-            {iaResult && (
-              <>
-                <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>
-                  💡 {iaResult.resum}
-                </div>
-                <div className="card" style={{ marginBottom: 16, border: '1px solid var(--border-2)' }}>
-                  {iaResult.proposta.map((p, i) => (
-                    <div key={i} className="ia-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 10px', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase' }}>{p.franja}</div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{p.docent} <span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 400 }}>· {p.motiu}</span></div>
-                      </div>
-                      {p.tp_afectat && <span className="sp sp-amber" style={{ fontSize: 10 }}>⚠ TP</span>}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button className="btn btn-green btn-full" onClick={confirmarCobertura}>✓ Confirmar i notificar</button>
-                  <button className="btn btn-ghost btn-full" onClick={() => cobrimCella(cobrirData.grup, cobrirData.hora, cobrirData.temps, cobrirData.avisId, cobrirData.fid)}>↺ Altra proposta</button>
-                </div>
-              </>
-            )}
-            {iaError && (
-              <button className="btn btn-ghost btn-full" style={{ marginTop: 8 }} onClick={() => cobrimCella(cobrirData.grup, cobrirData.hora, cobrirData.temps, cobrirData.avisId, cobrirData.fid)}>↺ Tornar a intentar</button>
-            )}
-          </div>
-        </div>
-        <button className="btn btn-ghost btn-full" style={{ marginTop: 8 }} onClick={() => setCobrirData(null)}>← Tornar a Avui</button>
-      </>
-    );
-  }
+  const groupSpans = computeSpans(GRUPS, cells);
+  const sieiSpans  = computeSpans(SIEI_ALUMNES.rivo || [], sieiCells);
 
   // Main grid view
   return (
@@ -317,15 +248,17 @@ export default function AvuiPage() {
                     )}
                     <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{franja?.sub}</Td>
                     {GRUPS.map(g => {
+                      const sp = groupSpans[g]?.[fid] || {};
+                      if (sp.skip) return null;
                       const cell = cells[`${g}__${fid}`];
                       const bg   = cell?.estat === 'pendent' ? 'var(--red-bg)'   : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
                       const bc   = cell?.estat === 'pendent' ? '#F0C0B8'         : cell?.estat === 'resolt' ? '#F0D5A8'         : 'var(--green-mid)';
                       return (
-                        <td key={g}
-                          style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48 }}
-                          onClick={() => cell?.estat === 'pendent' && cobrimCella(cell.grup, franja.hora, franja.sub, cell.avisId, fid)}
+                        <td key={g} rowSpan={sp.rowSpan || 1}
+                          style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
+                          onClick={() => cell?.estat === 'pendent' && setPage('javis')}
                         >
-                          {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!</span>}
+                          {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
                           {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                           {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
                         </td>
@@ -374,16 +307,18 @@ export default function AvuiPage() {
                       )}
                       <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{franja?.sub}</Td>
                       {SIEI_ALUMNES.rivo.map(student => {
+                        const sp = sieiSpans[student]?.[fid] || {};
+                        if (sp.skip) return null;
                         const cell = sieiCells[`${student}__${fid}`];
                         const bg = cell?.estat === 'pendent' ? 'var(--red-bg)'   : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
                         const bc = cell?.estat === 'pendent' ? '#F0C0B8'         : cell?.estat === 'resolt' ? '#F0D5A8'         : 'var(--green-mid)';
                         return (
                           <td
-                            key={student}
-                            style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48 }}
-                            onClick={() => cell?.estat === 'pendent' && cobrimCella(`SIEI·${student}`, franja.hora, franja.sub, cell.avisId, fid)}
+                            key={student} rowSpan={sp.rowSpan || 1}
+                            style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
+                            onClick={() => cell?.estat === 'pendent' && setPage('javis')}
                           >
-                            {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!</span>}
+                            {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
                             {cell?.estat === 'resolt'  && <span style={{ fontSize: 9,  fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                             {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
                           </td>

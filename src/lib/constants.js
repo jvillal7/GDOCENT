@@ -2,6 +2,12 @@ export const SUPA_URL = 'https://mtrylcazzwolgzfzmbrn.supabase.co';
 export const SUPA_KEY = 'sb_publishable_t3-NsA6e13wB0-kDuXvXGw_7b6vVllK';
 export const WORKER_URL = 'https://orange-bar-54f5gceip-claude-proxy.jvillal7.workers.dev';
 
+// Correu de la cap d'estudis (per a proves; canviar quan estigui en producció)
+export const JEFA_EMAIL = 'jvillal7@xtec.cat';
+
+// URL pública de l'app (s'usa als correus)
+export const APP_URL = 'https://jvillal7.github.io/GDOCENT';
+
 export const FRANJES = [
   { id: 'f1a',   label: '1a hora', sub: '9:00–9:30',   hora: '1a hora' },
   { id: 'f1b',   label: '1a hora', sub: '9:30–10:00',  hora: '1a hora' },
@@ -27,7 +33,7 @@ export const NAV_CFG = {
     ]},
     { sec: 'Gestió', items: [
       { id: 'jtp',      icon: '🕐', label: 'Treball Personal' },
-      { id: 'jhoraris', icon: '📅', label: 'Horaris' },
+      { id: 'jhoraris', icon: '👥', label: 'Personal' },
       { id: 'jh',       icon: '📋', label: 'Historial' },
     ]},
   ],
@@ -56,7 +62,7 @@ export const NAV_CFG = {
 };
 
 export const BNAV = {
-  jefa:      [{ id: 'jd', icon: '📊', label: 'Avui' }, { id: 'javis', icon: '🔔', label: 'Avisos' }, { id: 'jtp', icon: '🕐', label: 'TP' }, { id: 'jhoraris', icon: '📅', label: 'Horaris' }, { id: 'jh', icon: '📋', label: 'Historial' }],
+  jefa:      [{ id: 'jd', icon: '📊', label: 'Avui' }, { id: 'javis', icon: '🔔', label: 'Avisos' }, { id: 'jtp', icon: '🕐', label: 'TP' }, { id: 'jhoraris', icon: '👥', label: 'Personal' }, { id: 'jh', icon: '📋', label: 'Historial' }],
   teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }, { id: 'tt', icon: '🕐', label: 'TP' }],
   educador:  [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   vetllador: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
@@ -69,7 +75,7 @@ export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', educador: 'ta', vetllad
 
 export const PAGE_TITLES = {
   jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal',
-  jh: 'Historial', jhoraris: 'Horaris del centre',
+  jh: 'Historial', jhoraris: 'Personal del centre',
   ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP',
   di: 'Resum', df: 'Informes', dv: 'Administració',
 };
@@ -78,14 +84,16 @@ export const AVATAR_COLORS = ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#A142
 
 export const MANAGEMENT_USERS = {
   rivo: [
-    { id: 'm_jefa', nom: 'Veronica',     rol: 'jefa',       grup_principal: "Cap d'Estudis",       pin: '1234' },
-    { id: 'm_dir',  nom: 'Cristina',     rol: 'director',   grup_principal: 'Director',             pin: '1234' },
+    { id: 'm_dir',  nom: 'Cristina',     rol: 'director',   grup_principal: 'Directora',            pin: '1234' },
+    { id: 'm_jefa', nom: 'Veronica',     rol: 'jefa',       grup_principal: "Cap d'Estudis",        pin: '1234' },
     { id: 'm_sec',  nom: 'Patricia',     rol: 'secretaria', grup_principal: 'Secretaria',           pin: '1234' },
     { id: 'm_dev',  nom: 'Administrador',rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
   ],
   oriol: [
-    { id: 'm_jefa_oriol', nom: 'Mireia',         rol: 'jefa', grup_principal: "Cap d'Estudis",     pin: '1234' },
-    { id: 'm_dev_oriol',  nom: 'Administrador',  rol: 'dev',  grup_principal: 'Accés tècnic total', pin: '1234' },
+    { id: 'm_dir_oriol',  nom: 'Yolanda',        rol: 'director',   grup_principal: 'Directora',            pin: '1234' },
+    { id: 'm_jefa_oriol', nom: 'Mireia',          rol: 'jefa',       grup_principal: "Cap d'Estudis",        pin: '1234' },
+    { id: 'm_sec_oriol',  nom: 'Agnès',           rol: 'secretaria', grup_principal: 'Secretaria',           pin: '1234' },
+    { id: 'm_dev_oriol',  nom: 'Administrador',   rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
   ],
 };
 

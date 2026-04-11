@@ -80,6 +80,7 @@ export default function HorarisPage() {
       nom, escola_id: escola.id, rol: data.rol, grup_principal: data.grup_principal, horari, tp_franges: tpFranges, actiu: true,
       cobertures_mes: existing?.cobertures_mes || 0,
       pin: data.pin,
+      email: data.email || null,
       ...(existing?.id ? { id: existing.id } : {}),
     };
     try {
@@ -116,7 +117,7 @@ export default function HorarisPage() {
 
   return (
     <>
-      <div className="page-hdr"><h1>Horaris del centre</h1><p>Gestiona els horaris de tots els docents</p></div>
+      <div className="page-hdr"><h1>Personal del centre</h1><p>Gestiona el personal: horaris, correus i accés</p></div>
 
       <div className="alert alert-blue">
         ℹ️ Puja el PDF de l'horari de cada docent. La IA llegirà l'horari automàticament.
@@ -146,6 +147,7 @@ export default function HorarisPage() {
                       <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
                         {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
                       </div>
+                      {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12 }} onClick={() => setConfirm(d)}>✏️ Editar</button>
@@ -225,6 +227,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   const [rol,   setRol]   = useState(data.rol || 'tutor');
   const [grup,  setGrup]  = useState(data.grup_principal || '');
   const [pin,   setPin]   = useState(data.pin || '1234');
+  const [email, setEmail] = useState(data.email || '');
   const [horari, setHorari] = useState(() => {
     const h = {};
     DIES.forEach(d => {
@@ -241,7 +244,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   function handleSave() {
     if (!nom.trim()) return alert('Introdueix el nom del docent.');
     if (!pin.trim() || pin.length !== 4 || !/^\d{4}$/.test(pin)) return alert('El PIN ha de ser de 4 dígits.');
-    onSave({ nom, rol, grup_principal: grup, horari, pin });
+    onSave({ nom, rol, grup_principal: grup, horari, pin, email: email.trim() || null });
   }
 
   // Group franjes by hora for rowspan
@@ -283,6 +286,16 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
               placeholder="1234"
               value={pin}
               onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+            />
+          </div>
+          <div style={{ gridColumn: 'span 2' }}>
+            <label className="f-label">Correu electrònic (per notificacions)</label>
+            <input
+              type="email"
+              className="f-ctrl"
+              placeholder="nom.cognom@xtec.cat"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
             />
           </div>
         </div>
