@@ -21,6 +21,7 @@ export default function AvisosPage() {
   const { api, docents, normes, escola, showToast } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const [absencies, setAbsencies] = useState(null);
+  const [baixes,    setBaixes]    = useState([]);
   const [iaState,        setIaState]        = useState('idle');
   const [iaResult,       setIaResult]       = useState(null);
   const [iaTarget,       setIaTarget]       = useState(null);
@@ -32,6 +33,9 @@ export default function AvisosPage() {
   const [infoFitxer,       setInfoFitxer]       = useState(null);
   const [infoLoading,      setInfoLoading]      = useState(false);
   const [infoExtra,        setInfoExtra]        = useState([]); // [{resum, docentsBlocats, context, data_inici, data_fi}]
+  const [expandedInfoIdxs, setExpandedInfoIdxs] = useState(new Set());
+  const [editingInfoIdx,   setEditingInfoIdx]   = useState(null);
+  const [editingText,      setEditingText]      = useState('');
   const infoFileRef = useRef(null);
 
   useEffect(() => { if (api) load(); }, [api]);
@@ -39,10 +43,12 @@ export default function AvisosPage() {
   async function load() {
     try {
       const avui = new Date().toISOString().split('T')[0];
-      const [data, infoRes] = await Promise.all([
+      const [data, infoRes, diariRes] = await Promise.all([
         api.getAbsencies(),
         api.getInfoExtra().catch(() => null),
+        api.getOriolDiari().catch(() => null),
       ]);
+      setBaixes(diariRes?.[0]?.oriol_baixes || []);
       // Carregar i validar infoExtra persistent (suporta format antic objecte i nou array)
       const raw = infoRes?.[0]?.info_extra;
       const llista = Array.isArray(raw) ? raw : (raw ? [raw] : []);
@@ -105,6 +111,24 @@ export default function AvisosPage() {
     }
   }
 
+  function toggleInfoExtra(idx) {
+    setExpandedInfoIdxs(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  }
+
+  async function editarInfoExtra(idx, newResum) {
+    try {
+      const novaLlista = infoExtra.map((ie, i) => i === idx ? { ...ie, resum: newResum } : ie);
+      await api.saveInfoExtra(novaLlista);
+      setInfoExtra(novaLlista);
+      setEditingInfoIdx(null);
+      showToast('✓ Informació actualitzada');
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
   async function eliminarInfoExtra(idx) {
     try {
       const novaLlista = infoExtra.filter((_, i) => i !== idx);
@@ -139,7 +163,7 @@ export default function AvisosPage() {
       const infoExtraCombinada = infoExtra.length
         ? { context: infoExtra.map(ie => ie.context).filter(Boolean).join(' | '), docentsBlocats: infoExtra.flatMap(ie => ie.docentsBlocats || []) }
         : null;
-      const result = await proposarCobertura(avis.docent_nom, frangesIds, docentsFiltrats, normes, avis.data, isOriol, infoExtraCombinada);
+      const result = await proposarCobertura(avis.docent_nom, frangesIds, docentsFiltrats, normes, avis.data, isOriol, infoExtraCombinada, baixes.length ? baixes : null);
       setIaResult(result);
       setIaState('done');
       setEditedProposta(result.proposta.map(p => ({ ...p })));
@@ -241,41 +265,81 @@ export default function AvisosPage() {
         </button>
 
         {/* Llista d'entrades info extra actives */}
-        {infoExtra.map((ie, idx) => (
-          <div key={idx} style={{ marginTop: 8, background: 'var(--amber-bg)', border: '1px solid #F0D5A8', borderRadius: 10, padding: '10px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                Activitat especial
-                {ie.data_fi && ie.data_fi !== ie.data_inici && (
-                  <span style={{ marginLeft: 6, background: 'var(--amber)', color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 10 }}>
-                    fins {new Date(ie.data_fi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
+        {infoExtra.map((ie, idx) => {
+          const isExpanded = expandedInfoIdxs.has(idx);
+          const isEditing  = editingInfoIdx === idx;
+          return (
+            <div key={idx} style={{ marginTop: 8, background: 'var(--amber-bg)', border: '1px solid #F0D5A8', borderRadius: 10, overflow: 'hidden' }}>
+              {/* Fila compacta */}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => toggleInfoExtra(idx)}
+              >
+                {/* Esquerra: etiqueta + badge dies + chips mestres */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>
+                    Activitat especial
                   </span>
-                )}
-              </div>
-              <button
-                className="btn btn-red-soft btn-sm"
-                style={{ fontSize: 11, padding: '3px 9px', flexShrink: 0 }}
-                onClick={() => eliminarInfoExtra(idx)}
-              >🗑️ Eliminar</button>
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: ie.docentsBlocats?.length ? 8 : 0 }}>{ie.resum}</div>
-            {ie.docentsBlocats?.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>No disponibles:</span>
-                {ie.docentsBlocats.map((b, i) => {
-                  const nom = b.nom || b;
-                  const hores = b.hores || '';
-                  return (
-                    <span key={i} style={{ background: '#fff', border: '1px solid #F0D5A8', borderRadius: 20, padding: '3px 9px', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {nom.split(' ')[0]}
-                      {hores && <span style={{ fontSize: 10, color: 'var(--amber)', fontWeight: 500 }}>{hores}</span>}
+                  {ie.data_fi && ie.data_fi !== ie.data_inici && (
+                    <span style={{ background: 'var(--amber)', color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 10, flexShrink: 0 }}>
+                      fins {new Date(ie.data_fi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
                     </span>
-                  );
-                })}
+                  )}
+                  {ie.docentsBlocats?.map((b, i) => {
+                    const nom = b.nom || b;
+                    const hores = b.hores || '';
+                    return (
+                      <span key={i} style={{ background: '#fff', border: '1px solid #F0D5A8', borderRadius: 20, padding: '2px 7px', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                        {nom.split(' ')[0]}
+                        {hores && <span style={{ fontSize: 10, color: 'var(--amber)', fontWeight: 500 }}>{hores}</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+                {/* Dreta: botons + chevron */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 11, padding: '3px 8px' }}
+                    onClick={() => { setEditingInfoIdx(idx); setEditingText(ie.resum || ''); if (!isExpanded) toggleInfoExtra(idx); }}
+                    title="Editar"
+                  >✏️</button>
+                  <button
+                    className="btn btn-red-soft btn-sm"
+                    style={{ fontSize: 11, padding: '3px 8px' }}
+                    onClick={() => eliminarInfoExtra(idx)}
+                    title="Eliminar"
+                  >🗑️</button>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--amber)', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* Contingut expandit */}
+              {isExpanded && !isEditing && (
+                <div style={{ padding: '0 12px 10px', borderTop: '1px solid #F0D5A8' }}>
+                  <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--ink-2)' }}>{ie.resum}</p>
+                </div>
+              )}
+
+              {/* Mode edició */}
+              {isEditing && (
+                <div style={{ padding: '8px 12px 12px', borderTop: '1px solid #F0D5A8', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <textarea
+                    className="f-ctrl"
+                    rows={3}
+                    style={{ fontSize: 13 }}
+                    value={editingText}
+                    onChange={e => setEditingText(e.target.value)}
+                  />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-green btn-sm btn-full" onClick={() => editarInfoExtra(idx, editingText)}>✓ Guardar</button>
+                    <button className="btn btn-ghost btn-sm btn-full" onClick={() => setEditingInfoIdx(null)}>Cancel·lar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {/* Panel d'entrada */}
         {showInfoPanel && (

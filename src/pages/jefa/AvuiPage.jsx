@@ -13,7 +13,7 @@ const BLOCS_RIVO = [
   { hora: 'Pati B',  slots: ['patiB'] },
   { hora: '3a hora', slots: ['f3a','f3b'] },
   { hora: 'Dinar',   slots: ['f4'] },
-  { hora: '5a hora', slots: ['f5a','f5b','f5c'] },
+  { hora: 'Tarda', slots: ['f5a','f5b','f5c'] },
 ];
 
 export default function AvuiPage() {

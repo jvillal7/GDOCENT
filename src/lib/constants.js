@@ -17,9 +17,9 @@ export const FRANJES = [
   { id: 'f3a',   label: '3a hora', sub: '11:30–12:00', hora: '3a hora' },
   { id: 'f3b',   label: '3a hora', sub: '12:00–12:30', hora: '3a hora' },
   { id: 'f4',    label: 'Dinar',   sub: '12:30–15:00', hora: 'Dinar',   lliure: true },
-  { id: 'f5a',   label: '5a hora', sub: '15:00–15:30', hora: '5a hora' },
-  { id: 'f5b',   label: '5a hora', sub: '15:30–16:00', hora: '5a hora' },
-  { id: 'f5c',   label: '5a hora', sub: '16:00–16:30', hora: '5a hora' },
+  { id: 'f5a',   label: 'Tarda', sub: '15:00–15:30', hora: 'Tarda' },
+  { id: 'f5b',   label: 'Tarda', sub: '15:30–16:00', hora: 'Tarda' },
+  { id: 'f5c',   label: 'Tarda', sub: '16:00–16:30', hora: 'Tarda' },
 ];
 
 // Franges que poden tenir absències (sense Dinar)
@@ -35,6 +35,12 @@ export const NAV_CFG = {
       { id: 'jtp',      icon: '🕐', label: 'Treball Personal' },
       { id: 'jhoraris', icon: '👥', label: 'Personal' },
       { id: 'jh',       icon: '📋', label: 'Historial' },
+    ]},
+    { sec: "Diari Ca N'Oriol", oriolOnly: true, items: [
+      { id: 'oj_abs', icon: '👤', label: "Persones que s'absenten" },
+      { id: 'oj_reu', icon: '📝', label: 'Reunions i organització' },
+      { id: 'oj_cee', icon: '🏥', label: 'Actuacions CEEPSIR' },
+      { id: 'oj_bai', icon: '📋', label: 'Baixes amb substitucions' },
     ]},
   ],
   teacher: [
@@ -78,6 +84,8 @@ export const PAGE_TITLES = {
   jh: 'Historial', jhoraris: 'Personal del centre',
   ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP',
   di: 'Resum', df: 'Informes', dv: 'Administració',
+  oj_abs: "Persones que s'absenten", oj_reu: 'Reunions i organització',
+  oj_cee: 'Actuacions CEEPSIR',      oj_bai: 'Baixes amb substitucions',
 };
 
 export const AVATAR_COLORS = ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#A142F4', '#24C1E0'];
@@ -115,9 +123,9 @@ export const FRANJES_ORIOL = [
   { id: 'o3b',    label: '3a hora', sub: '12:00–12:30', hora: '3a hora' },
   { id: 'o3c',    label: '3a hora', sub: '12:30–13:00', hora: '3a hora' },
   { id: 'o4',     label: 'Dinar',   sub: '13:00–15:00', hora: 'Dinar',   lliure: true },
-  { id: 'o5a',    label: '5a hora', sub: '15:00–15:30', hora: '5a hora' },
-  { id: 'o5b',    label: '5a hora', sub: '15:30–16:00', hora: '5a hora' },
-  { id: 'o5c',    label: '5a hora', sub: '16:00–16:30', hora: '5a hora' },
+  { id: 'o5a',    label: 'Tarda', sub: '15:00–15:30', hora: 'Tarda' },
+  { id: 'o5b',    label: 'Tarda', sub: '15:30–16:00', hora: 'Tarda' },
+  { id: 'o5c',    label: 'Tarda', sub: '16:00–16:30', hora: 'Tarda' },
 ];
 
 export const SCHOOL_FRANJES_ORIOL = FRANJES_ORIOL.filter(f => !f.lliure);
@@ -130,5 +138,5 @@ export const BLOCS_ORIOL = [
   { hora: 'Pati B',  slots: ['opatiB'] },
   { hora: '3a hora', slots: ['o3a','o3b','o3c'] },
   { hora: 'Dinar',   slots: ['o4'] },
-  { hora: '5a hora', slots: ['o5a','o5b','o5c'] },
+  { hora: 'Tarda', slots: ['o5a','o5b','o5c'] },
 ];

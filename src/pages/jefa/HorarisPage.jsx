@@ -5,6 +5,8 @@ import { initials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
 
+const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
+
 const NIVELLS = [
   { key: 'i',  label: 'Infantil', match: g => /^I/i.test((g||'').trim()) },
   { key: 'p1', label: '1r',       match: g => /^1/i.test((g||'').trim()) },
@@ -308,7 +310,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
             <thead>
               <tr>
                 <th colSpan={2} style={{ padding: '6px 8px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 600, color: 'var(--ink-3)', textTransform: 'uppercase' }}>Horari</th>
-                {DIES.map(d => <th key={d} style={{ padding: '7px 6px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 600, color: 'var(--ink-2)', textAlign: 'center' }}>{d.slice(0,2).toUpperCase()}</th>)}
+                {DIES.map(d => <th key={d} title={d.charAt(0).toUpperCase() + d.slice(1)} style={{ padding: '7px 6px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 600, color: 'var(--ink-2)', textAlign: 'center' }}>{DIE_ABBR[d]}</th>)}
               </tr>
             </thead>
             <tbody>

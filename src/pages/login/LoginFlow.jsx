@@ -1,8 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
 import { supaFetch } from '../../lib/api';
-import { MANAGEMENT_USERS, AVATAR_COLORS } from '../../lib/constants';
+import { MANAGEMENT_USERS, AVATAR_COLORS, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { initials, mangementColor } from '../../lib/utils';
+
+const DIARI_BUTTONS = [
+  { type: 'abs', icon: '👤', label: "Qui s'absenta" },
+  { type: 'reu', icon: '📝', label: 'Reunions' },
+  { type: 'cee', icon: '🏥', label: 'CEEPSIR' },
+  { type: 'bai', icon: '📋', label: 'Baixes' },
+];
+
+function autoTextAbsents(absencies) {
+  if (!absencies?.length) return '';
+  const avui = new Date().toISOString().split('T')[0];
+  const llista = absencies.filter(a => a.data === avui && a.estat !== 'arxivat');
+  if (!llista.length) return '';
+  return llista.map(a => {
+    let ids = [];
+    try { ids = JSON.parse(a.franges || '[]'); } catch {}
+    const tot = ids.length >= SCHOOL_FRANJES_ORIOL.length;
+    if (tot) return `• ${a.docent_nom}: tot el dia`;
+    const labels = [...new Set(ids.map(fid => FRANJES_ORIOL.find(f => f.id === fid)?.label).filter(Boolean))];
+    return `• ${a.docent_nom}: ${labels.join(', ') || 'absència'}`;
+  }).join('\n');
+}
 
 export default function LoginFlow() {
   const { login } = useApp();
@@ -18,6 +40,9 @@ export default function LoginFlow() {
   const [loading, setLoading]         = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [pendingKey, setPendingKey]   = useState(null);
+  const [modalType,  setModalType]    = useState(null);
+  const [modalData,  setModalData]    = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
   const pinRef = useRef(null);
 
   useEffect(() => {
@@ -104,16 +129,99 @@ export default function LoginFlow() {
     login(perfil, school, perfil.rol);
   }
 
+  async function openDiari(type) {
+    if (!school) return;
+    setModalType(type);
+    setModalData(null);
+    setModalLoading(true);
+    try {
+      const avui = new Date().toISOString().split('T')[0];
+      const [diariRes, absRes] = await Promise.all([
+        supaFetch(`escoles?id=eq.${school.id}&select=oriol_absents,oriol_reunions,oriol_ceepsir,oriol_baixes`, { bypassSchoolId: true }),
+        type === 'abs'
+          ? supaFetch(`absencies?data=eq.${avui}&escola_id=eq.${school.id}`, { bypassSchoolId: true }).catch(() => [])
+          : Promise.resolve([]),
+      ]);
+      const d = diariRes?.[0] || {};
+      if (type === 'abs') {
+        const stored = d.oriol_absents;
+        setModalData(stored?.data === avui && stored?.text != null ? stored.text : autoTextAbsents(absRes));
+      } else if (type === 'reu') {
+        const s = d.oriol_reunions;
+        setModalData(s?.data === avui ? (s.text || '') : '');
+      } else if (type === 'cee') {
+        const s = d.oriol_ceepsir;
+        setModalData(s?.data === avui ? (s.text || '') : '');
+      } else if (type === 'bai') {
+        setModalData(d.oriol_baixes || []);
+      }
+    } catch { setModalData(''); }
+    finally { setModalLoading(false); }
+  }
+
   const filtered = users.filter(u => u.nom.toLowerCase().includes(search.toLowerCase()));
+
+  const isOriol = school?.nom?.toLowerCase().includes('oriol');
 
   return (
     <div id="login">
       {showConsent && <ConsentModal onAccept={handleConsentAccept} />}
-      <div className="login-hero">
+      {modalType && (
+        <DiariModal
+          type={modalType}
+          data={modalData}
+          loading={modalLoading}
+          onClose={() => setModalType(null)}
+        />
+      )}
+      <div
+        className="login-hero"
+        style={isOriol ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'center' } : {}}
+      >
         <div className="hero-text">
           <h1>Gestió<br /><em>Docent</em></h1>
           <p>{school ? school.nom : 'Selecciona la teva escola per accedir'}</p>
         </div>
+        {isOriol && (
+          <>
+            {/* Separació fixa entre el títol i els botons */}
+            <div style={{ height: 52 }} />
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>
+                Informació del dia
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {DIARI_BUTTONS.map(({ type, icon, label }) => (
+                  <button
+                    key={type}
+                    onClick={() => openDiari(type)}
+                    style={{
+                      background: 'rgba(255,255,255,.07)',
+                      border: '1px solid rgba(255,255,255,.13)',
+                      borderRadius: 10,
+                      padding: '12px 8px',
+                      color: 'rgba(255,255,255,.65)',
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 5,
+                      transition: 'background .15s, border-color .15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.13)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.25)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.07)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.13)'; }}
+                  >
+                    <span style={{ fontSize: 17 }}>{icon}</span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
       <div className="login-body">
         {error && (
@@ -183,7 +291,7 @@ export default function LoginFlow() {
                 <div className="role-card-arrow">→</div>
               </button>
             </div>
-            <button className="back-btn" onClick={() => setStep('school')}>← Canviar d'escola</button>
+            <button className="back-btn" onClick={() => { setStep('school'); setSchool(null); }}>← Canviar d'escola</button>
           </div>
         )}
 
@@ -258,6 +366,73 @@ export default function LoginFlow() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+const DIARI_TITLES = {
+  abs: "Qui s'absenta avui",
+  reu: 'Reunions i aspectes organitzatius',
+  cee: 'Actuacions CEEPSIR',
+  bai: 'Baixes cobertes amb substitucions',
+};
+
+function DiariModal({ type, data, loading, onClose }) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 9999, padding: '0 0 env(safe-area-inset-bottom)' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '72vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -4px 32px rgba(0,0,0,.18)', animation: 'fadeUp .25s ease-out' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Capçalera */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 14px' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>{DIARI_TITLES[type]}</div>
+          <button onClick={onClose} style={{ background: 'var(--bg-2)', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', fontSize: 13, color: 'var(--ink-3)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+        </div>
+
+        {/* Contingut */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 8px' }}>
+          {loading ? (
+            <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Carregant...</div>
+          ) : type === 'bai' ? (
+            Array.isArray(data) && data.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {data.map((b, i) => (
+                  <div key={i} style={{ background: 'var(--bg-2)', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{b.absent}</span>
+                      <span style={{ color: 'var(--ink-4)', fontSize: 12 }}>→</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>{b.substitut}</span>
+                    </div>
+                    {b.notes && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 4 }}>{b.notes}</div>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--ink-3)', fontSize: 13, padding: '16px 0' }}>Cap baixa registrada.</p>
+            )
+          ) : (
+            data ? (
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.75, color: 'var(--ink-2)', padding: '4px 0 8px' }}>{data}</div>
+            ) : (
+              <p style={{ color: 'var(--ink-3)', fontSize: 13, padding: '16px 0' }}>Sense informació registrada avui.</p>
+            )
+          )}
+        </div>
+
+        {/* Botó tancar */}
+        <div style={{ padding: '12px 24px 28px' }}>
+          <button
+            onClick={onClose}
+            style={{ width: '100%', padding: 14, background: '#000', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            Tancar
+          </button>
+        </div>
       </div>
     </div>
   );

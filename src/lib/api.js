@@ -88,6 +88,11 @@ export function makeApi(escolaId) {
     saveNormesIA:        txt   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ normes_ia: txt }), bypassSchoolId: true }),
     getInfoExtra:        ()    => f(`escoles?id=eq.${escolaId}&select=info_extra`, { bypassSchoolId: true }),
     saveInfoExtra:       d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ info_extra: d }), bypassSchoolId: true }),
+    getOriolDiari:       ()    => f(`escoles?id=eq.${escolaId}&select=oriol_absents,oriol_reunions,oriol_ceepsir,oriol_baixes`, { bypassSchoolId: true }),
+    saveOriolAbsents:    d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_absents: d }),  bypassSchoolId: true }),
+    saveOriolReunions:   d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_reunions: d }), bypassSchoolId: true }),
+    saveOriolCeepsir:    d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_ceepsir: d }),  bypassSchoolId: true }),
+    saveOriolBaixes:     d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_baixes: d }),   bypassSchoolId: true }),
     getAbsenciesProvisionals: () => {
       const tom = new Date(); tom.setDate(tom.getDate() + 1);
       return f(`absencies?estat=eq.provisional&data=eq.${tom.toISOString().split('T')[0]}&order=creat_el.desc`);

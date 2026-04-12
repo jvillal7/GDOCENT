@@ -32,7 +32,7 @@ function estatHorari(val) {
   return { lliure: false, text: `ocupat: ${val}` };
 }
 
-export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null) {
+export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
   const FRANJES_ACT = isOriol ? FRANJES_ORIOL : FRANJES;
   const dia = data
     ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date(data + 'T12:00:00').getDay()]
@@ -75,15 +75,23 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     ? `\nACTIVITAT ESPECIAL AVUI (prioritat màxima): ${infoExtra.context}\nEls docents implicats en aquesta activitat han estat exclosos de la llista de disponibles.`
     : '';
 
+  const contextBaixes = baixes?.length
+    ? `\nBAIXES LLARGUES (docents absents tot el curs):\n${baixes.map(b => `  · ${b.absent} → Substitut permanent: ${b.substitut}${b.notes ? ` (${b.notes})` : ''}. ${b.substitut} fa l'horari complet de ${b.absent} i les seves cobertures. NO assignar ${b.absent} a cap cobertura.`).join('\n')}`
+    : '';
+
+  const diaLabel = dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : 'dia no especificat';
+
   const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària.
 DOCENT ABSENT: ${absentNom}
+DIA DE L'ABSÈNCIA: ${diaLabel}${data ? ` (${data})` : ''}
 DURADA: ${durada} — Blocs horaris: ${blocsDesc}
 NORMES DEL CENTRE:
-${regles}${contextExtra}
+${regles}${contextExtra}${contextBaixes}
 
 REGLA FONAMENTAL: Assigna el MÍNIM de docents possible. Prioritza un SOL docent per a TOTA l'absència. Només si cap docent és lliure en tots els blocs, proposa un per bloc d'hora (mai un per franja de 30 min).
+IMPORTANT: La disponibilitat que veus a sota és la de l'horari de ${diaLabel}. Respecta-la estrictament.
 
-DISPONIBILITAT DELS DOCENTS (tots els blocs de l'absència):
+DISPONIBILITAT DELS DOCENTS a ${diaLabel} (tots els blocs de l'absència):
 ${disponibilitatDocents}
 
 INSTRUCCIONS:
@@ -104,7 +112,8 @@ export async function proposarCoberturaCella(grup, hora, fid, temps, docents, no
     const { text } = estatHorari(d.horari?.[dia]?.[fid]);
     return `${d.nom} (${d.grup_principal || '?'}): ${text}, cob:${d.cobertures_mes || 0}`;
   }).join(' | ');
-  const prompt = `Proposa UN docent per cobrir el grup ${grup} a ${hora} (${temps}). Tria preferentment els marcats com "lliure". Evita els marcats com "ocupat". Normes: ${regles}. Docents avui: ${dl}. JSON: {"proposta":[{"franja":"${hora}","docent":"Nom","grup_origen":"${grup}","tp_afectat":false,"motiu":"raó"}],"resum":"frase"}`;
+  const diaLabel = dia.charAt(0).toUpperCase() + dia.slice(1);
+  const prompt = `Proposa UN docent per cobrir el grup ${grup} a ${hora} (${temps}). Dia: ${diaLabel}. Tria preferentment els marcats com "lliure" a l'horari de ${diaLabel}. Evita els marcats com "ocupat". Normes: ${regles}. Docents (horari ${diaLabel}): ${dl}. JSON: {"proposta":[{"franja":"${hora}","docent":"Nom","grup_origen":"${grup}","tp_afectat":false,"motiu":"raó"}],"resum":"frase"}`;
   return callClaude([{ role: 'user', content: prompt }], 500);
 }
 

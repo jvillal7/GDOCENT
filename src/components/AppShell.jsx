@@ -23,7 +23,8 @@ export default function AppShell() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  const nav   = NAV_CFG[role] || NAV_CFG.teacher;
+  const isOriol = escola?.nom?.toLowerCase().includes('oriol');
+  const nav   = (NAV_CFG[role] || NAV_CFG.teacher).filter(sec => !sec.oriolOnly || isOriol);
   const bnav  = BNAV[role]    || BNAV.teacher;
   const title = PAGE_TITLES[page] || '';
   const userInit = initials(perfil?.nom);
