@@ -1,23 +1,34 @@
 import { WORKER_URL, FRANJES, FRANJES_ORIOL } from './constants';
 
-async function callClaude(messages, maxTokens = 1000) {
-  const res = await fetch(WORKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages }),
-  });
-  if (!res.ok) throw new Error('Error al Worker: ' + res.status);
-  const data = await res.json();
-  let raw = '';
-  if (Array.isArray(data.content)) raw = data.content.map(b => b.text || '').join('');
-  else if (typeof data.content === 'string') raw = data.content;
-  else if (data.choices?.[0]?.message) raw = data.choices[0].message.content;
-  else throw new Error('Format de resposta IA no reconegut');
-  const clean = raw.replace(/```json|```/g, '').trim();
-  const start = clean.indexOf('{');
-  const end = clean.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('No s\'ha trobat JSON a la resposta IA');
-  return JSON.parse(clean.slice(start, end + 1));
+async function callClaude(messages, maxTokens = 1000, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages }),
+    });
+    if (!res.ok) throw new Error('Error al Worker: ' + res.status);
+    const data = await res.json();
+    if (data.error) {
+      const msg = data.error.message || JSON.stringify(data.error);
+      const isOverloaded = msg.toLowerCase().includes('overload') || data.error.type === 'overloaded_error';
+      if (isOverloaded && attempt < retries) {
+        await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+        continue;
+      }
+      throw new Error(isOverloaded ? 'La IA està sobrecarregada, torna-ho a intentar en uns minuts' : msg);
+    }
+    let raw = '';
+    if (Array.isArray(data.content)) raw = data.content.map(b => b.text || '').join('');
+    else if (typeof data.content === 'string') raw = data.content;
+    else if (data.choices?.[0]?.message) raw = data.choices[0].message.content;
+    else throw new Error('Format de resposta IA no reconegut');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error('No s\'ha trobat JSON a la resposta IA');
+    return JSON.parse(clean.slice(start, end + 1));
+  }
 }
 
 const REGLES_DEFAULT = `1) Cap grup sense cobrir
@@ -122,7 +133,11 @@ export async function analitzarInfoExtra(notes, base64Pdf) {
   if (base64Pdf) {
     content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Pdf } });
   }
-  const notesLine = notes?.trim() ? `Informació addicional escrita per la cap d'estudis: ${notes.trim()}\n\n` : '';
+  const notesLine = notes?.trim()
+    ? `Informació addicional escrita per la cap d'estudis: ${notes.trim()}\n\n`
+    : base64Pdf
+      ? `Llegeix el document PDF adjunt i extreu tota la informació sobre l'activitat o esdeveniment.\n\n`
+      : '';
   const avui = new Date().toISOString().split('T')[0];
   content.push({
     type: 'text',

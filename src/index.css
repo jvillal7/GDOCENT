@@ -76,10 +76,12 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--i
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;height:var(--nav-h);background:rgba(247,247,245,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;align-items:stretch;z-index:100;padding-bottom:env(safe-area-inset-bottom)}
 .bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:6px 2px;transition:background .1s;position:relative}
 .bn-item:active{background:var(--bg-2)}
+.bn-item.active::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:32px;height:3px;background:var(--ink);border-radius:0 0 4px 4px}
 .bn-item.active .bn-icon,.bn-item.active .bn-label{color:var(--ink)}
-.bn-item.active .bn-label{font-weight:600}
-.bn-icon{font-size:21px;color:var(--ink-3);transition:color .12s}
-.bn-label{font-size:10.5px;color:var(--ink-3);transition:color .12s}
+.bn-item.active .bn-icon{font-size:23px}
+.bn-item.active .bn-label{font-weight:700;font-size:11px}
+.bn-icon{font-size:21px;color:var(--ink-3);transition:color .12s,font-size .12s}
+.bn-label{font-size:10.5px;color:var(--ink-3);transition:color .12s,font-size .12s,font-weight .12s}
 .bn-badge{position:absolute;top:-3px;right:-7px;min-width:16px;height:16px;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;border-radius:20px;display:flex;align-items:center;justify-content:center;padding:0 4px}
 .main-content{padding-top:54px;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));min-height:100vh}
 .page-wrap{padding:16px 16px 12px}

@@ -10,6 +10,7 @@ export default function AppShell() {
   const { perfil, escola, role, page, setPage, logout } = useApp();
   const [desktop, setDesktop] = useState(isDesktop);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [oriolMenu, setOriolMenu] = useState(false);
 
   useEffect(() => {
     let prev = isDesktop();
@@ -121,6 +122,30 @@ export default function AppShell() {
         </div>
       </div>
 
+      {/* Panell Diari Ca N'Oriol */}
+      {oriolMenu && isOriol && role === 'jefa' && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 98 }} onClick={() => setOriolMenu(false)} />
+          <div style={{ position: 'fixed', bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px)', right: 12, background: '#fff', borderRadius: 16, boxShadow: '0 4px 28px rgba(0,0,0,.18)', zIndex: 99, overflow: 'hidden', minWidth: 230 }}>
+            {[
+              { id: 'oj_abs', icon: '👤', label: "Persones que s'absenten" },
+              { id: 'oj_reu', icon: '📝', label: 'Reunions i organització' },
+              { id: 'oj_cee', icon: '🏥', label: 'Actuacions CEEPSIR' },
+              { id: 'oj_bai', icon: '📋', label: 'Baixes amb substitucions' },
+            ].map((it, i, arr) => (
+              <div
+                key={it.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: page === it.id ? 'var(--bg-2)' : '#fff', fontSize: 14, fontWeight: page === it.id ? 600 : 400, color: 'var(--ink)' }}
+                onClick={() => { navigate(it.id); setOriolMenu(false); }}
+              >
+                <span style={{ fontSize: 18 }}>{it.icon}</span>
+                {it.label}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       <nav className="bottom-nav">
         {bnav.map(it => (
           <div key={it.id} className={`bn-item${page === it.id ? ' active' : ''}`} onClick={() => navigate(it.id)}>
@@ -128,6 +153,15 @@ export default function AppShell() {
             <span className="bn-label">{it.label}</span>
           </div>
         ))}
+        {isOriol && role === 'jefa' && (() => {
+          const oriolActive = ['oj_abs','oj_reu','oj_cee','oj_bai'].includes(page);
+          return (
+            <div className={`bn-item${oriolActive || oriolMenu ? ' active' : ''}`} onClick={() => setOriolMenu(p => !p)}>
+              <span className="bn-icon">{oriolMenu ? '✕' : '＋'}</span>
+              <span className="bn-label">Diari</span>
+            </div>
+          );
+        })()}
       </nav>
 
       <div className="main-content">
