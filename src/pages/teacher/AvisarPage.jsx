@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
 import { todayISO } from '../../lib/utils';
 import { uploadFitxer, sendEmail } from '../../lib/api';
-import { JEFA_EMAIL, APP_URL } from '../../lib/constants';
+import { JEFA_EMAIL, APP_URL, MANAGEMENT_USERS } from '../../lib/constants';
 
 export default function AvisarPage() {
   const { api, perfil, escola, showToast } = useApp();
@@ -101,7 +101,7 @@ export default function AvisarPage() {
       sendEmail(
         JEFA_EMAIL,
         `🔔 Nova absència — ${perfil.nom}`,
-        emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu })
+        emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola })
       );
       loadMeusAvisos();
     } catch (e) {
@@ -129,7 +129,7 @@ export default function AvisarPage() {
       sendEmail(
         JEFA_EMAIL,
         `🔔 Nova absència — ${perfil.nom}`,
-        emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia' })
+        emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola })
       );
     } catch (e) {
       showToast('Error: ' + e.message);
@@ -365,10 +365,29 @@ export default function AvisarPage() {
   );
 }
 
-function emailAbsencia({ nom, dates, motiu }) {
+function frangesText(ids, isOriol) {
+  const allFranjes = isOriol ? FRANJES_ORIOL : FRANJES;
+  const schoolFranjes = allFranjes.filter(f => !f.lliure);
+  if (!ids?.length) return '—';
+  if (ids.length >= schoolFranjes.length) return 'Tot el dia';
+  const sel = allFranjes.filter(f => ids.includes(f.id));
+  if (!sel.length) return '—';
+  const labels = [...new Set(sel.map(f => f.label))].join(', ');
+  const start = sel[0].sub.split('–')[0].trim();
+  const end = sel[sel.length - 1].sub.split('–')[1]?.trim() || '';
+  return `${labels} · ${start}–${end}`;
+}
+
+function emailAbsencia({ nom, dates, franges, motiu, isOriol, escola }) {
+  const escolaKey = escola?.nom?.toLowerCase().includes('oriol') ? 'oriol' : 'rivo';
+  const jefaUser = MANAGEMENT_USERS[escolaKey]?.find(u => u.rol === 'jefa');
+  const deepLink = `${APP_URL}?escola=${escolaKey}&u=${encodeURIComponent(jefaUser?.nom || 'Veronica')}&p=${jefaUser?.pin || '1234'}`;
+
   const datesHtml = dates.map(d =>
-    `<li>${new Date(d + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</li>`
+    `<li style="margin-bottom:2px">${new Date(d + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</li>`
   ).join('');
+  const frangesHtml = frangesText(franges, isOriol);
+
   return `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
       <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
@@ -377,9 +396,10 @@ function emailAbsencia({ nom, dates, motiu }) {
           <tr><td style="padding:8px 0;color:#666;width:110px">Docent</td><td style="padding:8px 0;font-weight:600">${nom}</td></tr>
           <tr><td style="padding:8px 0;color:#666">Motiu</td><td style="padding:8px 0">${motiu || 'No especificat'}</td></tr>
           <tr><td style="padding:8px 0;color:#666;vertical-align:top">Dies</td><td style="padding:8px 0"><ul style="margin:0;padding-left:16px">${datesHtml}</ul></td></tr>
+          <tr><td style="padding:8px 0;color:#666">Horari</td><td style="padding:8px 0;font-weight:600">${frangesHtml}</td></tr>
         </table>
         <div style="margin-top:24px;text-align:center">
-          <a href="${APP_URL}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
+          <a href="${deepLink}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
             Gestionar cobertura a GDOCENT →
           </a>
         </div>

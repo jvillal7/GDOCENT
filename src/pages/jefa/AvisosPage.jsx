@@ -58,8 +58,10 @@ export default function AvisosPage() {
       }
       setInfoExtra(vigents);
       const actives = (data || []).filter(a => a.estat !== 'arxivat');
-      // Auto-arxivar absències resoltes de dies passats (les d'avui es gestionen manualment)
-      const passades = actives.filter(a => a.estat === 'resolt' && a.data && a.data < avui);
+      // Auto-arxivar absències resoltes de fa més de 3 dies (marge perquè la jefa les vegi)
+      const limitArxiu = new Date(); limitArxiu.setDate(limitArxiu.getDate() - 3);
+      const limitArxiuISO = limitArxiu.toISOString().split('T')[0];
+      const passades = actives.filter(a => a.estat === 'resolt' && a.data && a.data < limitArxiuISO);
       if (passades.length > 0) {
         await Promise.all(passades.map(a => api.patchAbsencia(a.id, { estat: 'arxivat' })));
       }
@@ -221,7 +223,7 @@ export default function AvisosPage() {
           sendEmail(
             cobrintDocent.email,
             `📋 Cobertura assignada — ${absData}`,
-            emailCobertura({ cobrint: p.docent, absent: iaTarget.docent_nom, data: absData, frangesIds, isOriol, grup: grupDestí, esFutura })
+            emailCobertura({ cobrint: p.docent, absent: iaTarget.docent_nom, data: absData, frangesIds, isOriol, grup: grupDestí, esFutura, notes: iaTarget.notes })
           );
         }
       }
@@ -530,10 +532,16 @@ function frangesHorari(ids, isOriol) {
   return end ? `${start}–${end}` : start;
 }
 
-function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFutura }) {
+function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFutura, notes }) {
   const dataFmt = new Date(data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   const horariText = frangesIds?.length ? frangesHorari(frangesIds, isOriol) : '';
   const firstName = cobrint?.split(' ')[0] || cobrint;
+  const notesHtml = notes?.trim()
+    ? `<div style="margin-top:20px;background:#f0f7ff;border-left:4px solid #4285F4;border-radius:6px;padding:14px 16px">
+        <div style="font-size:11px;font-weight:700;color:#4285F4;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Missatge de ${absent}</div>
+        <p style="margin:0;font-size:14px;color:#1a1a1a;line-height:1.6">${notes.trim().replace(/\n/g, '<br>')}</p>
+      </div>`
+    : '';
   return `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
       <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
@@ -546,6 +554,7 @@ function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFu
           ${grup ? `<tr><td style="padding:8px 0;color:#666">Grup</td><td style="padding:8px 0">${grup}</td></tr>` : ''}
           <tr><td style="padding:8px 0;color:#666">Substitueix</td><td style="padding:8px 0">${absent}</td></tr>
         </table>
+        ${notesHtml}
         <div style="margin-top:24px;text-align:center">
           <a href="${APP_URL}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
             Veure la meva cobertura a GDOCENT →

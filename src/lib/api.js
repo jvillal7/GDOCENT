@@ -2,12 +2,22 @@ import { SUPA_URL, SUPA_KEY } from './constants';
 
 export async function sendEmail(to, subject, html) {
   try {
-    await fetch(`${SUPA_URL}/functions/v1/send-email`, {
+    const res = await fetch(`${SUPA_URL}/functions/v1/send-email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY },
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+      },
       body: JSON.stringify({ to, subject, html }),
     });
-  } catch { /* silenci: el correu no ha de bloquejar el flux principal */ }
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.status);
+      console.error('[sendEmail] Error de l\'Edge Function:', err);
+    }
+  } catch (e) {
+    console.error('[sendEmail] Error de xarxa:', e?.message || e);
+  }
 }
 
 export async function supaFetch(path, opts = {}, escolaId = null) {

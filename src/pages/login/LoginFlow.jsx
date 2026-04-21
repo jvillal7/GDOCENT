@@ -57,6 +57,41 @@ export default function LoginFlow() {
     });
   }, []);
 
+  // Auto-login des d'un deep link (?escola=rivo&u=Veronica&p=1234)
+  useEffect(() => {
+    if (!schools.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const escolaParam = params.get('escola');
+    const userParam   = params.get('u');
+    const pinParam    = params.get('p');
+    if (!escolaParam || !userParam) return;
+
+    const matched = schools.find(e => e.nom.toLowerCase().includes(escolaParam));
+    if (!matched) return;
+
+    localStorage.setItem('gd_consent_accepted', '1');
+    localStorage.setItem('gd_last_escola_key', escolaParam);
+
+    const key = matched.nom.toLowerCase().includes('rivo') ? 'rivo' : 'oriol';
+    const mgmtUsers = (MANAGEMENT_USERS[key] || []).map(u => ({ ...u, escola_id: matched.id }));
+    const targetUser = mgmtUsers.find(u => u.nom === userParam);
+
+    window.history.replaceState({}, '', window.location.pathname);
+
+    // Si hi ha PIN i és correcte → login directe sense mostrar cap pantalla
+    if (targetUser && pinParam && pinParam === targetUser.pin) {
+      login(targetUser, matched, targetUser.rol);
+      return;
+    }
+
+    // Sense PIN → mostrar pantalla de PIN amb l'usuari preseleccionat
+    setSchool(matched);
+    setUsers(mgmtUsers);
+    setRoleGroup('directiu');
+    if (targetUser) setSelected(targetUser);
+    setStep('details');
+  }, [schools]);
+
   function selectSchool(key) {
     if (!schools.length) return setError('Carregant escoles, espera un moment...');
     const matched = schools.find(e => e.nom.toLowerCase().includes(key));
