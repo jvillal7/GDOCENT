@@ -7,32 +7,51 @@ import Spinner from '../../components/Spinner';
 
 const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
 
+const ESPECIALISTES_GRUPS = ['Anglès', 'EF', 'Música', 'EI suport'];
+
 const NIVELLS = [
-  { key: 'i',  label: 'Infantil', match: g => /^I/i.test((g||'').trim()) },
-  { key: 'p1', label: '1r',       match: g => /^1/i.test((g||'').trim()) },
-  { key: 'p2', label: '2n',       match: g => /^2/i.test((g||'').trim()) },
-  { key: 'p3', label: '3r',       match: g => /^3/i.test((g||'').trim()) },
-  { key: 'p4', label: '4t',       match: g => /^4/i.test((g||'').trim()) },
-  { key: 'p5', label: '5è',       match: g => /^5/i.test((g||'').trim()) },
-  { key: 'p6', label: '6è',       match: g => /^6/i.test((g||'').trim()) },
-  { key: 'ee', label: 'Ed. Especial / Especialistes', match: () => true },
+  { key: 'i3',  label: 'I3',                    match: (g)    => /^I3/i.test((g||'').trim()) },
+  { key: 'i4',  label: 'I4',                    match: (g)    => /^I4/i.test((g||'').trim()) },
+  { key: 'i5',  label: 'I5',                    match: (g)    => /^I5/i.test((g||'').trim()) },
+  { key: 'p1',  label: '1r',                    match: (g)    => /^1/i.test((g||'').trim()) },
+  { key: 'p2',  label: '2n',                    match: (g)    => /^2/i.test((g||'').trim()) },
+  { key: 'p3',  label: '3r',                    match: (g)    => /^3/i.test((g||'').trim()) },
+  { key: 'p4',  label: '4t',                    match: (g)    => /^4/i.test((g||'').trim()) },
+  { key: 'p5',  label: '5è',                    match: (g)    => /^5/i.test((g||'').trim()) },
+  { key: 'p6',  label: '6è',                    match: (g)    => /^6/i.test((g||'').trim()) },
+  { key: 'esp', label: 'Especialistes',          match: (g, d) => d.rol === 'teacher' && ESPECIALISTES_GRUPS.includes(g) },
+  { key: 'ee',  label: 'Ed. Especial i Suport', match: ()     => true },
 ];
+
+const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
+
+function isCoord(v) { return COORD_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
 
 function cellBg(val) {
   const v = (val || '').toLowerCase().trim();
   if (v === 'tp' || v === 'treball personal') return 'var(--amber-bg)';
+  if (isCoord(v)) return 'var(--purple-bg)';
   if (v === 'lliure' || v === 'libre' || v === '') return 'var(--green-bg)';
   if (v === 'pati' || v.startsWith('pati')) return 'var(--bg-3)';
   if (val) return 'var(--blue-bg)';
   return 'var(--green-bg)';
 }
 
+function cellColor(val) {
+  const v = (val || '').toLowerCase().trim();
+  if (v === 'tp' || v === 'treball personal') return 'var(--amber)';
+  if (isCoord(v)) return 'var(--purple)';
+  if (v === 'lliure' || v === 'libre' || v === '') return 'var(--green)';
+  return 'var(--ink-2)';
+}
+
 export default function HorarisPage() {
   const { api, escola, docents, setDocents, showToast } = useApp();
   const isOriol  = escola?.nom?.toLowerCase().includes('oriol');
   const franjes   = isOriol ? FRANJES_ORIOL : FRANJES;
-  const [confirm, setConfirm]   = useState(null); // horari data to confirm
-  const [uploads, setUploads]   = useState([]);   // [{ name, status, msg }]
+  const [confirm, setConfirm]   = useState(null);
+  const [uploads, setUploads]   = useState([]);
+  const [expanded, setExpanded] = useState(null); // id del docent amb horari obert
   const fileRef = useRef(null);
 
   useEffect(() => { if (api) reload(); }, [api]);
@@ -113,7 +132,7 @@ export default function HorarisPage() {
   const groups = {};
   NIVELLS.forEach(n => { groups[n.key] = []; });
   docents.forEach((d, i) => {
-    const assigned = NIVELLS.slice(0, -1).find(n => n.match(d.grup_principal));
+    const assigned = NIVELLS.slice(0, -1).find(n => n.match(d.grup_principal, d));
     groups[assigned ? assigned.key : 'ee'].push({ d, i });
   });
 
@@ -139,24 +158,36 @@ export default function HorarisPage() {
                 <div style={{ padding: '8px 16px 4px', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
                   {n.label}
                 </div>
-                {items.map(({ d }) => (
-                  <div key={d.id || d.nom} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                      {initials(d.nom)}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 500 }}>{d.nom}</div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                        {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
+                {items.map(({ d }) => {
+                  const isOpen = expanded === (d.id || d.nom);
+                  const teHorari = d.horari && Object.keys(d.horari).length > 0;
+                  return (
+                    <div key={d.id || d.nom} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px' }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                          {initials(d.nom)}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 500 }}>{d.nom}</div>
+                          <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                            {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
+                          </div>
+                          {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {teHorari && (
+                            <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setExpanded(isOpen ? null : (d.id || d.nom))}>
+                              {isOpen ? '▴ Tancar' : '▾ Horari'}
+                            </button>
+                          )}
+                          <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12 }} onClick={() => setConfirm(d)}>✏️ Editar</button>
+                          <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => eliminar(d.id, d.nom)}>✕</button>
+                        </div>
                       </div>
-                      {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
+                      {isOpen && teHorari && <HorariInline horari={d.horari} tpFranges={d.tp_franges} franjes={franjes} />}
                     </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12 }} onClick={() => setConfirm(d)}>✏️ Editar</button>
-                      <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => eliminar(d.id, d.nom)}>✕</button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })}
@@ -199,6 +230,61 @@ export default function HorarisPage() {
   );
 }
 
+function HorariInline({ horari, tpFranges = [], franjes }) {
+  const tpSet = new Set(tpFranges);
+  const horaGroups = {};
+  franjes.forEach(f => { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
+  const thS = { padding: '4px 4px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 9, fontWeight: 600, color: 'var(--ink-3)', textAlign: 'center', whiteSpace: 'nowrap' };
+  const tdS = { padding: '4px 5px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 9, color: 'var(--ink-3)', whiteSpace: 'nowrap' };
+  return (
+    <div style={{ padding: '0 12px 12px', background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+        {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati']].map(([bg,bc,lbl]) => (
+          <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, color: 'var(--ink-3)' }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />{lbl}
+          </span>
+        ))}
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 440 }}>
+          <thead>
+            <tr>
+              <th style={{ ...thS, width: 56, textAlign: 'left' }}>Hora</th>
+              <th style={{ ...thS, width: 64, textAlign: 'left' }}>Tram</th>
+              {DIES.map(d => <th key={d} style={thS}>{DIE_ABBR[d]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {franjes.map(f => {
+              const grp = horaGroups[f.hora] || [];
+              const isFirst = grp[0]?.id === f.id;
+              return (
+                <tr key={f.id}>
+                  {isFirst && (
+                    <td rowSpan={grp.length} style={{ ...tdS, fontWeight: 700, verticalAlign: 'middle', color: 'var(--ink-2)' }}>{f.label}</td>
+                  )}
+                  <td style={{ ...tdS, fontSize: 8 }}>{f.sub}</td>
+                  {DIES.map(dia => {
+                    const raw = horari?.[dia]?.[f.id] || '';
+                    const val = raw || (tpSet.has(`${dia}-${f.id}`) ? 'TP' : '');
+                    return (
+                      <td key={dia} style={{ padding: '3px 3px', border: '1px solid var(--border)', background: cellBg(val), textAlign: 'center', minWidth: 60 }}>
+                        <span style={{ fontSize: 9, color: cellColor(val), fontWeight: val ? 500 : 400 }}>
+                          {val || ''}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function exportJSON(docents) {
   const json = JSON.stringify(docents, null, 2);
   navigator.clipboard.writeText(json)
@@ -232,9 +318,13 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   const [email, setEmail] = useState(data.email || '');
   const [horari, setHorari] = useState(() => {
     const h = {};
+    const tpSet = new Set(data.tp_franges || []);
     DIES.forEach(d => {
       h[d] = {};
-      franjes.forEach(f => { h[d][f.id] = data.horari?.[d]?.[f.id] || ''; });
+      franjes.forEach(f => {
+        const raw = data.horari?.[d]?.[f.id] || '';
+        h[d][f.id] = raw || (tpSet.has(`${d}-${f.id}`) ? 'TP' : '');
+      });
     });
     return h;
   });
@@ -304,7 +394,16 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head"><h3>Horari extret per la IA <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink-3)' }}>(pots editar)</span></h3></div>
+        <div className="card-head">
+          <h3>Horari extret per la IA <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink-3)' }}>(pots editar)</span></h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati']].map(([bg,bc,lbl]) => (
+              <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--ink-3)' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />{lbl}
+              </span>
+            ))}
+          </div>
+        </div>
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: 10 }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 500 }}>
             <thead>
@@ -328,11 +427,11 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
                     {DIES.map(dia => {
                       const val = horari[dia]?.[f.id] || '';
                       return (
-                        <td key={dia} style={{ padding: 3, border: '1px solid var(--border)', minWidth: 75, background: cellBg(val), transition: 'background .15s' }}>
+                        <td key={dia} style={{ padding: 0, border: '1px solid var(--border)', minWidth: 75 }}>
                           {f.lliure
-                            ? <input disabled style={{ width: '100%', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 10, textAlign: 'center', padding: '2px', color: 'var(--green)', fontWeight: 600 }} value="Lliure" readOnly />
+                            ? <input disabled style={{ width: '100%', border: 'none', outline: 'none', background: cellBg('lliure'), fontFamily: 'inherit', fontSize: 10, textAlign: 'center', padding: '5px 2px', color: 'var(--green)', fontWeight: 600 }} value="Lliure" readOnly />
                             : <input
-                                style={{ width: '100%', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 10, textAlign: 'center', padding: 2, color: 'var(--ink)' }}
+                                style={{ width: '100%', border: 'none', outline: 'none', background: cellBg(val), fontFamily: 'inherit', fontSize: 10, textAlign: 'center', padding: '5px 2px', color: cellColor(val), transition: 'background .15s, color .15s' }}
                                 value={val}
                                 onChange={e => setCell(dia, f.id, e.target.value)}
                               />

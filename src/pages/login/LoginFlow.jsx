@@ -129,7 +129,7 @@ export default function LoginFlow() {
     setSearch('');
     try {
       if (group === 'teacher') {
-        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=not.in.(educador,vetllador)`);
+        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=not.in.(educador,vetllador,tei)`);
         setUsers(data || []);
       } else if (group === 'educador' || group === 'vetllador') {
         const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=eq.${group}`);

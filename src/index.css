@@ -7,7 +7,7 @@
   --red: #C43B2A; --red-bg: #FAECEA; --red-mid: #EBADAD;
   --amber: #B86B0A; --amber-bg: #FDF3E3;
   --blue: #2B5BAA; --blue-bg: #EBF0FA;
-  --purple: #6B4FA0; --purple-bg: #F3EFF9;
+  --purple: #6B4FA0; --purple-bg: #F3EFF9; --purple-mid: #C8B8E0;
   --sh: 0 1px 3px rgba(0,0,0,.06),0 0 1px rgba(0,0,0,.07);
   --sh-lg: 0 8px 32px rgba(0,0,0,.12),0 0 1px rgba(0,0,0,.08);
   --r: 12px; --r-sm: 8px; --nav-h: 62px;

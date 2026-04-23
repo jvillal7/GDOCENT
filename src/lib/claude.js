@@ -36,10 +36,14 @@ const REGLES_DEFAULT = `1) Cap grup sense cobrir
 3) Reparteix cobertures equitativament
 4) Un docent per franja`;
 
+const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
+function isCoordVal(v) { return COORD_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
+
 function estatHorari(val) {
   const v = (val || '').toLowerCase().trim();
   if (!v || v === 'lliure' || v === 'libre') return { lliure: true,  text: 'lliure' };
   if (v === 'tp' || v === 'treball personal') return { lliure: false, text: 'TP' };
+  if (isCoordVal(v)) return { lliure: false, text: 'Coordinació/Càrrec' };
   return { lliure: false, text: `ocupat: ${val}` };
 }
 
@@ -108,8 +112,10 @@ ${disponibilitatDocents}
 INSTRUCCIONS:
 1. Tria preferentment un docent marcat com "✓ LLIURE TOT EL BLOC" amb menys cobertures.
 2. Si no n'hi ha cap, proposa el mínim (1 per bloc d'hora). Mai 1 per franja de 30 min.
-3. Evita docents "ocupat". Usa "TP" només si no hi ha cap altra opció.
-4. "franges_ids" ha de contenir TOTES les franges que cobreix aquell docent.
+3. Evita docents "ocupat". Usa "TP" o "Coordinació/Càrrec" NOMÉS si no hi ha cap altra opció.
+4. Si un docent cobreix en la seva franja de "Coordinació/Càrrec", posa tp_afectat:false (NO genera deute de TP).
+5. Si un docent cobreix en la seva franja de "TP", posa tp_afectat:true (SÍ genera deute de TP).
+6. "franges_ids" ha de contenir TOTES les franges que cobreix aquell docent.
 
 Respon NOMÉS JSON: {"proposta":[{"docent":"Nom Cognom","franges_ids":${JSON.stringify(frangesIds)},"hores":"${blocsDesc}","grup_origen":"GX","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
 
