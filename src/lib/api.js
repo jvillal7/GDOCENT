@@ -80,7 +80,7 @@ export function makeApi(escolaId) {
     saveDocent:          d     => d.id
       ? f(`docents?id=eq.${d.id}`, { method: 'PATCH', body: JSON.stringify(d) })
       : f('docents', { method: 'POST', body: JSON.stringify(d) }),
-    deleteDocent:        id    => f(`docents?id=eq.${id}`, { method: 'DELETE' }),
+    deleteDocent:        id    => f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actiu: false }) }),
     getAbsenciesAvui:    ()    => f(`absencies?data=eq.${avui()}&order=creat_el.desc`),
     getAbsencies:        ()    => f('absencies?order=creat_el.desc&limit=50'),
     getAbsenciaById:     id    => f(`absencies?id=eq.${id}`),
