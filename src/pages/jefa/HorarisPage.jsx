@@ -49,7 +49,7 @@ export default function HorarisPage() {
   const { api, escola, docents, setDocents, showToast } = useApp();
   const isOriol  = escola?.nom?.toLowerCase().includes('oriol');
   const franjes   = isOriol ? FRANJES_ORIOL : FRANJES;
-  const [confirm, setConfirm]   = useState(null);
+  const [confirmData, setConfirm]   = useState(null);
   const [uploads, setUploads]   = useState([]);
   const [expanded, setExpanded] = useState(null); // id del docent amb horari obert
   const fileRef = useRef(null);
@@ -126,7 +126,7 @@ export default function HorarisPage() {
     catch (e) { showToast('Error eliminant: ' + e.message); reload(); }
   }
 
-  if (confirm) return <ConfirmHorari data={confirm} franjes={franjes} onSave={saveHorari} onCancel={() => { setConfirm(null); if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; } }} />;
+  if (confirmData) return <ConfirmHorari data={confirmData} franjes={franjes} onSave={saveHorari} onCancel={() => { setConfirm(null); if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; } }} />;
 
   // Group docents by nivell
   const groups = {};
