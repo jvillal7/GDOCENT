@@ -62,8 +62,8 @@ export const NAV_CFG = {
       { id: 'tc', icon: '🔄', label: 'Les meves cobertures' },
     ]},
   ],
-  director:  [{ sec: 'Direcció',  items: [{ id: 'di', icon: '📊', label: 'Resum' }, { id: 'df', icon: '📋', label: 'Informes' }] }],
-  secretaria:[{ sec: 'Secretaria',items: [{ id: 'di', icon: '📊', label: 'Resum' }] }],
+  director:  [{ sec: 'Direcció',  items: [{ id: 'di', icon: '📋', label: 'Historial' }] }],
+  secretaria:[{ sec: 'Secretaria',items: [{ id: 'di', icon: '📋', label: 'Historial' }] }],
   dev:       [{ sec: 'Sistema',   items: [{ id: 'dv', icon: '🤖', label: 'Normes IA' }] }],
 };
 
@@ -72,8 +72,8 @@ export const BNAV = {
   teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }, { id: 'tt', icon: '🕐', label: 'TP' }],
   educador:  [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   vetllador: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
-  director:  [{ id: 'di', icon: '📊', label: 'Resum' }, { id: 'df', icon: '📋', label: 'Informes' }],
-  secretaria:[{ id: 'di', icon: '📊', label: 'Resum' }],
+  director:  [{ id: 'di', icon: '📋', label: 'Historial' }],
+  secretaria:[{ id: 'di', icon: '📋', label: 'Historial' }],
   dev:       [{ id: 'dv', icon: '🤖', label: 'Normes IA' }],
 };
 
@@ -83,7 +83,7 @@ export const PAGE_TITLES = {
   jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal',
   jh: 'Historial', jhoraris: 'Personal del centre',
   ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP',
-  di: 'Resum', df: 'Informes', dv: 'Normes IA',
+  di: 'Historial', df: 'Informes', dv: 'Normes IA',
   oj_abs: "Persones que s'absenten", oj_reu: 'Reunions i organització',
   oj_cee: 'Actuacions CEEPSIR',      oj_bai: 'Baixes amb substitucions',
 };

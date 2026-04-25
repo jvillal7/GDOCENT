@@ -18,7 +18,7 @@ const PAGES = {
   jd: AvuiPage,   javis: AvisosPage,  jtp: TPPage,
   jh: HistorialPage, jhoraris: HorarisPage,
   ta: AvisarPage, tc: CoberturasPage, tt: MeuTPPage,
-  di: ResumPage,  df: InformesPage,   dv: AdminPage,
+  di: HistorialPage, df: InformesPage, dv: AdminPage,
   oj_abs: OriolAbsentsPage, oj_reu: OriolReunionsPage,
   oj_cee: OriolCeepsirPage, oj_bai: OriolBaixesPage,
 };
