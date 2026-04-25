@@ -231,7 +231,7 @@ export default function HorarisPage() {
 }
 
 function HorariInline({ horari, tpFranges = [], franjes }) {
-  const tpSet = new Set(tpFranges);
+  const tpSet = new Set(Array.isArray(tpFranges) ? tpFranges : []);
   const horaGroups = {};
   franjes.forEach(f => { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
   const thS = { padding: '4px 4px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 9, fontWeight: 600, color: 'var(--ink-3)', textAlign: 'center', whiteSpace: 'nowrap' };
@@ -318,7 +318,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   const [email, setEmail] = useState(data.email || '');
   const [horari, setHorari] = useState(() => {
     const h = {};
-    const tpSet = new Set(data.tp_franges || []);
+    const tpSet = new Set(Array.isArray(data.tp_franges) ? data.tp_franges : []);
     DIES.forEach(d => {
       h[d] = {};
       franjes.forEach(f => {
