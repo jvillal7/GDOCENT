@@ -10,17 +10,22 @@ const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', d
 const ESPECIALISTES_GRUPS = ['Anglès', 'EF', 'Música', 'EI suport'];
 
 const NIVELLS = [
-  { key: 'i3',  label: 'I3',                    match: (g)    => /^I3/i.test((g||'').trim()) },
-  { key: 'i4',  label: 'I4',                    match: (g)    => /^I4/i.test((g||'').trim()) },
-  { key: 'i5',  label: 'I5',                    match: (g)    => /^I5/i.test((g||'').trim()) },
-  { key: 'p1',  label: '1r',                    match: (g)    => /^1/i.test((g||'').trim()) },
-  { key: 'p2',  label: '2n',                    match: (g)    => /^2/i.test((g||'').trim()) },
-  { key: 'p3',  label: '3r',                    match: (g)    => /^3/i.test((g||'').trim()) },
-  { key: 'p4',  label: '4t',                    match: (g)    => /^4/i.test((g||'').trim()) },
-  { key: 'p5',  label: '5è',                    match: (g)    => /^5/i.test((g||'').trim()) },
-  { key: 'p6',  label: '6è',                    match: (g)    => /^6/i.test((g||'').trim()) },
-  { key: 'esp', label: 'Especialistes',          match: (g, d) => d.rol === 'teacher' && ESPECIALISTES_GRUPS.includes(g) },
-  { key: 'ee',  label: 'Ed. Especial i Suport', match: ()     => true },
+  { key: 'i3',   label: 'I3',                          match: (g)    => /^I3/i.test((g||'').trim()) },
+  { key: 'i4',   label: 'I4',                          match: (g)    => /^I4/i.test((g||'').trim()) },
+  { key: 'i5',   label: 'I5',                          match: (g)    => /^I5/i.test((g||'').trim()) },
+  { key: 'p1',   label: '1r',                          match: (g)    => /^1/i.test((g||'').trim()) },
+  { key: 'p2',   label: '2n',                          match: (g)    => /^2/i.test((g||'').trim()) },
+  { key: 'p3',   label: '3r',                          match: (g)    => /^3/i.test((g||'').trim()) },
+  { key: 'p4',   label: '4t',                          match: (g)    => /^4/i.test((g||'').trim()) },
+  { key: 'p5',   label: '5è',                          match: (g)    => /^5/i.test((g||'').trim()) },
+  { key: 'p6',   label: '6è',                          match: (g)    => /^6/i.test((g||'').trim()) },
+  { key: 'ef',   label: 'Especialistes · Educació Física', match: (g) => g === 'EF' },
+  { key: 'ang',  label: 'Especialistes · Anglès',          match: (g) => g === 'Anglès' },
+  { key: 'mus',  label: 'Especialistes · Música',          match: (g) => g === 'Música' },
+  { key: 'eis',  label: 'Especialistes · EI Suport',       match: (g) => g === 'EI suport' },
+  { key: 'siei', label: 'MESI / SIEI',                     match: (g, d) => d.rol === 'ee' || /MESI|SIEI/i.test(g||'') },
+  { key: 'pae',  label: 'Suport d\'Educació Especial',     match: (g, d) => ['educador','vetllador','tei','suport'].includes(d.rol) },
+  { key: 'ee',   label: 'Altres',                          match: () => true },
 ];
 
 const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
