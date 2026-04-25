@@ -1,28 +1,42 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 
-const PLACEHOLDER = `Exemples de normes:
-- Prioritzar docents de cicle inicial per cobrir grups de cicle inicial
-- No assignar més de 2 cobertures al mateix docent en un dia
-- La especialista de música no pot cobrir grups d'infantil
-- Prioritzar tutors del mateix nivell`;
+const REGLES_DEFAULT = [
+  'Cap grup sense cobrir',
+  'Un sol docent per a tota l\'absència. Si és tot el dia i no pot ser el mateix, un docent pel matí i un per la tarda',
+];
+
+function parseNormes(text) {
+  if (!text?.trim()) return [];
+  return text.split('\n').map(l => l.replace(/^[-–•]\s*/, '').trim()).filter(Boolean);
+}
+
+function serializeNormes(normes) {
+  return normes.map(n => `- ${n}`).join('\n');
+}
 
 export default function AdminPage() {
   const { api, escola, normes, setNormes, showToast } = useApp();
-  const [text,    setText]   = useState('');
-  const [saving,  setSaving] = useState(false);
-  const [loaded,  setLoaded] = useState(false);
+  const [items,   setItems]   = useState([]);
+  const [editing, setEditing] = useState(null); // index o 'new'
+  const [draft,   setDraft]   = useState('');
+  const [saving,  setSaving]  = useState(false);
+  const [loaded,  setLoaded]  = useState(false);
 
   useEffect(() => {
-    if (normes !== undefined) { setText(normes || ''); setLoaded(true); }
+    if (normes !== undefined) {
+      setItems(parseNormes(normes));
+      setLoaded(true);
+    }
   }, [normes]);
 
-  async function save() {
+  async function persistItems(newItems) {
     setSaving(true);
     try {
+      const text = serializeNormes(newItems);
       await api.saveNormesIA(text);
       setNormes(text);
-      showToast('Normes guardades correctament');
+      showToast('Normes guardades');
     } catch (e) {
       showToast('Error guardant: ' + e.message);
     } finally {
@@ -30,57 +44,173 @@ export default function AdminPage() {
     }
   }
 
-  function reset() {
-    setText('');
+  function startNew() {
+    setDraft('');
+    setEditing('new');
+  }
+
+  function startEdit(i) {
+    setDraft(items[i]);
+    setEditing(i);
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setDraft('');
+  }
+
+  async function confirmEdit() {
+    if (!draft.trim()) return;
+    let newItems;
+    if (editing === 'new') {
+      newItems = [...items, draft.trim()];
+    } else {
+      newItems = items.map((it, i) => i === editing ? draft.trim() : it);
+    }
+    setItems(newItems);
+    setEditing(null);
+    setDraft('');
+    await persistItems(newItems);
+  }
+
+  async function deleteItem(i) {
+    const newItems = items.filter((_, idx) => idx !== i);
+    setItems(newItems);
+    await persistItems(newItems);
+  }
+
+  async function moveItem(i, dir) {
+    const newItems = [...items];
+    const target = i + dir;
+    if (target < 0 || target >= newItems.length) return;
+    [newItems[i], newItems[target]] = [newItems[target], newItems[i]];
+    setItems(newItems);
+    await persistItems(newItems);
   }
 
   return (
     <>
       <div className="page-hdr">
-        <h1>Administració</h1>
-        <p>{escola?.nom}</p>
+        <h1>Normes IA</h1>
+        <p>Regles que la IA seguirà per proposar cobertures a {escola?.nom}</p>
       </div>
 
-      <div className="alert alert-amber">⚙️ Accés total al sistema.</div>
-
-      <div className="card">
+      {/* Normes per defecte */}
+      <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head">
-          <h3>Normes per a la IA de cobertures</h3>
+          <h3>Normes per defecte del sistema</h3>
+          <span className="sp sp-ink">S'apliquen sempre</span>
         </div>
-        <div style={{ padding: '14px 16px' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 12, lineHeight: 1.5 }}>
-            Defineix les normes que la IA utilitzarà quan proposi cobertures. Si no n'hi ha, s'aplicaran les normes per defecte (repartiment equitatiu, prioritzar sense TP).
+        <div style={{ padding: '8px 16px 14px' }}>
+          <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 10 }}>
+            Aquestes normes s'apliquen sempre, independentment de les normes del centre.
           </p>
+          {REGLES_DEFAULT.map((r, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 6 }}>
+              <span style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 700, minWidth: 18 }}>{i + 1}.</span>
+              <span style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5 }}>{r}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
+      {/* Normes del centre */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head">
+          <h3>Normes específiques del centre</h3>
+          <span className="sp sp-blue">{items.length} normes</span>
+        </div>
+        <div style={{ padding: '8px 16px 14px' }}>
           {!loaded ? (
             <div style={{ textAlign: 'center', padding: 20, color: 'var(--ink-3)', fontSize: 13 }}>Carregant...</div>
           ) : (
             <>
-              <textarea
-                className="f-ctrl"
-                rows={10}
-                placeholder={PLACEHOLDER}
-                value={text}
-                onChange={e => setText(e.target.value)}
-                style={{ fontFamily: 'monospace', fontSize: 13, lineHeight: 1.6, resize: 'vertical' }}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <button className="btn btn-green btn-full" style={{ padding: 12, fontSize: 14 }} disabled={saving} onClick={save}>
-                  {saving ? 'Guardant...' : '💾 Guardar normes'}
-                </button>
-                <button className="btn btn-ghost" style={{ padding: 12 }} onClick={reset} title="Esborrar tot i usar normes per defecte">
-                  ↺
-                </button>
-              </div>
-              {!text.trim() && (
-                <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 8 }}>
-                  S'usaran les normes per defecte: repartiment equitatiu, prioritzar docents sense TP.
+              {items.length === 0 && editing !== 'new' && (
+                <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+                  Sense normes específiques. S'aplicaran només les normes per defecte.
                 </div>
+              )}
+
+              {items.map((item, i) => (
+                <div key={i}>
+                  {editing === i ? (
+                    <EditRow
+                      value={draft}
+                      onChange={setDraft}
+                      onConfirm={confirmEdit}
+                      onCancel={cancelEdit}
+                      saving={saving}
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 12, color: 'var(--ink-4)', fontWeight: 700, minWidth: 20, paddingTop: 2 }}>{i + 1}.</span>
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--ink)', lineHeight: 1.5 }}>{item}</span>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button className="btn btn-sm btn-ghost" style={{ fontSize: 11, padding: '3px 7px' }} onClick={() => moveItem(i, -1)} disabled={i === 0} title="Pujar">↑</button>
+                        <button className="btn btn-sm btn-ghost" style={{ fontSize: 11, padding: '3px 7px' }} onClick={() => moveItem(i, 1)} disabled={i === items.length - 1} title="Baixar">↓</button>
+                        <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px', background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)' }} onClick={() => startEdit(i)}>Editar</button>
+                        <button className="btn btn-sm btn-ghost" style={{ fontSize: 11, padding: '3px 7px', color: 'var(--red)' }} onClick={() => deleteItem(i)}>✕</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {editing === 'new' && (
+                <EditRow
+                  value={draft}
+                  onChange={setDraft}
+                  onConfirm={confirmEdit}
+                  onCancel={cancelEdit}
+                  saving={saving}
+                  isNew
+                />
+              )}
+
+              {editing !== 'new' && (
+                <button
+                  className="btn btn-full"
+                  style={{ marginTop: 12, padding: 11, background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 13, fontWeight: 600 }}
+                  onClick={startNew}
+                >
+                  + Afegir nova norma
+                </button>
               )}
             </>
           )}
         </div>
       </div>
+
+      {/* Info */}
+      <div className="alert alert-blue" style={{ fontSize: 12.5 }}>
+        🤖 La IA llegeix aquestes normes cada vegada que proposa una cobertura. Els canvis s'apliquen immediatament a la propera consulta.
+      </div>
     </>
+  );
+}
+
+function EditRow({ value, onChange, onConfirm, onCancel, saving, isNew }) {
+  return (
+    <div style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+      {isNew && (
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Nova norma</div>
+      )}
+      <textarea
+        className="f-ctrl"
+        rows={2}
+        autoFocus
+        placeholder="Escriu la norma aquí... (ex: Els especialistes d'EF no cobreixen grups d'infantil)"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ fontSize: 13, lineHeight: 1.5, resize: 'vertical', marginBottom: 8 }}
+        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onConfirm(); if (e.key === 'Escape') onCancel(); }}
+      />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-green" style={{ fontSize: 13, padding: '7px 16px' }} onClick={onConfirm} disabled={saving || !value.trim()}>
+          {saving ? 'Guardant...' : '✓ Guardar'}
+        </button>
+        <button className="btn btn-ghost" style={{ fontSize: 13, padding: '7px 12px' }} onClick={onCancel}>Cancel·lar</button>
+      </div>
+    </div>
   );
 }
