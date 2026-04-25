@@ -32,9 +32,7 @@ async function callClaude(messages, maxTokens = 1000, retries = 2) {
 }
 
 const REGLES_DEFAULT = `1) Cap grup sense cobrir
-2) Prioritza docents sense TP en aquella franja
-3) Reparteix cobertures equitativament
-4) Un docent per franja`;
+2) Un sol docent per a tota l'absència. Si és tot el dia i no pot ser el mateix, un docent pel matí i un per la tarda`;
 
 const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
 function isCoordVal(v) { return COORD_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
