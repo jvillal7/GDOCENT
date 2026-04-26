@@ -13,7 +13,7 @@ const BLOCS_RIVO = [
   { hora: 'Pati B',  slots: ['patiB'] },
   { hora: '3a hora', slots: ['f3a','f3b'] },
   { hora: 'Dinar',   slots: ['f4'] },
-  { hora: 'Tarda', slots: ['f5a','f5b','f5c'] },
+  { hora: 'Tarda',   slots: ['f5a','f5b','f5c'] },
 ];
 
 export default function AvuiPage() {
@@ -71,23 +71,13 @@ export default function AvuiPage() {
           if (a.estat === 'pendent') {
             newCells[key] = { estat: 'pendent', avisId: a.id, grup: colGrup, fid };
           } else if (a.estat === 'resolt' || a.estat === 'arxivat') {
-            const franjaLabel = FRANJES_ACT.find(f => f.id === fid)?.label || '';
-            const franjaSub   = FRANJES_ACT.find(f => f.id === fid)?.sub   || '';
-            const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
-            const matchFn = cf =>
-              cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
-            const fallbackFn = cf =>
-              cf === franjaLabel.toLowerCase() || cf.startsWith(franjaLabel.toLowerCase());
-            const cob =
-              (cobertures || []).find(c => c.absencia_id === a.id && matchFn((c.franja || '').toLowerCase())) ||
-              (cobertures || []).find(c => c.absencia_id === a.id && fallbackFn((c.franja || '').toLowerCase()));
+            const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT);
             newCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
           }
         });
       });
       setCells(newCells);
 
-      // Graella SIEI (només Rivo Rubeo)
       const sieiStudents = escola?.nom?.toLowerCase().includes('rivo') ? SIEI_ALUMNES.rivo : [];
       const newSieiCells = {};
       if (sieiStudents.length > 0) {
@@ -105,14 +95,7 @@ export default function AvuiPage() {
             if (a.estat === 'pendent') {
               newSieiCells[key] = { estat: 'pendent', avisId: a.id, student: matched, fid };
             } else {
-              const franjaLabel = FRANJES_ACT.find(f => f.id === fid)?.label || '';
-              const franjaSub   = FRANJES_ACT.find(f => f.id === fid)?.sub   || '';
-              const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
-              const matchFn  = cf => cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
-              const fallbackFn = cf => cf === franjaLabel.toLowerCase() || cf.startsWith(franjaLabel.toLowerCase());
-              const cob =
-                (cobertures || []).find(c => c.absencia_id === a.id && matchFn((c.franja || '').toLowerCase())) ||
-                (cobertures || []).find(c => c.absencia_id === a.id && fallbackFn((c.franja || '').toLowerCase()));
+              const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT);
               newSieiCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
             }
           });
@@ -123,51 +106,9 @@ export default function AvuiPage() {
     } catch (e) { console.error('loadAvuiData:', e); }
   }
 
-  // Pre-calcula fusió de cel·les: cel·les consecutives del mateix cobrint → rowSpan
-  function computeSpans(items, cellsMap) {
-    const allSlots = BLOCS.flatMap(b => b.slots);
-    const spans = {};
-    for (const item of items) {
-      spans[item] = {};
-      let i = 0;
-      while (i < allSlots.length) {
-        const fid = allSlots[i];
-        const cell = cellsMap[`${item}__${fid}`];
-        if (cell?.estat === 'resolt' && cell.cobrint) {
-          // Fusionar cel·les resoltes consecutives del mateix mestre
-          let span = 1;
-          while (i + span < allSlots.length) {
-            const next = cellsMap[`${item}__${allSlots[i + span]}`];
-            if (next?.estat === 'resolt' && next.cobrint === cell.cobrint) span++;
-            else break;
-          }
-          spans[item][fid] = { rowSpan: span };
-          for (let j = 1; j < span; j++) spans[item][allSlots[i + j]] = { skip: true };
-          i += span;
-        } else if (cell?.estat === 'pendent') {
-          // Fusionar cel·les pendents consecutives de la mateixa absència
-          let span = 1;
-          while (i + span < allSlots.length) {
-            const next = cellsMap[`${item}__${allSlots[i + span]}`];
-            if (next?.estat === 'pendent' && next.avisId === cell.avisId) span++;
-            else break;
-          }
-          spans[item][fid] = { rowSpan: span };
-          for (let j = 1; j < span; j++) spans[item][allSlots[i + j]] = { skip: true };
-          i += span;
-        } else {
-          spans[item][fid] = { rowSpan: 1 };
-          i++;
-        }
-      }
-    }
-    return spans;
-  }
+  const groupSpans = computeSpans(GRUPS, cells, BLOCS);
+  const sieiSpans  = computeSpans(SIEI_ALUMNES.rivo || [], sieiCells, BLOCS);
 
-  const groupSpans = computeSpans(GRUPS, cells);
-  const sieiSpans  = computeSpans(SIEI_ALUMNES.rivo || [], sieiCells);
-
-  // Main grid view
   return (
     <>
       <div className="page-hdr" style={{ marginBottom: 12 }}><h1>Avui</h1><p>{dtStr}</p></div>
@@ -215,124 +156,142 @@ export default function AvuiPage() {
         🔔 <div>Consulta els <strong>Avisos rebuts</strong> per veure les absències del dia. <span style={{ textDecoration: 'underline' }}>Veure →</span></div>
       </div>
 
-      <div className="card">
-        <div className="card-head" style={{ padding: '10px 14px' }}>
-          <h3 style={{ fontSize: 13 }}>Estat dels grups</h3>
-          <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--ink-3)' }}>
-            {[['var(--green-bg)','var(--green-mid)','OK'],['var(--amber-bg)','#F0D5A8','Cobert'],['var(--red-bg)','#F0C0B8','Pendent']].map(([bg,bc,lbl]) => (
-              <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />
-                {lbl}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 620 }}>
-            <thead>
-              <tr>
-                <Th sticky left={0}  minW={58} zIdx={2}>Hora</Th>
-                <Th sticky left={58} minW={60} zIdx={2}>Tram</Th>
-                {GRUPS.map(g => <Th key={g}>{g}</Th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {BLOCS.map(bloc => bloc.slots.map((fid, si) => {
-                const franja = FRANJES_ACT.find(f => f.id === fid);
-                return (
-                  <tr key={fid}>
-                    {si === 0 && (
-                      <Td rowSpan={bloc.slots.length} sticky left={0} minW={58} zIdx={1} style={{ fontWeight: 700, verticalAlign: 'middle' }}>
-                        {bloc.hora}
-                      </Td>
-                    )}
-                    <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{franja?.sub}</Td>
-                    {GRUPS.map(g => {
-                      const sp = groupSpans[g]?.[fid] || {};
-                      if (sp.skip) return null;
-                      const cell = cells[`${g}__${fid}`];
-                      const bg   = cell?.estat === 'pendent' ? 'var(--red-bg)'   : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
-                      const bc   = cell?.estat === 'pendent' ? '#F0C0B8'         : cell?.estat === 'resolt' ? '#F0D5A8'         : 'var(--green-mid)';
-                      return (
-                        <td key={g} rowSpan={sp.rowSpan || 1}
-                          style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
-                          onClick={() => cell?.estat === 'pendent' && setPage('javis')}
-                        >
-                          {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
-                          {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                          {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              }))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <GraellaCard
+        title="Estat dels grups"
+        items={GRUPS}
+        cells={cells}
+        spans={groupSpans}
+        blocs={BLOCS}
+        franjesAct={FRANJES_ACT}
+        pendentLabel="Pendent"
+        onPendentClick={() => setPage('javis')}
+      />
 
-      {/* Graella SIEI — només Rivo Rubeo */}
       {escola?.nom?.toLowerCase().includes('rivo') && (
-        <div className="card" style={{ marginTop: 14 }}>
-          <div className="card-head" style={{ padding: '10px 14px' }}>
-            <h3 style={{ fontSize: 13 }}>SIEI · Alumnes</h3>
-            <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--ink-3)' }}>
-              {[['var(--green-bg)','var(--green-mid)','OK'],['var(--amber-bg)','#F0D5A8','Cobert'],['var(--red-bg)','#F0C0B8','Sense suport']].map(([bg,bc,lbl]) => (
-                <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />
-                  {lbl}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 620 }}>
-              <thead>
-                <tr>
-                  <Th sticky left={0}  minW={58} zIdx={2}>Hora</Th>
-                  <Th sticky left={58} minW={60} zIdx={2}>Tram</Th>
-                  {SIEI_ALUMNES.rivo.map(s => <Th key={s}>{s}</Th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {BLOCS.map(bloc => bloc.slots.map((fid, si) => {
-                  const franja = FRANJES_ACT.find(f => f.id === fid);
-                  return (
-                    <tr key={fid}>
-                      {si === 0 && (
-                        <Td rowSpan={bloc.slots.length} sticky left={0} minW={58} zIdx={1} style={{ fontWeight: 700, verticalAlign: 'middle' }}>
-                          {bloc.hora}
-                        </Td>
-                      )}
-                      <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{franja?.sub}</Td>
-                      {SIEI_ALUMNES.rivo.map(student => {
-                        const sp = sieiSpans[student]?.[fid] || {};
-                        if (sp.skip) return null;
-                        const cell = sieiCells[`${student}__${fid}`];
-                        const bg = cell?.estat === 'pendent' ? 'var(--red-bg)'   : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
-                        const bc = cell?.estat === 'pendent' ? '#F0C0B8'         : cell?.estat === 'resolt' ? '#F0D5A8'         : 'var(--green-mid)';
-                        return (
-                          <td
-                            key={student} rowSpan={sp.rowSpan || 1}
-                            style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
-                            onClick={() => cell?.estat === 'pendent' && setPage('javis')}
-                          >
-                            {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
-                            {cell?.estat === 'resolt'  && <span style={{ fontSize: 9,  fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                            {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                }))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <GraellaCard
+          title="SIEI · Alumnes"
+          items={SIEI_ALUMNES.rivo}
+          cells={sieiCells}
+          spans={sieiSpans}
+          blocs={BLOCS}
+          franjesAct={FRANJES_ACT}
+          pendentLabel="Sense suport"
+          onPendentClick={() => setPage('javis')}
+          style={{ marginTop: 14 }}
+        />
       )}
     </>
+  );
+}
+
+function findCobertura(cobertures, absenciaId, fid, franjesAct) {
+  const franjaLabel = franjesAct.find(f => f.id === fid)?.label || '';
+  const franjaSub   = franjesAct.find(f => f.id === fid)?.sub   || '';
+  const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
+  const matchFn    = cf => cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
+  const fallbackFn = cf => cf === franjaLabel.toLowerCase() || cf.startsWith(franjaLabel.toLowerCase());
+  return (
+    (cobertures || []).find(c => c.absencia_id === absenciaId && matchFn((c.franja || '').toLowerCase())) ||
+    (cobertures || []).find(c => c.absencia_id === absenciaId && fallbackFn((c.franja || '').toLowerCase()))
+  );
+}
+
+function computeSpans(items, cellsMap, blocs) {
+  const allSlots = blocs.flatMap(b => b.slots);
+  const spans = {};
+  for (const item of items) {
+    spans[item] = {};
+    let i = 0;
+    while (i < allSlots.length) {
+      const fid = allSlots[i];
+      const cell = cellsMap[`${item}__${fid}`];
+      if (cell?.estat === 'resolt' && cell.cobrint) {
+        let span = 1;
+        while (i + span < allSlots.length) {
+          const next = cellsMap[`${item}__${allSlots[i + span]}`];
+          if (next?.estat === 'resolt' && next.cobrint === cell.cobrint) span++;
+          else break;
+        }
+        spans[item][fid] = { rowSpan: span };
+        for (let j = 1; j < span; j++) spans[item][allSlots[i + j]] = { skip: true };
+        i += span;
+      } else if (cell?.estat === 'pendent') {
+        let span = 1;
+        while (i + span < allSlots.length) {
+          const next = cellsMap[`${item}__${allSlots[i + span]}`];
+          if (next?.estat === 'pendent' && next.avisId === cell.avisId) span++;
+          else break;
+        }
+        spans[item][fid] = { rowSpan: span };
+        for (let j = 1; j < span; j++) spans[item][allSlots[i + j]] = { skip: true };
+        i += span;
+      } else {
+        spans[item][fid] = { rowSpan: 1 };
+        i++;
+      }
+    }
+  }
+  return spans;
+}
+
+function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLabel = 'Pendent', onPendentClick, style }) {
+  return (
+    <div className="card" style={style}>
+      <div className="card-head" style={{ padding: '10px 14px' }}>
+        <h3 style={{ fontSize: 13 }}>{title}</h3>
+        <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--ink-3)' }}>
+          {[['var(--green-bg)','var(--green-mid)','OK'],['var(--amber-bg)','#F0D5A8','Cobert'],['var(--red-bg)','#F0C0B8', pendentLabel]].map(([bg,bc,lbl]) => (
+            <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />
+              {lbl}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 620 }}>
+          <thead>
+            <tr>
+              <Th sticky left={0}  minW={58} zIdx={2}>Hora</Th>
+              <Th sticky left={58} minW={60} zIdx={2}>Tram</Th>
+              {items.map(g => <Th key={g}>{g}</Th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {blocs.map(bloc => bloc.slots.map((fid, si) => {
+              const franja = franjesAct.find(f => f.id === fid);
+              return (
+                <tr key={fid}>
+                  {si === 0 && (
+                    <Td rowSpan={bloc.slots.length} sticky left={0} minW={58} zIdx={1} style={{ fontWeight: 700, verticalAlign: 'middle' }}>
+                      {bloc.hora}
+                    </Td>
+                  )}
+                  <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{franja?.sub}</Td>
+                  {items.map(item => {
+                    const sp = spans[item]?.[fid] || {};
+                    if (sp.skip) return null;
+                    const cell = cells[`${item}__${fid}`];
+                    const bg = cell?.estat === 'pendent' ? 'var(--red-bg)' : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
+                    const bc = cell?.estat === 'pendent' ? '#F0C0B8' : cell?.estat === 'resolt' ? '#F0D5A8' : 'var(--green-mid)';
+                    return (
+                      <td key={item} rowSpan={sp.rowSpan || 1}
+                        style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
+                        onClick={() => cell?.estat === 'pendent' && onPendentClick?.()}
+                      >
+                        {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
+                        {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
+                        {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            }))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

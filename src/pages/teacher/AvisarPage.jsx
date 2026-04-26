@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
-import { todayISO } from '../../lib/utils';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, JEFA_EMAIL } from '../../lib/constants';
+import { todayISO, emailAbsencia } from '../../lib/utils';
 import { uploadFitxer, sendEmail } from '../../lib/api';
-import { JEFA_EMAIL, APP_URL, MANAGEMENT_USERS } from '../../lib/constants';
+import MeusAvisosCard from '../../components/MeusAvisosCard';
 
 export default function AvisarPage() {
   const { api, perfil, escola, showToast } = useApp();
@@ -365,113 +365,3 @@ export default function AvisarPage() {
   );
 }
 
-function frangesText(ids, isOriol) {
-  const allFranjes = isOriol ? FRANJES_ORIOL : FRANJES;
-  const schoolFranjes = allFranjes.filter(f => !f.lliure);
-  if (!ids?.length) return '—';
-  if (ids.length >= schoolFranjes.length) return 'Tot el dia';
-  const sel = allFranjes.filter(f => ids.includes(f.id));
-  if (!sel.length) return '—';
-  const labels = [...new Set(sel.map(f => f.label))].join(', ');
-  const start = sel[0].sub.split('–')[0].trim();
-  const end = sel[sel.length - 1].sub.split('–')[1]?.trim() || '';
-  return `${labels} · ${start}–${end}`;
-}
-
-function emailAbsencia({ nom, dates, franges, motiu, isOriol, escola }) {
-  const escolaKey = escola?.nom?.toLowerCase().includes('oriol') ? 'oriol' : 'rivo';
-  const jefaUser = MANAGEMENT_USERS[escolaKey]?.find(u => u.rol === 'jefa');
-  const deepLink = `${APP_URL}?escola=${escolaKey}&u=${encodeURIComponent(jefaUser?.nom || 'Veronica')}&p=${jefaUser?.pin || '1234'}`;
-
-  const datesHtml = dates.map(d =>
-    `<li style="margin-bottom:2px">${new Date(d + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</li>`
-  ).join('');
-  const frangesHtml = frangesText(franges, isOriol);
-
-  return `
-    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
-      <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
-        <h2 style="margin:0 0 16px;color:#1a1a1a;font-size:18px">🔔 Nova absència registrada</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:14px">
-          <tr><td style="padding:8px 0;color:#666;width:110px">Docent</td><td style="padding:8px 0;font-weight:600">${nom}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Motiu</td><td style="padding:8px 0">${motiu || 'No especificat'}</td></tr>
-          <tr><td style="padding:8px 0;color:#666;vertical-align:top">Dies</td><td style="padding:8px 0"><ul style="margin:0;padding-left:16px">${datesHtml}</ul></td></tr>
-          <tr><td style="padding:8px 0;color:#666">Horari</td><td style="padding:8px 0;font-weight:600">${frangesHtml}</td></tr>
-        </table>
-        <div style="margin-top:24px;text-align:center">
-          <a href="${deepLink}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            Gestionar cobertura a GDOCENT →
-          </a>
-        </div>
-      </div>
-    </div>`;
-}
-
-function MeusAvisosCard({ avisos, franjesAct, schoolFranjesAct }) {
-  if (!avisos || avisos.length === 0) return null;
-
-  function frangesResum(frangesJson) {
-    const ids = (() => { try { return JSON.parse(frangesJson || '[]'); } catch { return []; } })();
-    if (ids.length >= schoolFranjesAct.length) return <span className="slot-chip all-day">Tot el dia</span>;
-    const selected = franjesAct.filter(f => ids.includes(f.id));
-    const seen = new Set();
-    return selected
-      .filter(f => { if (seen.has(f.label)) return false; seen.add(f.label); return true; })
-      .map(f => <span key={f.label} className={`slot-chip${f.patio ? ' patio' : ''}`}>{f.label}</span>);
-  }
-
-  return (
-    <div className="card" style={{ marginBottom: 14 }}>
-      <div className="card-head" style={{ padding: '10px 14px' }}>
-        <h3 style={{ fontSize: 13 }}>Les teves absències recents</h3>
-      </div>
-      {avisos.map(a => {
-        const dataFmt = a.data
-          ? new Date(a.data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })
-          : '—';
-        const cobert  = a.estat === 'resolt' || a.estat === 'arxivat';
-        const pendent = a.estat === 'pendent';
-        // Deduplicar cobrants (pot haver-hi múltiples registres per al mateix mestre)
-        const cobrantsUnics = [...new Set(a.cobrants)];
-        return (
-          <div key={a.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, color: 'var(--ink)' }}>{dataFmt}</span>
-              {pendent
-                ? <span className="sp sp-red" style={{ fontSize: 10 }}>Pendent</span>
-                : <span className="sp sp-green" style={{ fontSize: 10 }}>✓ Cobert</span>
-              }
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {frangesResum(a.franges)}
-            </div>
-            {cobert && cobrantsUnics.length > 0 && (
-              <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 10, padding: '8px 10px', marginTop: 2 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Cobert per</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {cobrantsUnics.slice(0, 4).map(nom => {
-                    const parts = nom.trim().split(' ');
-                    const ini = (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
-                    return (
-                      <div key={nom} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 20, padding: '4px 10px 4px 4px', border: '1px solid var(--green-mid)' }}>
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--green)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          {ini.toUpperCase()}
-                        </div>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>{parts[0]}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {cobert && cobrantsUnics.length === 0 && (
-              <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, color: 'var(--green)', fontWeight: 600 }}>
-                ✓ Marcat com a resolt
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
