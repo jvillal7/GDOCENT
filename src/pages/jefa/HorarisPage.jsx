@@ -65,7 +65,14 @@ export default function HorarisPage() {
   const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '' });
   const fileRef = useRef(null);
 
-  useEffect(() => { if (api) reload(); }, [api]);
+  useEffect(() => {
+    if (!api) return;
+    reload();
+    if (!isOriol) api.getBaixes().then(res => {
+      setBaixes(res?.[0]?.oriol_baixes || []);
+      setBaixesLoaded(true);
+    }).catch(() => setBaixesLoaded(true));
+  }, [api]);
 
   async function loadBaixes() {
     if (baixesLoaded) return;
@@ -189,6 +196,10 @@ export default function HorarisPage() {
     groups[assigned ? assigned.key : 'ee'].push({ d, i });
   });
 
+  const baixesMap = Object.fromEntries(
+    baixes.map(b => [b.absent.toLowerCase().trim(), b])
+  );
+
   return (
     <>
       <div className="page-hdr">
@@ -290,14 +301,23 @@ export default function HorarisPage() {
                 {items.map(({ d }) => {
                   const isOpen = expanded === (d.id || d.nom);
                   const teHorari = d.horari && Object.keys(d.horari).length > 0;
+                  const baixa = baixesMap[d.nom.toLowerCase().trim()];
                   return (
-                    <div key={d.id || d.nom} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <div key={d.id || d.nom} style={{ borderBottom: '1px solid var(--border)', background: baixa ? 'var(--amber-bg)' : undefined }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px' }}>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: baixa ? 'var(--amber)' : avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0, opacity: baixa ? 0.7 : 1 }}>
                           {initials(d.nom)}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 500 }}>{d.nom}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 500, color: baixa ? 'var(--ink-3)' : undefined, textDecoration: baixa ? 'line-through' : undefined }}>{d.nom}</span>
+                            {baixa && (
+                              <>
+                                <span className="sp sp-amber" style={{ fontSize: 10 }}>🩹 Baixa</span>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>→ {baixa.substitut}</span>
+                              </>
+                            )}
+                          </div>
                           <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
                             {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
                           </div>
