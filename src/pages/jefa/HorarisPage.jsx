@@ -56,10 +56,58 @@ export default function HorarisPage() {
   const franjes   = isOriol ? FRANJES_ORIOL : FRANJES;
   const [confirmData, setConfirm]   = useState(null);
   const [uploads, setUploads]   = useState([]);
-  const [expanded, setExpanded] = useState(null); // id del docent amb horari obert
+  const [expanded, setExpanded] = useState(null);
+  const [showBaixes,  setShowBaixes]  = useState(false);
+  const [baixes,      setBaixes]      = useState([]);
+  const [baixesLoaded, setBaixesLoaded] = useState(false);
+  const [baixesSaving, setBaixesSaving] = useState(false);
+  const [baixaForm,   setBaixaForm]   = useState(null); // null | 'new' | index
+  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '' });
   const fileRef = useRef(null);
 
   useEffect(() => { if (api) reload(); }, [api]);
+
+  async function loadBaixes() {
+    if (baixesLoaded) return;
+    try {
+      const res = await api.getBaixes();
+      setBaixes(res?.[0]?.oriol_baixes || []);
+      setBaixesLoaded(true);
+    } catch { setBaixes([]); setBaixesLoaded(true); }
+  }
+
+  async function saveBaixesList(nova) {
+    setBaixesSaving(true);
+    try {
+      await api.saveBaixes(nova);
+      setBaixes(nova);
+      showToast('✓ Baixes guardades');
+    } catch (e) { showToast('Error: ' + e.message); }
+    finally { setBaixesSaving(false); }
+  }
+
+  function openBaixaForm(idx) {
+    if (idx === 'new') {
+      setBaixaDraft({ absent: '', substitut: '', notes: '' });
+    } else {
+      setBaixaDraft({ ...baixes[idx] });
+    }
+    setBaixaForm(idx);
+  }
+
+  async function confirmBaixaForm() {
+    if (!baixaDraft.absent.trim() || !baixaDraft.substitut.trim()) return showToast('Introdueix els dos noms');
+    const item = { absent: baixaDraft.absent.trim(), substitut: baixaDraft.substitut.trim(), notes: baixaDraft.notes.trim() };
+    const nova = baixaForm === 'new'
+      ? [...baixes, item]
+      : baixes.map((b, i) => i === baixaForm ? item : b);
+    setBaixaForm(null);
+    await saveBaixesList(nova);
+  }
+
+  async function deleteBaixa(idx) {
+    await saveBaixesList(baixes.filter((_, i) => i !== idx));
+  }
 
   async function reload() {
     try { const d = await api.getDocents(); if (d) setDocents(d); }
@@ -143,7 +191,83 @@ export default function HorarisPage() {
 
   return (
     <>
-      <div className="page-hdr"><h1>Personal del centre</h1><p>Gestiona el personal: horaris, correus i accés</p></div>
+      <div className="page-hdr">
+        <div>
+          <h1>Personal del centre</h1>
+          <p>Gestiona el personal: horaris, correus i accés</p>
+        </div>
+        {!isOriol && (
+          <button
+            className="btn btn-sm"
+            style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderColor: 'var(--amber)', fontSize: 13, fontWeight: 600, padding: '7px 14px', flexShrink: 0 }}
+            onClick={() => { setShowBaixes(o => !o); if (!baixesLoaded) loadBaixes(); }}
+          >
+            🩹 Baixes{baixes.length > 0 ? ` (${baixes.length})` : ''}
+          </button>
+        )}
+      </div>
+
+      {showBaixes && !isOriol && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head">
+            <h3>Baixes amb substitucions</h3>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {baixaForm !== 'new' && (
+                <button className="btn btn-sm" style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 12, fontWeight: 600 }} onClick={() => openBaixaForm('new')}>
+                  + Afegir baixa
+                </button>
+              )}
+              <span className="sp sp-amber">{baixes.length} baixes</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--blue)', background: 'var(--blue-bg)', padding: '9px 14px', borderBottom: '1px solid var(--border)' }}>
+            ℹ️ La IA llegeix aquesta llista. El substitut farà l'horari i les cobertures del docent de baixa.
+          </div>
+
+          {!baixesLoaded ? (
+            <div style={{ padding: 24, textAlign: 'center' }}><Spinner /></div>
+          ) : (
+            <>
+              {baixes.length === 0 && baixaForm !== 'new' && (
+                <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Cap baixa registrada.</div>
+              )}
+              {baixes.map((b, idx) => (
+                <div key={idx}>
+                  {baixaForm === idx ? (
+                    <BaixaFormRow
+                      draft={baixaDraft} onChange={setBaixaDraft}
+                      onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)}
+                      saving={baixesSaving}
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{b.absent}</span>
+                          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>→</span>
+                          <span style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600 }}>Substitut/a: {b.substitut}</span>
+                        </div>
+                        {b.notes && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>{b.notes}</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => openBaixaForm(idx)}>✏️</button>
+                        <button className="btn btn-red-soft btn-sm" style={{ fontSize: 12 }} onClick={() => deleteBaixa(idx)}>🗑️</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {baixaForm === 'new' && (
+                <BaixaFormRow
+                  draft={baixaDraft} onChange={setBaixaDraft}
+                  onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)}
+                  saving={baixesSaving} isNew
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="alert alert-blue">
         ℹ️ Puja el PDF de l'horari de cada docent. La IA llegirà l'horari automàticament.
@@ -459,5 +583,33 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
         <button className="btn btn-ghost btn-full" style={{ padding: 13 }} onClick={onCancel}>Cancel·lar</button>
       </div>
     </>
+  );
+}
+
+function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew }) {
+  return (
+    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {isNew && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Nova baixa</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div>
+          <label className="f-label">Docent de baixa</label>
+          <input className="f-ctrl" placeholder="Nom complet" value={draft.absent} onChange={e => onChange(d => ({ ...d, absent: e.target.value }))} />
+        </div>
+        <div>
+          <label className="f-label">Substitut/a</label>
+          <input className="f-ctrl" placeholder="Nom del substitut/a" value={draft.substitut} onChange={e => onChange(d => ({ ...d, substitut: e.target.value }))} />
+        </div>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label className="f-label">Notes (opcional)</label>
+          <input className="f-ctrl" placeholder="Ex: Baixa des del 01/03/2026" value={draft.notes} onChange={e => onChange(d => ({ ...d, notes: e.target.value }))} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-green" style={{ fontSize: 13, padding: '7px 16px' }} onClick={onSave} disabled={saving || !draft.absent.trim() || !draft.substitut.trim()}>
+          {saving ? 'Guardant...' : '✓ Guardar'}
+        </button>
+        <button className="btn btn-ghost" style={{ fontSize: 13, padding: '7px 12px' }} onClick={onCancel}>Cancel·lar</button>
+      </div>
+    </div>
   );
 }
