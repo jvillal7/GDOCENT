@@ -77,7 +77,7 @@ export const BNAV = {
   dev:       [{ id: 'dv', icon: '🤖', label: 'Normes IA' }],
 };
 
-export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', educador: 'ta', vetllador: 'ta', director: 'di', secretaria: 'di', dev: 'dv' };
+export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', educador: 'ta', vetllador: 'ta', tei: 'ta', director: 'di', secretaria: 'di', dev: 'dv' };
 
 export const PAGE_TITLES = {
   jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal',

@@ -39,10 +39,12 @@ function isCoordVal(v) { return COORD_KW.some(k => v === k || v.startsWith(k + '
 
 function estatHorari(val) {
   const v = (val || '').toLowerCase().trim();
-  if (!v || v === 'lliure' || v === 'libre') return { lliure: true,  text: 'lliure' };
-  if (v === 'tp' || v === 'treball personal') return { lliure: false, text: 'TP' };
-  if (isCoordVal(v)) return { lliure: false, text: 'Coordinació/Càrrec' };
-  return { lliure: false, text: `ocupat: ${val}` };
+  if (v === 'lliure' || v === 'libre') return { estat: 'fora',   text: 'FORA del centre' };
+  if (!v)                              return { estat: 'lliure',  text: 'lliure al centre' };
+  if (v === 'tp' || v === 'treball personal') return { estat: 'tp',   text: 'TP (pot cobrir amb deute)' };
+  if (isCoordVal(v))                   return { estat: 'carec',   text: `Càrrec: ${val}` };
+  if (v.includes('suport'))            return { estat: 'suport',  text: `Suport (flexible): ${val}` };
+  return                                      { estat: 'ocupat',  text: `ocupat: ${val}` };
 }
 
 export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
@@ -66,22 +68,33 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
   const durada = `${frangesIds.length * 30} min`;
 
   // Per cada docent, mostrar disponibilitat a TOTS els blocs d'hora
-  const disponibilitatDocents = docents.map(d => {
-    const blocsInfo = blocs.map(b => {
-      const totLliure = b.ids.every(fid => {
-        const { lliure } = dia ? estatHorari(d.horari?.[dia]?.[fid]) : { lliure: false };
-        return lliure;
-      });
-      const { text } = dia ? estatHorari(d.horari?.[dia]?.[b.ids[0]]) : { text: '?' };
-      return `${b.hora}=${totLliure ? 'lliure' : text}`;
-    }).join(', ');
-    const disponibleTot = blocs.every(b =>
-      b.ids.every(fid => {
-        const { lliure } = dia ? estatHorari(d.horari?.[dia]?.[fid]) : { lliure: false };
-        return lliure;
-      })
+  // (docents sense horari s'exclouen — no es poden proposar)
+  const disponibilitatDocents = docents.filter(d => d.horari).map(d => {
+    const totsEstats = blocs.flatMap(b =>
+      b.ids.map(fid => (dia ? estatHorari(d.horari?.[dia]?.[fid]) : { estat: 'ocupat', text: '?' }))
     );
-    return `  · ${d.nom} (${d.grup_principal || '?'}): cob.mes=${d.cobertures_mes || 0} | ${disponibleTot ? '✓ LLIURE TOT EL BLOC' : blocsInfo}`;
+
+    if (totsEstats.some(e => e.estat === 'fora')) {
+      return `  · ${d.nom} (${d.grup_principal || '?'}): ❌ FORA DEL CENTRE — no proposar`;
+    }
+
+    const blocsInfo = blocs.map(b => {
+      const { text } = dia ? estatHorari(d.horari?.[dia]?.[b.ids[0]]) : { text: '?' };
+      return `${b.hora}=${text}`;
+    }).join(', ');
+
+    const estats = totsEstats.map(e => e.estat);
+    const totLliure = estats.every(e => e === 'lliure');
+    const potCobrir = estats.every(e => ['lliure', 'tp', 'carec', 'suport'].includes(e));
+    const ambTP     = estats.some(e => e === 'tp');
+    const ambSuport = estats.some(e => e === 'suport');
+
+    const base = `  · ${d.nom} (${d.grup_principal || '?'}): cob.mes=${d.cobertures_mes || 0} |`;
+    if (totLliure)              return `${base} ✅ DISPONIBLE TOT EL BLOC (al centre, sense classe)`;
+    if (potCobrir && ambSuport) return `${base} ✅ POT COBRIR (Suport, flexible — ideal si mateix cicle) — ${blocsInfo}`;
+    if (potCobrir && ambTP)     return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
+    if (potCobrir)              return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
+                                return `${base} ❌ OCUPAT — ${blocsInfo}`;
   }).join('\n');
 
   const contextExtra = infoExtra?.context
@@ -108,12 +121,15 @@ DISPONIBILITAT DELS DOCENTS a ${diaLabel} (tots els blocs de l'absència):
 ${disponibilitatDocents}
 
 INSTRUCCIONS:
-1. Tria preferentment un docent marcat com "✓ LLIURE TOT EL BLOC" amb menys cobertures.
-2. Si no n'hi ha cap, proposa el mínim (1 per bloc d'hora). Mai 1 per franja de 30 min.
-3. Evita docents "ocupat". Usa "TP" o "Coordinació/Càrrec" NOMÉS si no hi ha cap altra opció.
-4. Si un docent cobreix en la seva franja de "Coordinació/Càrrec", posa tp_afectat:false (NO genera deute de TP).
-5. Si un docent cobreix en la seva franja de "TP", posa tp_afectat:true (SÍ genera deute de TP).
-6. "franges_ids" ha de contenir TOTES les franges que cobreix aquell docent.
+1. ❌ "FORA DEL CENTRE" = el docent és a casa. MAI proposar-lo. Ignora'l completament.
+2. Prioritat 1 — "✅ DISPONIBLE TOT EL BLOC": al centre sense classe. Tria el de menys cobertures del mes.
+3. Prioritat 2 — "✅ POT COBRIR (Suport, flexible)": ja és al centre fent suport. Ideal si és el mateix cicle que el docent absent.
+4. Prioritat 3 — "✅ POT COBRIR amb deute TP": al centre fent TP, pot cobrir però genera deute. tp_afectat:true.
+5. Prioritat 4 — "⚠️ POT COBRIR (Càrrec)": al centre fent coordinació, últim recurs. tp_afectat:false.
+6. ❌ "OCUPAT": està ensenyant el seu propi grup. No proposar.
+7. Prioritza el MATEIX cicle educatiu: Infantil (I3-I5), Cicle Inicial (1r-2n), Cicle Mitjà (3r-4t), Cicle Superior (5è-6è).
+8. Un SOL docent per a TOTA l'absència si és possible. Si no, un per bloc d'hora. Mai un per franja de 30 min.
+9. Aplica les NORMES DEL CENTRE per a restriccions addicionals.
 
 Respon NOMÉS JSON: {"proposta":[{"docent":"Nom Cognom","franges_ids":${JSON.stringify(frangesIds)},"hores":"${blocsDesc}","grup_origen":"GX","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
 

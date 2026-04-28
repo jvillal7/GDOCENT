@@ -10,13 +10,27 @@ function readSession() {
   catch { return null; }
 }
 
+function popUrlPage() {
+  try {
+    const p = new URLSearchParams(window.location.search).get('page');
+    if (p) window.history.replaceState({}, '', window.location.pathname);
+    return p || null;
+  } catch { return null; }
+}
+
+const _urlPage = (() => {
+  const p = popUrlPage();
+  if (p && !readSession()) sessionStorage.setItem('gd_redirect_page', p);
+  return p;
+})();
+
 export function AppProvider({ children }) {
   const saved = useMemo(readSession, []);
 
   const [perfil, setPerfil]   = useState(saved?.perfil || null);
   const [escola, setEscola]   = useState(saved?.escola || null);
   const [role, setRole]       = useState(saved?.role   || null);
-  const [page, setPage]       = useState(saved ? (DEFAULT_PAGE[saved.role] || 'jd') : null);
+  const [page, setPage]       = useState(saved ? (_urlPage || DEFAULT_PAGE[saved.role] || 'ta') : null);
   const [docents, setDocents] = useState([]);
   const [normes,  setNormes]  = useState('');
   const [toast, setToast]     = useState(null);
@@ -33,10 +47,12 @@ export function AppProvider({ children }) {
   }, [escola?.id]);
 
   const login = useCallback((p, e, r) => {
+    const redirect = sessionStorage.getItem('gd_redirect_page');
+    sessionStorage.removeItem('gd_redirect_page');
     setPerfil(p);
     setEscola(e);
     setRole(r);
-    setPage(DEFAULT_PAGE[r] || 'jd');
+    setPage(redirect || DEFAULT_PAGE[r] || 'ta');
     document.title = `Gestió Docent — ${e.nom}`;
     localStorage.setItem('gd_session', JSON.stringify({ perfil: p, escola: e, role: r }));
   }, []);

@@ -1,4 +1,5 @@
 import { useApp } from '../context/AppContext';
+import { DEFAULT_PAGE } from '../lib/constants';
 import AvuiPage      from './jefa/AvuiPage';
 import AvisosPage    from './jefa/AvisosPage';
 import TPPage        from './jefa/TPPage';
@@ -23,8 +24,11 @@ const PAGES = {
   oj_cee: OriolCeepsirPage, oj_bai: OriolBaixesPage,
 };
 
+const JEFA_PAGES = new Set(['jd','javis','jtp','jh','jhoraris','oj_abs','oj_reu','oj_cee','oj_bai']);
+
 export default function PageRouter() {
-  const { page } = useApp();
-  const Page = PAGES[page];
+  const { page, role } = useApp();
+  const safePage = (JEFA_PAGES.has(page) && role !== 'jefa') ? (DEFAULT_PAGE[role] || 'ta') : page;
+  const Page = PAGES[safePage];
   return Page ? <Page /> : <div className="page-hdr"><h1>Pàgina</h1></div>;
 }

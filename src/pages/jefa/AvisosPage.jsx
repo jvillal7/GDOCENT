@@ -158,8 +158,13 @@ export default function AvisosPage() {
       const blocatsExtra = new Set(
         infoExtra.flatMap(ie => (ie.docentsBlocats || []).map(b => (b.nom || b).toLowerCase()))
       );
+      const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei', 'suport']);
       const docentsFiltrats = docents.filter(d =>
-        !jaAssignats.has(d.nom) && !blocatsExtra.has(d.nom.toLowerCase())
+        !jaAssignats.has(d.nom) &&
+        !blocatsExtra.has(d.nom.toLowerCase()) &&
+        !ROLS_EXCLOSOS.has(d.rol) &&
+        !['SIEI', 'SIEI+'].includes(d.grup_principal) &&
+        d.horari
       );
       // Passar totes les entrades d'info extra a la IA (contexte combinat)
       const infoExtraCombinada = infoExtra.length
@@ -236,8 +241,30 @@ export default function AvisosPage() {
 
   async function confirmarProvisional(id) {
     try {
-      await api.patchAbsencia(id, { estat: 'resolt' });
+      const [cobs] = await Promise.all([
+        api.getCoberturesByAbsencia(id),
+        api.patchAbsencia(id, { estat: 'resolt' }),
+      ]);
       showToast('✓ Cobertura confirmada per avui');
+
+      // Enviar correu a cada docent cobrint (agrupem franges per docent)
+      const avis = absencies?.find(a => a.id === id);
+      const avui = new Date().toISOString().split('T')[0];
+      const perDocent = {};
+      for (const cob of (cobs || [])) {
+        if (!perDocent[cob.docent_cobrint_nom]) perDocent[cob.docent_cobrint_nom] = { frangesIds: [], grup: cob.grup };
+        perDocent[cob.docent_cobrint_nom].frangesIds.push(cob.franja);
+      }
+      for (const [nom, { frangesIds, grup }] of Object.entries(perDocent)) {
+        const cobrintDocent = docents.find(d => d.nom === nom);
+        if (cobrintDocent?.email) {
+          sendEmail(
+            cobrintDocent.email,
+            `📋 Cobertura assignada — ${avui}`,
+            emailCobertura({ cobrint: nom, absent: avis?.docent_nom || '', data: avui, frangesIds, isOriol, grup, esFutura: false, notes: avis?.notes })
+          );
+        }
+      }
       load();
     } catch (e) { showToast('Error: ' + e.message); }
   }
@@ -556,7 +583,7 @@ function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFu
         </table>
         ${notesHtml}
         <div style="margin-top:24px;text-align:center">
-          <a href="${APP_URL}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
+          <a href="${APP_URL}?page=tc" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
             Veure la meva cobertura a GDOCENT →
           </a>
         </div>

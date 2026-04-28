@@ -158,13 +158,18 @@ export default function LoginFlow() {
   function doLogin() {
     if (!selected) return setError('Selecciona el teu nom a la llista.');
     if (pin !== selected.pin) return setError('PIN incorrecte. Torna-ho a provar.');
-    let perfil;
-    if (roleGroup === 'teacher' || roleGroup === 'pae' || roleGroup === 'vetllador') {
+    let perfil, role;
+    if (roleGroup === 'teacher') {
       perfil = { id: selected.id, escola_id: school.id, nom: selected.nom, rol: selected.rol };
+      role = 'teacher';
+    } else if (roleGroup === 'pae' || roleGroup === 'vetllador') {
+      perfil = { id: selected.id, escola_id: school.id, nom: selected.nom, rol: selected.rol };
+      role = selected.rol;
     } else {
       perfil = selected;
+      role = perfil.rol;
     }
-    login(perfil, school, perfil.rol);
+    login(perfil, school, role);
   }
 
   async function openDiari(type) {

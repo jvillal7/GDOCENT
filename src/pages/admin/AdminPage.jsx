@@ -17,11 +17,12 @@ function serializeNormes(normes) {
 
 export default function AdminPage() {
   const { api, escola, normes, setNormes, showToast } = useApp();
-  const [items,   setItems]   = useState([]);
-  const [editing, setEditing] = useState(null); // index o 'new'
-  const [draft,   setDraft]   = useState('');
-  const [saving,  setSaving]  = useState(false);
-  const [loaded,  setLoaded]  = useState(false);
+  const [items,        setItems]        = useState([]);
+  const [editing,      setEditing]      = useState(null);
+  const [draft,        setDraft]        = useState('');
+  const [saving,       setSaving]       = useState(false);
+  const [loaded,       setLoaded]       = useState(false);
+  const [defaultOpen,  setDefaultOpen]  = useState(false);
 
   useEffect(() => {
     if (normes !== undefined) {
@@ -95,30 +96,47 @@ export default function AdminPage() {
         <p>Regles que la IA seguirà per proposar cobertures a {escola?.nom}</p>
       </div>
 
-      {/* Normes per defecte */}
+      {/* Normes per defecte — desplegable */}
       <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head">
+        <div
+          className="card-head"
+          onClick={() => setDefaultOpen(o => !o)}
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+        >
           <h3>Normes per defecte del sistema</h3>
-          <span className="sp sp-ink">S'apliquen sempre</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="sp sp-ink">S'apliquen sempre</span>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)', transition: 'transform .2s', display: 'inline-block', transform: defaultOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+          </div>
         </div>
-        <div style={{ padding: '8px 16px 14px' }}>
-          <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 10 }}>
-            Aquestes normes s'apliquen sempre, independentment de les normes del centre.
-          </p>
-          {REGLES_DEFAULT.map((r, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 6 }}>
-              <span style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 700, minWidth: 18 }}>{i + 1}.</span>
-              <span style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5 }}>{r}</span>
-            </div>
-          ))}
-        </div>
+        {defaultOpen && (
+          <div style={{ padding: '8px 16px 14px' }}>
+            {REGLES_DEFAULT.map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 700, minWidth: 18 }}>{i + 1}.</span>
+                <span style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5 }}>{r}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Normes del centre */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head">
           <h3>Normes específiques del centre</h3>
-          <span className="sp sp-blue">{items.length} normes</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {editing !== 'new' && (
+              <button
+                className="btn btn-sm"
+                style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 13, fontWeight: 600, padding: '6px 14px' }}
+                onClick={startNew}
+              >
+                + Nova norma
+              </button>
+            )}
+            <span className="sp sp-blue">{items.length} normes</span>
+          </div>
         </div>
         <div style={{ padding: '8px 16px 14px' }}>
           {!loaded ? (
@@ -165,16 +183,6 @@ export default function AdminPage() {
                   saving={saving}
                   isNew
                 />
-              )}
-
-              {editing !== 'new' && (
-                <button
-                  className="btn btn-full"
-                  style={{ marginTop: 12, padding: 11, background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 13, fontWeight: 600 }}
-                  onClick={startNew}
-                >
-                  + Afegir nova norma
-                </button>
               )}
             </>
           )}

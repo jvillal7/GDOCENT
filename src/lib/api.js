@@ -88,6 +88,7 @@ export function makeApi(escolaId) {
     patchAbsencia:       (id,d) => f(`absencies?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
     saveCobertura:       c     => f('cobertures', { method: 'POST', body: JSON.stringify(c) }),
     getCobertures:       ()    => f('cobertures?order=data.desc&limit=100'),
+    getCoberturesByAbsencia: id => f(`cobertures?absencia_id=eq.${id}`),
     getCoberturasAvui:   ()    => f(`cobertures?data=eq.${avui()}`),
     getCoberturesByDocent: nom => f(`cobertures?docent_cobrint_nom=eq.${encodeURIComponent(nom)}&data=eq.${avui()}`),
     getDeutesTP:         ()    => f('deutes_tp?retornat=eq.false&order=data_deute'),
