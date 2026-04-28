@@ -560,6 +560,7 @@ function frangesHorari(ids, isOriol) {
 }
 
 function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFutura, notes }) {
+  const escolaKey = isOriol ? 'oriol' : 'rivo';
   const dataFmt = new Date(data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   const horariText = frangesIds?.length ? frangesHorari(frangesIds, isOriol) : '';
   const firstName = cobrint?.split(' ')[0] || cobrint;
@@ -583,7 +584,7 @@ function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFu
         </table>
         ${notesHtml}
         <div style="margin-top:24px;text-align:center">
-          <a href="${APP_URL}?page=tc" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
+          <a href="${APP_URL}?escola=${escolaKey}&page=tc" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
             Veure la meva cobertura a GDOCENT →
           </a>
         </div>

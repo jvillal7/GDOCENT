@@ -10,18 +10,16 @@ function readSession() {
   catch { return null; }
 }
 
-function popUrlPage() {
-  try {
-    const p = new URLSearchParams(window.location.search).get('page');
-    if (p) window.history.replaceState({}, '', window.location.pathname);
-    return p || null;
-  } catch { return null; }
-}
-
+// Llegeix ?page de la URL. Si hi ha ?escola, NO neteja la URL (LoginFlow la necessita).
 const _urlPage = (() => {
-  const p = popUrlPage();
-  if (p && !readSession()) sessionStorage.setItem('gd_redirect_page', p);
-  return p;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('page');
+    if (!p) return null;
+    if (!params.has('escola')) window.history.replaceState({}, '', window.location.pathname);
+    if (!readSession()) sessionStorage.setItem('gd_redirect_page', p);
+    return p;
+  } catch { return null; }
 })();
 
 export function AppProvider({ children }) {

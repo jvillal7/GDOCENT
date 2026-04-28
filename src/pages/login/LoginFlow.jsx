@@ -57,28 +57,35 @@ export default function LoginFlow() {
     });
   }, []);
 
-  // Auto-login des d'un deep link (?escola=rivo&u=Veronica&p=1234)
+  // Deep links: ?escola=rivo (docent) o ?escola=rivo&u=Veronica&p=1234 (equip directiu)
   useEffect(() => {
     if (!schools.length) return;
     const params = new URLSearchParams(window.location.search);
     const escolaParam = params.get('escola');
     const userParam   = params.get('u');
     const pinParam    = params.get('p');
-    if (!escolaParam || !userParam) return;
+    if (!escolaParam) return;
 
     const matched = schools.find(e => e.nom.toLowerCase().includes(escolaParam));
     if (!matched) return;
 
     localStorage.setItem('gd_consent_accepted', '1');
     localStorage.setItem('gd_last_escola_key', escolaParam);
+    window.history.replaceState({}, '', window.location.pathname);
 
+    // Sense u= → correu de docent: pre-seleccionar escola i mostrar selecció de rol
+    if (!userParam) {
+      setSchool(matched);
+      setStep('role');
+      return;
+    }
+
+    // Amb u= → deep link de l'equip directiu
     const key = matched.nom.toLowerCase().includes('rivo') ? 'rivo' : 'oriol';
     const mgmtUsers = (MANAGEMENT_USERS[key] || []).map(u => ({ ...u, escola_id: matched.id }));
     const targetUser = mgmtUsers.find(u => u.nom === userParam);
 
-    window.history.replaceState({}, '', window.location.pathname);
-
-    // Si hi ha PIN i és correcte → login directe sense mostrar cap pantalla
+    // Si PIN correcte → auto-login directe
     if (targetUser && pinParam && pinParam === targetUser.pin) {
       login(targetUser, matched, targetUser.rol);
       return;
