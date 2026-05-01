@@ -1,10 +1,10 @@
-import { WORKER_URL, FRANJES, FRANJES_ORIOL } from './constants';
+import { WORKER_URL, WORKER_AUTH_TOKEN, FRANJES, FRANJES_ORIOL } from './constants';
 
 async function callClaude(messages, maxTokens = 1000, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Auth-Token': WORKER_AUTH_TOKEN },
       body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages }),
     });
     if (!res.ok) throw new Error('Error al Worker: ' + res.status);

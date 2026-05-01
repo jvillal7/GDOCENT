@@ -1,6 +1,7 @@
 export const SUPA_URL = 'https://mtrylcazzwolgzfzmbrn.supabase.co';
 export const SUPA_KEY = 'sb_publishable_t3-NsA6e13wB0-kDuXvXGw_7b6vVllK';
 export const WORKER_URL = 'https://orange-bar-54f5gceip-claude-proxy.jvillal7.workers.dev';
+export const WORKER_AUTH_TOKEN = 'gd-2024-xK9mQpR7wZ';
 
 // Correu de la cap d'estudis (per a proves; canviar quan estigui en producció)
 export const JEFA_EMAIL = 'jvillal7@xtec.cat';
