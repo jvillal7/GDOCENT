@@ -559,6 +559,15 @@ export default function AvisosPage() {
   );
 }
 
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function frangesHorari(ids, isOriol) {
   const allFranjes = isOriol ? FRANJES_ORIOL : FRANJES;
   const sel = allFranjes.filter(f => ids.includes(f.id));
@@ -575,21 +584,21 @@ function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFu
   const firstName = cobrint?.split(' ')[0] || cobrint;
   const notesHtml = notes?.trim()
     ? `<div style="margin-top:20px;background:#f0f7ff;border-left:4px solid #4285F4;border-radius:6px;padding:14px 16px">
-        <div style="font-size:11px;font-weight:700;color:#4285F4;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Missatge de ${absent}</div>
-        <p style="margin:0;font-size:14px;color:#1a1a1a;line-height:1.6">${notes.trim().replace(/\n/g, '<br>')}</p>
+        <div style="font-size:11px;font-weight:700;color:#4285F4;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Missatge de ${escHtml(absent)}</div>
+        <p style="margin:0;font-size:14px;color:#1a1a1a;line-height:1.6">${escHtml(notes.trim()).replace(/\n/g, '<br>')}</p>
       </div>`
     : '';
   return `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
       <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
-        <p style="margin:0 0 16px;font-size:15px;color:#1a1a1a">Hola, <strong>${firstName}</strong></p>
+        <p style="margin:0 0 16px;font-size:15px;color:#1a1a1a">Hola, <strong>${escHtml(firstName)}</strong></p>
         <h2 style="margin:0 0 16px;color:#1a1a1a;font-size:18px">📋 ${esFutura ? 'Cobertura provisional assignada' : 'Cobertura assignada per avui'}</h2>
         <table style="width:100%;border-collapse:collapse;font-size:14px">
-          <tr><td style="padding:8px 0;color:#666;width:110px">Nom</td><td style="padding:8px 0;font-weight:600">${cobrint}</td></tr>
+          <tr><td style="padding:8px 0;color:#666;width:110px">Nom</td><td style="padding:8px 0;font-weight:600">${escHtml(cobrint)}</td></tr>
           <tr><td style="padding:8px 0;color:#666">Data</td><td style="padding:8px 0">${dataFmt}</td></tr>
           <tr><td style="padding:8px 0;color:#666">Horari</td><td style="padding:8px 0;font-weight:600">${horariText || '—'}</td></tr>
-          ${grup ? `<tr><td style="padding:8px 0;color:#666">Grup</td><td style="padding:8px 0">${grup}</td></tr>` : ''}
-          <tr><td style="padding:8px 0;color:#666">Substitueix</td><td style="padding:8px 0">${absent}</td></tr>
+          ${grup ? `<tr><td style="padding:8px 0;color:#666">Grup</td><td style="padding:8px 0">${escHtml(grup)}</td></tr>` : ''}
+          <tr><td style="padding:8px 0;color:#666">Substitueix</td><td style="padding:8px 0">${escHtml(absent)}</td></tr>
         </table>
         ${notesHtml}
         <div style="margin-top:24px;text-align:center">

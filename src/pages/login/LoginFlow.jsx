@@ -4,6 +4,16 @@ import { MANAGEMENT_USERS, AVATAR_COLORS, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } 
 import { useApp } from '../../context/AppContext';
 import { initials, mangementColor } from '../../lib/utils';
 
+const MAX_PIN_FAILS = 5;
+const LOCKOUT_MS    = 30_000;
+
+function getRl(key) {
+  try { return JSON.parse(sessionStorage.getItem(`gd_rl_${key}`) || '{}'); } catch { return {}; }
+}
+function setRl(key, state) {
+  sessionStorage.setItem(`gd_rl_${key}`, JSON.stringify(state));
+}
+
 const DIARI_BUTTONS = [
   { type: 'abs', icon: '👤', label: "Qui s'absenta" },
   { type: 'reu', icon: '📝', label: 'Reunions' },
@@ -164,7 +174,19 @@ export default function LoginFlow() {
 
   function doLogin() {
     if (!selected) return setError('Selecciona el teu nom a la llista.');
-    if (pin !== selected.pin) return setError('PIN incorrecte. Torna-ho a provar.');
+    const rlKey = String(selected.id || selected.nom);
+    const rl    = getRl(rlKey);
+    const now   = Date.now();
+    if (rl.fails >= MAX_PIN_FAILS && (now - rl.since) < LOCKOUT_MS) {
+      const secs = Math.ceil((LOCKOUT_MS - (now - rl.since)) / 1000);
+      return setError(`Massa intents fallits. Espera ${secs}s abans de tornar-ho a provar.`);
+    }
+    if (pin !== selected.pin) {
+      const isNew = !rl.since || (now - rl.since) >= LOCKOUT_MS;
+      setRl(rlKey, { fails: isNew ? 1 : (rl.fails || 0) + 1, since: isNew ? now : rl.since });
+      return setError('PIN incorrecte. Torna-ho a provar.');
+    }
+    setRl(rlKey, {});
     let perfil, role;
     if (roleGroup === 'teacher') {
       perfil = { id: selected.id, escola_id: school.id, nom: selected.nom, rol: selected.rol };

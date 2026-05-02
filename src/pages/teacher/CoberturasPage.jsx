@@ -81,7 +81,7 @@ export default function CoberturasPage() {
                 ? <div style={{ textAlign: 'center' }}><Spinner /></div>
                 : <>
                     {notes
-                      ? <p style={{ lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: notes.replace(/\n/g, '<br>') }} />
+                      ? <p style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap', margin: 0 }}>{notes}</p>
                       : <div style={{ color: 'var(--ink-4)', fontStyle: 'italic' }}>No s'ha deixat cap nota específica.</div>
                     }
                     {fitxers.length > 0 && (

@@ -1,13 +1,9 @@
-export const SUPA_URL = 'https://mtrylcazzwolgzfzmbrn.supabase.co';
-export const SUPA_KEY = 'sb_publishable_t3-NsA6e13wB0-kDuXvXGw_7b6vVllK';
-export const WORKER_URL = 'https://orange-bar-54f5gceip-claude-proxy.jvillal7.workers.dev';
-export const WORKER_AUTH_TOKEN = 'gd-2024-xK9mQpR7wZ';
-
-// Correu de la cap d'estudis (per a proves; canviar quan estigui en producció)
-export const JEFA_EMAIL = 'jvillal7@xtec.cat';
-
-// URL pública de l'app (s'usa als correus)
-export const APP_URL = 'https://jvillal7.github.io/GDOCENT';
+export const SUPA_URL          = import.meta.env.VITE_SUPA_URL;
+export const SUPA_KEY          = import.meta.env.VITE_SUPA_KEY;
+export const WORKER_URL        = import.meta.env.VITE_WORKER_URL;
+export const WORKER_AUTH_TOKEN = import.meta.env.VITE_WORKER_AUTH_TOKEN;
+export const JEFA_EMAIL        = import.meta.env.VITE_JEFA_EMAIL;
+export const APP_URL           = import.meta.env.VITE_APP_URL;
 
 export const FRANJES = [
   { id: 'f1a',   label: '1a hora', sub: '9:00–9:30',   hora: '1a hora' },
