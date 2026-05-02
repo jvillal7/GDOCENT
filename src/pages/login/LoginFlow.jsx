@@ -14,6 +14,11 @@ function setRl(key, state) {
   sessionStorage.setItem(`gd_rl_${key}`, JSON.stringify(state));
 }
 
+const _urlEscola = (() => {
+  try { return new URLSearchParams(window.location.search).get('escola') || null; }
+  catch { return null; }
+})();
+
 const DIARI_BUTTONS = [
   { type: 'abs', icon: '👤', label: "Qui s'absenta" },
   { type: 'reu', icon: '📝', label: 'Reunions' },
@@ -38,7 +43,7 @@ function autoTextAbsents(absencies) {
 
 export default function LoginFlow() {
   const { login } = useApp();
-  const [step, setStep]               = useState(() => localStorage.getItem('gd_last_escola_key') ? 'role' : 'school');
+  const [step, setStep]               = useState(() => (_urlEscola || localStorage.getItem('gd_last_escola_key')) ? 'role' : 'school');
   const [schools, setSchools]         = useState([]);
   const [school, setSchool]           = useState(null);
   const [roleGroup, setRoleGroup]     = useState(null);
@@ -48,7 +53,7 @@ export default function LoginFlow() {
   const [search, setSearch]           = useState('');
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
-  const [escolaFixa, setEscolaFixa]   = useState(false);
+  const [escolaFixa, setEscolaFixa]   = useState(!!_urlEscola);
   const [showConsent, setShowConsent] = useState(false);
   const [pendingKey, setPendingKey]   = useState(null);
   const [modalType,  setModalType]    = useState(null);
