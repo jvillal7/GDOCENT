@@ -54,6 +54,7 @@ export default function LoginFlow() {
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
   const [escolaFixa, setEscolaFixa]   = useState(!!_urlEscola);
+  const [linkOpen, setLinkOpen]       = useState(null);
   const [showConsent, setShowConsent] = useState(false);
   const [pendingKey, setPendingKey]   = useState(null);
   const [modalType,  setModalType]    = useState(null);
@@ -315,16 +316,39 @@ export default function LoginFlow() {
               Tria el teu centre educatiu
             </p>
             <div className="school-logo-grid">
-              <button className="school-logo-btn" onClick={() => selectSchool('rivo')}>
-                <img src="logo_rivo.png" alt="Rivo Rubeo"
-                  onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
-                <div className="fallback-logo-text" style={{ display: 'none' }}>RIVO RUBEO</div>
-              </button>
-              <button className="school-logo-btn" onClick={() => selectSchool('oriol')}>
-                <img src="logo_canoriol.png" alt="Ca n'Oriol"
-                  onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
-                <div className="fallback-logo-text" style={{ display: 'none' }}>CEE CA N'ORIOL</div>
-              </button>
+              {[
+                { key: 'rivo',  src: 'logo_rivo.png',      alt: 'Rivo Rubeo',    fallback: 'RIVO RUBEO' },
+                { key: 'oriol', src: 'logo_canoriol.png',  alt: "Ca n'Oriol",    fallback: "CEE CA N'ORIOL" },
+              ].map(({ key, src, alt, fallback }) => {
+                const url = `${window.location.origin}${window.location.pathname}?escola=${key}`;
+                const open = linkOpen === key;
+                return (
+                  <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <button className="school-logo-btn" onClick={() => selectSchool(key)}>
+                      <img src={src} alt={alt}
+                        onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
+                      <div className="fallback-logo-text" style={{ display: 'none' }}>{fallback}</div>
+                    </button>
+                    <button
+                      onClick={() => setLinkOpen(open ? null : key)}
+                      style={{ fontSize: 11, color: 'var(--ink-4)', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      🔗 Enllaç accés
+                    </button>
+                    {open && (
+                      <div style={{ width: '100%', background: 'var(--bg-2)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <span style={{ fontSize: 11, color: 'var(--ink-3)', wordBreak: 'break-all', lineHeight: 1.5 }}>{url}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(url); setLinkOpen(null); }}
+                          style={{ fontSize: 11.5, fontWeight: 600, background: '#000', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 0', cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          Copiar enllaç
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
