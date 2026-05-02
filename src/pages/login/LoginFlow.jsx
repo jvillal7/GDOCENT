@@ -48,6 +48,7 @@ export default function LoginFlow() {
   const [search, setSearch]           = useState('');
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
+  const [escolaFixa, setEscolaFixa]   = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [pendingKey, setPendingKey]   = useState(null);
   const [modalType,  setModalType]    = useState(null);
@@ -82,6 +83,7 @@ export default function LoginFlow() {
     localStorage.setItem('gd_consent_accepted', '1');
     localStorage.setItem('gd_last_escola_key', escolaParam);
     window.history.replaceState({}, '', window.location.pathname);
+    setEscolaFixa(true);
 
     // Sense u= → correu de docent: pre-seleccionar escola i mostrar selecció de rol
     if (!userParam) {
@@ -363,7 +365,7 @@ export default function LoginFlow() {
                 <div className="role-card-arrow">→</div>
               </button>
             </div>
-            <button className="back-btn" onClick={() => { setStep('school'); setSchool(null); }}>← Canviar d'escola</button>
+            {!escolaFixa && <button className="back-btn" onClick={() => { setStep('school'); setSchool(null); }}>← Canviar d'escola</button>}
           </div>
         )}
 
