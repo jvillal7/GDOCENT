@@ -11,6 +11,7 @@ export default function AppShell() {
   const [desktop, setDesktop] = useState(isDesktop);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [oriolMenu, setOriolMenu] = useState(false);
+  const [tapAnimId, setTapAnimId] = useState(null);
 
   useEffect(() => {
     let prev = isDesktop();
@@ -34,6 +35,14 @@ export default function AppShell() {
   const chipTxt  = role === 'dev' ? 'Admin' : userRole;
 
   function navigate(id) { setPage(id); setDrawerOpen(false); }
+
+  function handleBnTap(it) {
+    navigate(it.id);
+    if (it.anim) {
+      setTapAnimId(it.id);
+      setTimeout(() => setTapAnimId(null), 1200);
+    }
+  }
 
   const SidebarNav = () => nav.map(sec => (
     <div key={sec.sec}>
@@ -150,8 +159,8 @@ export default function AppShell() {
 
       <nav className="bottom-nav">
         {bnav.map(it => (
-          <div key={it.id} className={`bn-item${page === it.id ? ' active' : ''}`} onClick={() => navigate(it.id)}>
-            <span className="bn-icon">{it.icon}</span>
+          <div key={it.id} className={`bn-item${page === it.id ? ' active' : ''}`} onClick={() => handleBnTap(it)}>
+            <span className={`bn-icon${it.anim ? ` icon-anim-${it.anim}${tapAnimId === it.id ? ' anim-play' : ''}` : ''}`}>{it.icon}</span>
             <span className="bn-label">{it.label}</span>
           </div>
         ))}

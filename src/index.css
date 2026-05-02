@@ -115,7 +115,16 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--i
 .bn-item.active .bn-icon,.bn-item.active .bn-label{color:var(--ink)}
 .bn-item.active .bn-icon{font-size:23px}
 .bn-item.active .bn-label{font-weight:700;font-size:11px}
-.bn-icon{font-size:21px;color:var(--ink-3);transition:color .12s,font-size .12s}
+.bn-icon{font-size:21px;color:var(--ink-3);transition:color .12s,font-size .12s;display:inline-block}
+.anim-play.icon-anim-bell{animation:anim-bell .75s ease}
+.anim-play.icon-anim-bars{animation:anim-bars .65s ease}
+.anim-play.icon-anim-clock{animation:anim-clock .8s ease}
+.anim-play.icon-anim-walk{animation:anim-walk 1.1s ease}
+.anim-play.icon-anim-flip{animation:anim-flip .7s ease}
+.anim-play.icon-anim-pulse{animation:anim-pulse .7s ease}
+.anim-play.icon-anim-spin{animation:anim-spin .65s linear}
+.anim-play.icon-anim-bob{animation:anim-bob .6s ease}
+.anim-play.icon-anim-write{animation:anim-write .7s ease}
 .bn-label{font-size:10.5px;color:var(--ink-3);transition:color .12s,font-size .12s,font-weight .12s}
 .bn-badge{position:absolute;top:-3px;right:-7px;min-width:16px;height:16px;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;border-radius:20px;display:flex;align-items:center;justify-content:center;padding:0 4px}
 .main-content{padding-top:54px;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));min-height:100vh}
