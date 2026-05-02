@@ -7,7 +7,7 @@ import PageRouter from '../pages/PageRouter';
 const isDesktop = () => window.innerWidth >= 768;
 
 export default function AppShell() {
-  const { perfil, escola, role, page, setPage, logout } = useApp();
+  const { perfil, escola, role, page, setPage, logout, darkMode, toggleDark } = useApp();
   const [desktop, setDesktop] = useState(isDesktop);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [oriolMenu, setOriolMenu] = useState(false);
@@ -64,6 +64,7 @@ export default function AppShell() {
               <div className="sdu-av" style={{ background: 'var(--ink)' }}>{userInit}</div>
               <div className="sdu-info"><p>{perfil?.nom}</p><span>{userRole}</span></div>
             </div>
+            <button className="sd-btn" onClick={toggleDark}>{darkMode ? '☀️ Mode clar' : '🌙 Mode fosc'}</button>
             <button className="sd-btn" onClick={logout}>← Tancar sessió</button>
           </div>
         </aside>
@@ -118,6 +119,7 @@ export default function AppShell() {
           ))}
         </nav>
         <div className="drawer-foot">
+          <button onClick={toggleDark}>{darkMode ? '☀️ Mode clar' : '🌙 Mode fosc'}</button>
           <button onClick={logout}>← Tancar sessió</button>
         </div>
       </div>
@@ -126,7 +128,7 @@ export default function AppShell() {
       {oriolMenu && isOriol && role === 'jefa' && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 98 }} onClick={() => setOriolMenu(false)} />
-          <div style={{ position: 'fixed', bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px)', right: 12, background: '#fff', borderRadius: 16, boxShadow: '0 4px 28px rgba(0,0,0,.18)', zIndex: 99, overflow: 'hidden', minWidth: 230 }}>
+          <div style={{ position: 'fixed', bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px)', right: 12, background: 'var(--surface)', borderRadius: 16, boxShadow: '0 4px 28px rgba(0,0,0,.18)', zIndex: 99, overflow: 'hidden', minWidth: 230 }}>
             {[
               { id: 'oj_abs', icon: '👤', label: "Persones que s'absenten" },
               { id: 'oj_reu', icon: '📝', label: 'Reunions i organització' },
@@ -135,7 +137,7 @@ export default function AppShell() {
             ].map((it, i, arr) => (
               <div
                 key={it.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: page === it.id ? 'var(--bg-2)' : '#fff', fontSize: 14, fontWeight: page === it.id ? 600 : 400, color: 'var(--ink)' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: page === it.id ? 'var(--bg-2)' : 'var(--surface)', fontSize: 14, fontWeight: page === it.id ? 600 : 400, color: 'var(--ink)' }}
                 onClick={() => { navigate(it.id); setOriolMenu(false); }}
               >
                 <span style={{ fontSize: 18 }}>{it.icon}</span>

@@ -190,7 +190,7 @@ export default function AvisarPage() {
   if (sent) {
     return (
       <>
-        <div style={{ background: 'var(--ink)', borderRadius: 'var(--r)', padding: '18px 18px 16px', marginBottom: 14, color: '#fff' }}>
+        <div style={{ background: 'var(--ink-static)', borderRadius: 'var(--r)', padding: '18px 18px 16px', marginBottom: 14, color: '#fff' }}>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600 }}>Hola, {firstName}</div>
           <div style={{ fontFamily: 'Georgia,serif', fontSize: 22, fontWeight: 300, marginBottom: 3 }}>Avisa la teva <em style={{ fontStyle: 'italic', color: '#B8DFC8' }}>absència</em></div>
         </div>
@@ -207,7 +207,7 @@ export default function AvisarPage() {
 
   return (
     <>
-      <div style={{ background: 'var(--ink)', borderRadius: 'var(--r)', padding: '18px 18px 16px', marginBottom: 14, color: '#fff' }}>
+      <div style={{ background: 'var(--ink-static)', borderRadius: 'var(--r)', padding: '18px 18px 16px', marginBottom: 14, color: '#fff' }}>
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600 }}>Hola, {firstName}</div>
         <div style={{ fontFamily: 'Georgia,serif', fontSize: 22, fontWeight: 300, marginBottom: 3 }}>Avisa la teva <em style={{ fontStyle: 'italic', color: '#B8DFC8' }}>absència</em></div>
         <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.4)' }}>Seràs notificat quan la cobertura estigui assignada</div>

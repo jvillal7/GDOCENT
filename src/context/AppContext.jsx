@@ -32,6 +32,11 @@ export function AppProvider({ children }) {
   const [docents, setDocents] = useState([]);
   const [normes,  setNormes]  = useState('');
   const [toast, setToast]     = useState(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('gd_dark') === 'true';
+    document.documentElement.setAttribute('data-theme', saved ? 'dark' : 'light');
+    return saved;
+  });
 
   const api = useMemo(() => escola ? makeApi(escola.id) : null, [escola?.id]);
 
@@ -60,6 +65,15 @@ export function AppProvider({ children }) {
     window.location.reload();
   }, []);
 
+  const toggleDark = useCallback(() => {
+    setDarkMode(d => {
+      const next = !d;
+      document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light');
+      localStorage.setItem('gd_dark', next);
+      return next;
+    });
+  }, []);
+
   const showToast = useCallback(msg => {
     const id = Date.now();
     setToast({ msg, id });
@@ -67,9 +81,9 @@ export function AppProvider({ children }) {
   }, []);
 
   const value = useMemo(() => ({
-    perfil, escola, role, page, docents, normes, toast, api,
-    setPage, setDocents, setNormes, login, logout, showToast,
-  }), [perfil, escola, role, page, docents, normes, toast, api, login, logout, showToast]);
+    perfil, escola, role, page, docents, normes, toast, api, darkMode,
+    setPage, setDocents, setNormes, login, logout, showToast, toggleDark,
+  }), [perfil, escola, role, page, docents, normes, toast, api, darkMode, login, logout, showToast, toggleDark]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
