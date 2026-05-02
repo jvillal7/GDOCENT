@@ -27,6 +27,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_SUPA_URL: ${{ secrets.VITE_SUPA_URL }}
+          VITE_SUPA_KEY: ${{ secrets.VITE_SUPA_KEY }}
+          VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
+          VITE_WORKER_AUTH_TOKEN: ${{ secrets.VITE_WORKER_AUTH_TOKEN }}
+          VITE_JEFA_EMAIL: ${{ secrets.VITE_JEFA_EMAIL }}
+          VITE_APP_URL: ${{ secrets.VITE_APP_URL }}
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
         with:
