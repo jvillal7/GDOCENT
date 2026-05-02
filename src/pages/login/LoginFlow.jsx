@@ -15,8 +15,11 @@ function setRl(key, state) {
 }
 
 const _urlEscola = (() => {
-  try { return new URLSearchParams(window.location.search).get('escola') || null; }
-  catch { return null; }
+  try {
+    const p = new URLSearchParams(window.location.search).get('escola') || null;
+    if (p) sessionStorage.setItem('gd_escola_fixa', '1');
+    return p;
+  } catch { return null; }
 })();
 
 const DIARI_BUTTONS = [
@@ -53,7 +56,7 @@ export default function LoginFlow() {
   const [search, setSearch]           = useState('');
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
-  const [escolaFixa, setEscolaFixa]   = useState(!!_urlEscola);
+  const [escolaFixa, setEscolaFixa]   = useState(!!_urlEscola || sessionStorage.getItem('gd_escola_fixa') === '1');
   const [linkOpen, setLinkOpen]       = useState(null);
   const [showConsent, setShowConsent] = useState(false);
   const [pendingKey, setPendingKey]   = useState(null);
