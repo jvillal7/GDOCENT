@@ -10,6 +10,12 @@ const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', d
 const ESPECIALISTES_GRUPS = ['Anglès', 'EF', 'Música', 'EI suport'];
 
 const NIVELLS = [
+  { key: 'dir',  label: 'Equip Directiu',               match: (g, d) => d.rol === 'directiu',
+    sort: (a, b) => {
+      const ord = { 'directora': 0, 'director': 0, "cap d'estudis": 1, 'secretaria': 2 };
+      return (ord[(a.d.grup_principal||'').toLowerCase()] ?? 9) - (ord[(b.d.grup_principal||'').toLowerCase()] ?? 9);
+    }
+  },
   { key: 'i3',   label: 'I3',                          match: (g)    => /^I3/i.test((g||'').trim()) },
   { key: 'i4',   label: 'I4',                          match: (g)    => /^I4/i.test((g||'').trim()) },
   { key: 'i5',   label: 'I5',                          match: (g)    => /^I5/i.test((g||'').trim()) },
@@ -122,15 +128,16 @@ export default function HorarisPage() {
   }
 
   async function handleFiles(files) {
-    const pdfs = Array.from(files).filter(f => f.type === 'application/pdf');
+    const ACCEPTED = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    const pdfs = Array.from(files).filter(f => ACCEPTED.includes(f.type));
     if (!pdfs.length) return;
     for (const file of pdfs) {
       const id = Date.now() + Math.random();
-      setUploads(prev => [...prev, { id, name: file.name, status: 'loading', msg: 'Llegint PDF...' }]);
+      setUploads(prev => [...prev, { id, name: file.name, status: 'loading', msg: 'Llegint arxiu...' }]);
       try {
         const base64 = await fileToBase64(file);
         setUploads(prev => prev.map(u => u.id === id ? { ...u, msg: 'IA analitzant...' } : u));
-        const result = await extractHorariFromPDF(base64, franjes);
+        const result = await extractHorariFromPDF(base64, franjes, file.type);
         setUploads(prev => prev.map(u => u.id === id ? { ...u, status: 'done', msg: 'Llest' } : u));
         setConfirm(result);
         // Wait for user to confirm before processing next file
@@ -156,7 +163,9 @@ export default function HorarisPage() {
       });
     });
 
-    const existing = docents.find(d => d.nom.toLowerCase() === nom.toLowerCase());
+    const existing = data.id
+      ? docents.find(d => d.id === data.id)
+      : docents.find(d => d.nom.toLowerCase() === nom.toLowerCase());
     const docent = {
       nom, escola_id: escola.id, rol: data.rol, grup_principal: data.grup_principal, horari, tp_franges: tpFranges, actiu: true,
       cobertures_mes: existing?.cobertures_mes || 0,
@@ -169,7 +178,11 @@ export default function HorarisPage() {
       if (!existing && saved?.[0]) {
         setDocents(prev => [...prev, { ...docent, id: saved[0].id }]);
       } else {
-        setDocents(prev => prev.map(d => d.nom.toLowerCase() === nom.toLowerCase() ? { ...d, ...docent } : d));
+        setDocents(prev => prev.map(d =>
+          (existing?.id ? d.id === existing.id : d.nom.toLowerCase() === nom.toLowerCase())
+            ? { ...d, ...docent }
+            : d
+        ));
       }
       showToast(`Horari de ${nom} ${existing ? 'actualitzat' : 'afegit'}`);
       setConfirm(null);
@@ -281,7 +294,7 @@ export default function HorarisPage() {
       )}
 
       <div className="alert alert-blue">
-        ℹ️ Puja el PDF de l'horari de cada docent. La IA llegirà l'horari automàticament.
+        ℹ️ Puja el PDF o una foto (PNG, JPG) de l'horari de cada docent. La IA llegirà l'horari automàticament.
       </div>
 
       {docents.length > 0 && (
@@ -291,7 +304,7 @@ export default function HorarisPage() {
             <span className="sp sp-green">{docents.length} docents</span>
           </div>
           {NIVELLS.map(n => {
-            const items = groups[n.key];
+            const items = n.sort ? [...groups[n.key]].sort(n.sort) : groups[n.key];
             if (!items.length) return null;
             return (
               <div key={n.key}>
@@ -350,10 +363,10 @@ export default function HorarisPage() {
             style={{ border: '2px dashed var(--border-2)', borderRadius: 'var(--r)', padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: 'var(--bg)', marginBottom: 12 }}
             onClick={() => fileRef.current?.click()}
           >
-            <input ref={fileRef} type="file" accept=".pdf" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+            <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF d'horari</div>
-            <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>Fes clic aquí · Pots pujar-ne diversos alhora</div>
+            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF o foto de l'horari</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF · PNG · JPG · Pots pujar-ne diversos alhora</div>
           </div>
           {uploads.map(u => (
             <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 8 }}>
@@ -485,7 +498,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   function handleSave() {
     if (!nom.trim()) return alert('Introdueix el nom del docent.');
     if (!pin.trim() || pin.length !== 4 || !/^\d{4}$/.test(pin)) return alert('El PIN ha de ser de 4 dígits.');
-    onSave({ nom, rol, grup_principal: grup, horari, pin, email: email.trim() || null });
+    onSave({ id: data.id, nom, rol, grup_principal: grup, horari, pin, email: email.trim() || null });
   }
 
   // Group franjes by hora for rowspan

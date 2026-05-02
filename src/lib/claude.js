@@ -37,14 +37,26 @@ const REGLES_DEFAULT = `1) Cap grup sense cobrir
 const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
 function isCoordVal(v) { return COORD_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
 
+const TP_KW = ['tp', 't.p.', 'treball personal', 'temps personal', 'treball pers.', 't.personal'];
+const SUPORT_KW = ['suport', 'mee', 'mesi', 'siei', 'aci', 'acis'];
+function isSuportVal(v) { return SUPORT_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
+
 function estatHorari(val) {
   const v = (val || '').toLowerCase().trim();
-  if (v === 'lliure' || v === 'libre') return { estat: 'fora',   text: 'FORA del centre' };
-  if (!v)                              return { estat: 'lliure',  text: 'lliure al centre' };
-  if (v === 'tp' || v === 'treball personal') return { estat: 'tp',   text: 'TP (pot cobrir amb deute)' };
-  if (isCoordVal(v))                   return { estat: 'carec',   text: `Càrrec: ${val}` };
-  if (v.includes('suport'))            return { estat: 'suport',  text: `Suport (flexible): ${val}` };
-  return                                      { estat: 'ocupat',  text: `ocupat: ${val}` };
+  if (v === 'lliure' || v === 'libre' || v === 'absent' || v === 'fora') return { estat: 'fora',   text: 'FORA del centre' };
+  if (!v)                   return { estat: 'lliure', text: 'lliure al centre' };
+  if (TP_KW.includes(v))    return { estat: 'tp',     text: 'TP (pot cobrir amb deute)' };
+  if (isCoordVal(v))        return { estat: 'carec',  text: `Càrrec: ${val}` };
+  if (isSuportVal(v))       return { estat: 'suport', text: `Suport (flexible): ${val}` };
+  return                           { estat: 'ocupat', text: `ocupat: ${val}` };
+}
+
+// Normalitza noms de grup per fer matching (ex: "5è A" ≈ "5eA" ≈ "5ea")
+function normG(s) {
+  return (s || '').toLowerCase()
+    .replace(/[èéê]/g,'e').replace(/[àáâ]/g,'a').replace(/[òóô]/g,'o')
+    .replace(/[úùû]/g,'u').replace(/[íìï]/g,'i')
+    .replace(/\s+/g,'').replace(/[·.\-/]/g,'');
 }
 
 export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
@@ -52,6 +64,8 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
   const dia = data
     ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date(data + 'T12:00:00').getDay()]
     : null;
+
+  if (dia === 'dissabte' || dia === 'diumenge') throw new Error('No es generen cobertures per a cap de setmana');
 
   const regles = (normes || '').trim() || REGLES_DEFAULT;
 
@@ -67,8 +81,33 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
   const blocsDesc = blocs.map(b => b.hora).join(' + ');
   const durada = `${frangesIds.length * 30} min`;
 
+  // Identificar grups afectats i tutors per cada bloc
+  const absentDocent = docents.find(d => d.nom === absentNom);
+  const absentHorariDia = absentDocent?.horari?.[dia] || {};
+
+  const infoGrupsAfectats = dia ? blocs.map(b => {
+    const acts = [...new Set(b.ids.map(fid => absentHorariDia[fid]).filter(v => v))];
+    if (!acts.length) return null;
+    const tutorsAfectats = docents.filter(d => {
+      if (!d.grup_principal || !d.horari) return false;
+      const gpN = normG(d.grup_principal);
+      if (gpN.length < 2) return false;
+      return acts.some(act => normG(act).includes(gpN));
+    });
+    if (!tutorsAfectats.length) return `• ${b.hora} (${acts.join(' / ')}): cap tutor identificat — buscar al mateix cicle`;
+    const lines = tutorsAfectats.map(t => {
+      const estats = b.ids.map(fid => estatHorari(t.horari?.[dia]?.[fid]));
+      const esFora = estats.some(e => e.estat === 'fora');
+      const potCobrir = estats.every(e => ['lliure','tp','carec','suport'].includes(e.estat));
+      const detail = estats.map(e => e.text).join(', ');
+      if (esFora) return `  → TUTOR/A ${t.nom} (${t.grup_principal}): ❌ FORA — buscar alternativa al cicle`;
+      if (potCobrir) return `  → TUTOR/A ${t.nom} (${t.grup_principal}): ✅ PRIMERA OPCIÓ — interrompre (${detail}) i quedar-se amb el seu grup`;
+      return `  → TUTOR/A ${t.nom} (${t.grup_principal}): ❌ ja ensenya un altre grup (${detail}) — buscar alternativa`;
+    }).join('\n');
+    return `• ${b.hora} (${acts.join(' / ')}):\n${lines}`;
+  }).filter(Boolean).join('\n') : '';
+
   // Per cada docent, mostrar disponibilitat a TOTS els blocs d'hora
-  // (docents sense horari s'exclouen — no es poden proposar)
   const disponibilitatDocents = docents.filter(d => d.horari).map(d => {
     const totsEstats = blocs.flatMap(b =>
       b.ids.map(fid => (dia ? estatHorari(d.horari?.[dia]?.[fid]) : { estat: 'ocupat', text: '?' }))
@@ -91,7 +130,7 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
 
     const base = `  · ${d.nom} (${d.grup_principal || '?'}): cob.mes=${d.cobertures_mes || 0} |`;
     if (totLliure)              return `${base} ✅ DISPONIBLE TOT EL BLOC (al centre, sense classe)`;
-    if (potCobrir && ambSuport) return `${base} ✅ POT COBRIR (Suport, flexible — ideal si mateix cicle) — ${blocsInfo}`;
+    if (potCobrir && ambSuport) return `${base} ✅ POT COBRIR (Suport, flexible) — ${blocsInfo}`;
     if (potCobrir && ambTP)     return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
     if (potCobrir)              return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
                                 return `${base} ❌ OCUPAT — ${blocsInfo}`;
@@ -105,6 +144,10 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     ? `\nBAIXES LLARGUES (docents absents tot el curs):\n${baixes.map(b => `  · ${b.absent} → Substitut permanent: ${b.substitut}${b.notes ? ` (${b.notes})` : ''}. ${b.substitut} fa l'horari complet de ${b.absent} i les seves cobertures. NO assignar ${b.absent} a cap cobertura.`).join('\n')}`
     : '';
 
+  const contextGrups = infoGrupsAfectats
+    ? `\nGRUPS AFECTATS I TUTORS a ${dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : ''}:\n${infoGrupsAfectats}\n`
+    : '';
+
   const diaLabel = dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : 'dia no especificat';
 
   const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària.
@@ -112,24 +155,23 @@ DOCENT ABSENT: ${absentNom}
 DIA DE L'ABSÈNCIA: ${diaLabel}${data ? ` (${data})` : ''}
 DURADA: ${durada} — Blocs horaris: ${blocsDesc}
 NORMES DEL CENTRE:
-${regles}${contextExtra}${contextBaixes}
+${regles}${contextExtra}${contextBaixes}${contextGrups}
 
-REGLA FONAMENTAL: Assigna el MÍNIM de docents possible. Prioritza un SOL docent per a TOTA l'absència. Només si cap docent és lliure en tots els blocs, proposa un per bloc d'hora (mai un per franja de 30 min).
-IMPORTANT: La disponibilitat que veus a sota és la de l'horari de ${diaLabel}. Respecta-la estrictament.
+JERARQUIA DE PRIORITATS per a cada bloc (ordre estricte):
+1. TUTOR/A DEL GRUP AFECTAT marcats com "PRIMERA OPCIÓ": si fan TP, coordinació o suport → INTERROMPRE i quedar-se amb el seu grup. Un tutor/a sempre prefereix quedar-se amb el seu propi grup.
+2. Docent del MATEIX cicle (Infantil I3-I5 · Cicle Inicial 1r-2n · Cicle Mitjà 3r-4t · Cicle Superior 5è-6è) amb disponibilitat (✅).
+3. Docent d'un cicle diferent — ÚLTIM RECURS absolut. Només si cap opció anterior existeix.
+4. Si ningú disponible per un bloc → indicar "GRUP DESCOBERT" al resum, no inventar ningú.
 
-DISPONIBILITAT DELS DOCENTS a ${diaLabel} (tots els blocs de l'absència):
+REGLES ADDICIONALS:
+- ❌ "FORA DEL CENTRE" = MAI proposar. Ignora'l completament.
+- ❌ "OCUPAT" = ensenya un altre grup. No proposar (excepte si és el tutor del grup afectat que ja és amb el seu grup).
+- Mínim de docents possible: un sol docent per a TOTA l'absència si pot. Si no, un per bloc d'hora (mai per franja de 30 min).
+- tp_afectat:true si el docent proposat tenia TP en aquelles franges.
+- Aplica les NORMES DEL CENTRE per a restriccions addicionals.
+
+DISPONIBILITAT DELS DOCENTS a ${diaLabel}:
 ${disponibilitatDocents}
-
-INSTRUCCIONS:
-1. ❌ "FORA DEL CENTRE" = el docent és a casa. MAI proposar-lo. Ignora'l completament.
-2. Prioritat 1 — "✅ DISPONIBLE TOT EL BLOC": al centre sense classe. Tria el de menys cobertures del mes.
-3. Prioritat 2 — "✅ POT COBRIR (Suport, flexible)": ja és al centre fent suport. Ideal si és el mateix cicle que el docent absent.
-4. Prioritat 3 — "✅ POT COBRIR amb deute TP": al centre fent TP, pot cobrir però genera deute. tp_afectat:true.
-5. Prioritat 4 — "⚠️ POT COBRIR (Càrrec)": al centre fent coordinació, últim recurs. tp_afectat:false.
-6. ❌ "OCUPAT": està ensenyant el seu propi grup. No proposar.
-7. Prioritza el MATEIX cicle educatiu: Infantil (I3-I5), Cicle Inicial (1r-2n), Cicle Mitjà (3r-4t), Cicle Superior (5è-6è).
-8. Un SOL docent per a TOTA l'absència si és possible. Si no, un per bloc d'hora. Mai un per franja de 30 min.
-9. Aplica les NORMES DEL CENTRE per a restriccions addicionals.
 
 Respon NOMÉS JSON: {"proposta":[{"docent":"Nom Cognom","franges_ids":${JSON.stringify(frangesIds)},"hores":"${blocsDesc}","grup_origen":"GX","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
 
@@ -172,7 +214,7 @@ Respon ÚNICAMENT en JSON sense cap altre text:
   return callClaude([{ role: 'user', content }], 1000);
 }
 
-export async function extractHorariFromPDF(base64, franjes) {
+export async function extractHorariFromPDF(base64, franjes, mimeType = 'application/pdf') {
   const franjesDesc = franjes
     .map(f => `${f.id}=${f.sub}${f.lliure ? '(Lliure)' : ''}`)
     .join(', ');
@@ -181,15 +223,34 @@ export async function extractHorariFromPDF(base64, franjes) {
   );
   const tpExId = franjes.filter(f => !f.lliure && !f.patio).slice(-1)[0]?.id || franjes[0]?.id;
 
-  const prompt = `Extreu l'horari del docent d'aquest PDF.
+  const prompt = `Extreu l'horari del docent d'aquest arxiu.
 Franges: ${franjesDesc}
-Valors: "TP", "Lliure", "Pati", o grup+activitat ("G3 · Lectura")
+
+VALORS PERMESOS — usa'ls exactament:
+• "" (buit) → docent AL CENTRE sense classe assignada: DISPONIBLE per cobrir absències
+• "Lliure" → docent ABSENT/fora del centre (dia lliure, festiu). ÚNICAMENT si NO ve al centre.
+• "TP" → Treball Personal (al centre)
+• "Pati" → Vigilància de pati
+• "GX · Matèria" → Classe amb un grup (ex: "G3 · Matemàtiques", "1r A · Lectura")
+• "Tutoria GX" → Tutoria (ex: "Tutoria G4")
+• "Suport X" → Suport dins l'aula o a un alumne (ex: "Suport G2", "Suport SIEI")
+• "MEE" o "MESI" → Suport de mestre d'educació especial
+• "coordinació" → Coordinació de cicle o equip
+• "càrrec X" → Càrrec directiu (ex: "càrrec direcció")
+• "Racons X" → Sessió de racons (ex: "Racons 3")
+
+REGLA CRÍTICA: Si el docent no té res assignat en una franja però SÍ és al centre → usa "" (buit), MAI "Lliure".
+"Lliure" és EXCLUSIU per quan el docent no ve al centre aquell dia.
+
 JSON: {"nom":"Nom","rol":"tutor","grup_principal":"G1","horari":{"dilluns":${diaTemplate},"dimarts":${diaTemplate},"dimecres":${diaTemplate},"dijous":${diaTemplate},"divendres":${diaTemplate}},"tp_franges":["divendres-${tpExId}"]}`;
+
+  const isImage = mimeType.startsWith('image/');
+  const fileBlock = isImage
+    ? { type: 'image',    source: { type: 'base64', media_type: mimeType,           data: base64 } }
+    : { type: 'document', source: { type: 'base64', media_type: 'application/pdf',  data: base64 } };
+
   return callClaude([{
     role: 'user',
-    content: [
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
-      { type: 'text', text: prompt },
-    ],
+    content: [fileBlock, { type: 'text', text: prompt }],
   }], 2000);
 }

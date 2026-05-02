@@ -141,6 +141,15 @@ export default function AvisosPage() {
   }
 
   async function generarIA(avis) {
+    if (avis.data) {
+      const diaSetmana = new Date(avis.data + 'T12:00:00').getDay();
+      if (diaSetmana === 0 || diaSetmana === 6) {
+        setIaTarget(avis);
+        setIaState('error');
+        setIaError('Aquesta absència és un cap de setmana — no hi ha classes ni cobertures possibles.');
+        return;
+      }
+    }
     setIaTarget(avis);
     setIaState('loading');
     setIaResult(null);
@@ -158,7 +167,7 @@ export default function AvisosPage() {
       const blocatsExtra = new Set(
         infoExtra.flatMap(ie => (ie.docentsBlocats || []).map(b => (b.nom || b).toLowerCase()))
       );
-      const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei', 'suport']);
+      const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei', 'suport', 'directiu']);
       const docentsFiltrats = docents.filter(d =>
         !jaAssignats.has(d.nom) &&
         !blocatsExtra.has(d.nom.toLowerCase()) &&
