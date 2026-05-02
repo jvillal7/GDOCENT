@@ -25,26 +25,26 @@ export const SCHOOL_FRANJES = FRANJES.filter(f => !f.lliure);
 export const NAV_CFG = {
   jefa: [
     { sec: 'Avui', items: [
-      { id: 'jd',       icon: '📊', label: 'Avui' },
-      { id: 'javis',    icon: '🔔', label: 'Avisos rebuts' },
+      { id: 'jd',       icon: '📊', label: 'Avui',            anim: 'bars' },
+      { id: 'javis',    icon: '🔔', label: 'Avisos rebuts',    anim: 'bell' },
     ]},
     { sec: 'Gestió', items: [
-      { id: 'jtp',      icon: '🕐', label: 'Treball Personal' },
-      { id: 'jhoraris', icon: '👥', label: 'Personal' },
-      { id: 'jh',       icon: '📋', label: 'Historial' },
+      { id: 'jtp',      icon: '🕐', label: 'Treball Personal', anim: 'clock' },
+      { id: 'jhoraris', icon: '👥', label: 'Personal',         anim: 'walk' },
+      { id: 'jh',       icon: '📋', label: 'Historial',        anim: 'flip' },
     ]},
     { sec: "Diari Ca N'Oriol", oriolOnly: true, items: [
-      { id: 'oj_abs', icon: '👤', label: "Persones que s'absenten" },
-      { id: 'oj_reu', icon: '📝', label: 'Reunions i organització' },
-      { id: 'oj_cee', icon: '🏥', label: 'Actuacions CEEPSIR' },
-      { id: 'oj_bai', icon: '📋', label: 'Baixes amb substitucions' },
+      { id: 'oj_abs', icon: '👤', label: "Persones que s'absenten", anim: 'bob' },
+      { id: 'oj_reu', icon: '📝', label: 'Reunions i organització',  anim: 'write' },
+      { id: 'oj_cee', icon: '🏥', label: 'Actuacions CEEPSIR',       anim: 'pulse' },
+      { id: 'oj_bai', icon: '📋', label: 'Baixes amb substitucions', anim: 'flip' },
     ]},
   ],
   teacher: [
     { sec: 'El meu espai', items: [
-      { id: 'ta', icon: '🏥', label: 'Avisar absència' },
-      { id: 'tc', icon: '🔄', label: 'Les meves cobertures' },
-      { id: 'tt', icon: '🕐', label: 'El meu TP' },
+      { id: 'ta', icon: '🏥', label: 'Avisar absència',       anim: 'pulse' },
+      { id: 'tc', icon: '🔄', label: 'Les meves cobertures',  anim: 'spin' },
+      { id: 'tt', icon: '🕐', label: 'El meu TP',             anim: 'clock' },
     ]},
   ],
   educador: [
@@ -65,8 +65,8 @@ export const NAV_CFG = {
 };
 
 export const BNAV = {
-  jefa:      [{ id: 'jd', icon: '📊', label: 'Avui' }, { id: 'javis', icon: '🔔', label: 'Avisos' }, { id: 'jtp', icon: '🕐', label: 'TP' }, { id: 'jhoraris', icon: '👥', label: 'Personal' }, { id: 'jh', icon: '📋', label: 'Historial' }],
-  teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }, { id: 'tt', icon: '🕐', label: 'TP' }],
+  jefa:      [{ id: 'jd', icon: '📊', label: 'Avui', anim: 'bars' }, { id: 'javis', icon: '🔔', label: 'Avisos', anim: 'bell' }, { id: 'jtp', icon: '🕐', label: 'TP', anim: 'clock' }, { id: 'jhoraris', icon: '👥', label: 'Personal', anim: 'walk' }, { id: 'jh', icon: '📋', label: 'Historial', anim: 'flip' }],
+  teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar', anim: 'pulse' }, { id: 'tc', icon: '🔄', label: 'Cobertures', anim: 'spin' }, { id: 'tt', icon: '🕐', label: 'TP', anim: 'clock' }],
   educador:  [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   vetllador: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   director:  [{ id: 'di', icon: '📋', label: 'Historial' }],

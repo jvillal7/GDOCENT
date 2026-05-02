@@ -151,7 +151,25 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--i
 .sd-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--r-sm);cursor:pointer;font-size:13px;color:var(--ink-2);margin-bottom:1px;transition:background .1s}
 .sd-item:hover{background:var(--bg-2)}
 .sd-item.active{background:var(--bg-3);color:var(--ink);font-weight:500}
-.sd-item-icon{font-size:14px;width:20px;text-align:center}
+.sd-item-icon{font-size:14px;width:20px;text-align:center;display:inline-block}
+@keyframes anim-bell{0%,100%{transform:rotate(0)}10%{transform:rotate(15deg)}20%{transform:rotate(-15deg)}30%{transform:rotate(12deg)}40%{transform:rotate(-10deg)}55%{transform:rotate(5deg)}70%{transform:rotate(-3deg)}85%{transform:rotate(0)}}
+@keyframes anim-bars{0%,100%{transform:scaleY(1)}20%{transform:scaleY(1.3)}40%{transform:scaleY(0.75)}60%{transform:scaleY(1.2)}80%{transform:scaleY(0.88)}}
+@keyframes anim-clock{0%,100%{transform:rotate(0)}15%{transform:rotate(-12deg)}30%{transform:rotate(12deg)}45%{transform:rotate(-9deg)}60%{transform:rotate(9deg)}75%{transform:rotate(-4deg)}90%{transform:rotate(0)}}
+@keyframes anim-walk{0%,100%{transform:translateX(0)}25%{transform:translateX(4px)}75%{transform:translateX(-4px)}}
+@keyframes anim-flip{0%{transform:perspective(300px) rotateY(0)}50%{transform:perspective(300px) rotateY(-180deg)}100%{transform:perspective(300px) rotateY(0)}}
+@keyframes anim-bob{0%,100%{transform:translateY(0)}25%{transform:translateY(-5px)}50%{transform:translateY(-2px)}75%{transform:translateY(-4px)}}
+@keyframes anim-write{0%,100%{transform:rotate(0)}20%{transform:rotate(-8deg)}40%{transform:rotate(6deg)}60%{transform:rotate(-5deg)}80%{transform:rotate(3deg)}}
+.sd-item:hover .icon-anim-bob{animation:anim-bob .6s ease}
+.sd-item:hover .icon-anim-write{animation:anim-write .7s ease}
+@keyframes anim-pulse{0%,100%{transform:scale(1)}14%{transform:scale(1.3)}28%{transform:scale(1)}42%{transform:scale(1.2)}70%{transform:scale(1)}}
+@keyframes anim-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.sd-item:hover .icon-anim-pulse{animation:anim-pulse .7s ease}
+.sd-item:hover .icon-anim-spin{animation:anim-spin .6s linear infinite}
+.sd-item:hover .icon-anim-bell{animation:anim-bell .75s ease}
+.sd-item:hover .icon-anim-bars{animation:anim-bars .65s ease}
+.sd-item:hover .icon-anim-clock{animation:anim-clock .8s ease infinite}
+.sd-item:hover .icon-anim-walk{animation:anim-walk .55s ease infinite}
+.sd-item:hover .icon-anim-flip{animation:anim-flip .7s ease}
 .sd-badge{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px}
 .sd-badge.red{background:var(--red-bg);color:var(--red)}
 .sd-badge.amber{background:var(--amber-bg);color:var(--amber)}

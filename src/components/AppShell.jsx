@@ -40,7 +40,7 @@ export default function AppShell() {
       <div className="sd-sec">{sec.sec}</div>
       {sec.items.map(it => (
         <div key={it.id} className={`sd-item${page === it.id ? ' active' : ''}`} onClick={() => navigate(it.id)}>
-          <span className="sd-item-icon">{it.icon}</span>{it.label}
+          <span className={`sd-item-icon${it.anim ? ` icon-anim-${it.anim}` : ''}`}>{it.icon}</span>{it.label}
         </div>
       ))}
     </div>
