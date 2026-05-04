@@ -3,7 +3,6 @@ import { useApp } from '../../context/AppContext';
 
 const REGLES_DEFAULT = [
   'Cap grup sense cobrir',
-  'Un sol docent per a tota l\'absència. Si és tot el dia i no pot ser el mateix, un docent pel matí i un per la tarda',
 ];
 
 function parseNormes(text) {

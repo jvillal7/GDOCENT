@@ -36,6 +36,20 @@ export default function AvisosPage() {
   const [expandedInfoIdxs, setExpandedInfoIdxs] = useState(new Set());
   const [editingInfoIdx,   setEditingInfoIdx]   = useState(null);
   const [editingText,      setEditingText]      = useState('');
+  const [editingDateIdx,   setEditingDateIdx]   = useState(null);
+  const [editingDateInici, setEditingDateInici] = useState('');
+  const [editingDateFi,    setEditingDateFi]    = useState('');
+  // Cobertura manual
+  const [showCoberturaManual, setShowCoberturaManual] = useState(false);
+  const [cmAbsent,  setCmAbsent]  = useState('');
+  const [cmData,    setCmData]    = useState(() => new Date().toISOString().split('T')[0]);
+  const [cmFranges, setCmFranges] = useState(new Set());
+  const [cmCobrint, setCmCobrint] = useState('');
+  const [cmGrup,    setCmGrup]    = useState('');
+  const [cmSaving,  setCmSaving]  = useState(false);
+  // Avisos descoberts des d'infoExtra
+  const [avisosDescoberts, setAvisosDescoberts] = useState([]);
+  const [creantAvisos,     setCreantAvisos]     = useState(false);
   const infoFileRef = useRef(null);
 
   useEffect(() => { if (api) load(); }, [api]);
@@ -85,6 +99,176 @@ export default function AvisosPage() {
     } catch (e) { showToast('Error: ' + e.message); }
   }
 
+  function nomsSimilars(a, b) {
+    const clean = s => (s || '').toLowerCase().normalize('NFD')
+      .replace(/[̀-ͯ]/g, '').replace(/[ªº.]/g, '').replace(/\s+/g, ' ').trim();
+    const ca = clean(a), cb = clean(b);
+    if (ca === cb) return true;
+    const toks = s => s.split(' ').filter(w => w.length >= 2);
+    const ta = toks(ca), tb = toks(cb);
+    const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+    return shorter.length > 0 && shorter.every(sw => longer.some(lw => lw === sw || lw.startsWith(sw) || sw.startsWith(lw)));
+  }
+
+  function needsCoverage(val) {
+    if (!val || val === 'Lliure' || val === 'TP' || val === 'Pati') return false;
+    const low = val.toLowerCase();
+    if (low.startsWith('suport') || low.startsWith('càrrec') || low.startsWith('racons') ||
+        low === 'coordinació' || low === 'mee' || low === 'mesi') return false;
+    return true;
+  }
+
+  function horaAFranges(hores, schoolFranjes) {
+    if (!hores || hores.toLowerCase().includes('tot el dia')) return schoolFranjes.map(f => f.id);
+    const m = hores.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+    if (!m) return schoolFranjes.map(f => f.id);
+    const toMin = s => { const [h, mn] = s.split(':').map(Number); return h * 60 + mn; };
+    const start = toMin(m[1]), end = toMin(m[2]);
+    return schoolFranjes.filter(f => {
+      const parts = f.sub.split('–');
+      if (parts.length < 2) return false;
+      const fStart = toMin(parts[0].trim()), fEnd = toMin(parts[1].trim());
+      return fStart < end && fEnd > start;
+    }).map(f => f.id);
+  }
+
+  function detectarClassesDescobertes(entrada) {
+    const { docentsBlocats = [], data_inici, data_fi } = entrada;
+    if (!data_inici) return [];
+    const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+    const dates = [];
+    let cur = new Date(data_inici + 'T12:00:00');
+    const fi = new Date((data_fi || data_inici) + 'T12:00:00');
+    while (cur <= fi) {
+      const d = cur.getDay();
+      if (d >= 1 && d <= 5) {
+        const dia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][d];
+        dates.push({ iso: cur.toISOString().split('T')[0], dia });
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    const results = [];
+    for (const blocked of docentsBlocats) {
+      const nom = blocked.nom || blocked;
+      const docent = docents.find(d => nomsSimilars(d.nom, nom));
+      if (!docent?.horari) continue;
+      // MESI/MEE: les seves activitats són sempre suport, no cal cobertura
+      const gp = (docent.grup_principal || '').toUpperCase();
+      if (gp.includes('MESI') || gp.includes('MEE')) continue;
+      const frangesBloquejades = horaAFranges(blocked.hores, schoolFranjesAct);
+      for (const { iso, dia } of dates) {
+        const horariDia = docent.horari[dia] || {};
+        const afectades = frangesBloquejades.filter(fid => needsCoverage(horariDia[fid]));
+        if (afectades.length > 0) results.push({ nom, data: iso, dia, franges: afectades });
+      }
+    }
+    return results;
+  }
+
+  async function crearAvisosAutomatics() {
+    setCreantAvisos(true);
+    try {
+      for (const av of avisosDescoberts) {
+        await api.saveAbsencia({
+          escola_id: escola.id,
+          docent_nom: av.nom,
+          data: av.data,
+          franges: JSON.stringify(av.franges),
+          motiu: 'Activitat especial',
+          estat: 'pendent',
+        });
+      }
+      setAvisosDescoberts([]);
+      showToast(`✓ ${avisosDescoberts.length} avís${avisosDescoberts.length > 1 ? 'os' : ''} creat${avisosDescoberts.length > 1 ? 's' : ''}`);
+      load();
+    } catch (e) {
+      showToast('Error creant avisos: ' + e.message);
+    } finally {
+      setCreantAvisos(false);
+    }
+  }
+
+  async function guardarCoberturaManual() {
+    if (!cmAbsent || !cmCobrint || !cmGrup || cmFranges.size === 0) return showToast('Omple tots els camps');
+    setCmSaving(true);
+    const avui = new Date().toISOString().split('T')[0];
+    const esFutura = cmData > avui;
+    const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+    const dia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date(cmData + 'T12:00:00').getDay()];
+    const frangesArr = [...cmFranges];
+    try {
+      // 1. Crear absència (resolta directament)
+      const absResult = await api.saveAbsencia({
+        escola_id: escola.id,
+        docent_nom: cmAbsent,
+        data: cmData,
+        franges: JSON.stringify(frangesArr),
+        motiu: 'Cobertura manual',
+        estat: esFutura ? 'provisional' : 'resolt',
+      });
+      const absId = absResult?.[0]?.id || null;
+
+      // 2. Cobertura per cada franja (detecta TP)
+      const cobrintDocent = docents.find(d => d.nom === cmCobrint);
+      for (const fid of frangesArr) {
+        const val = cobrintDocent?.horari?.[dia]?.[fid] || '';
+        const tpAfectat = val.toLowerCase() === 'tp';
+        await api.saveCobertura({
+          escola_id: escola.id,
+          absencia_id: absId,
+          docent_cobrint_nom: cmCobrint,
+          docent_absent_nom: cmAbsent,
+          franja: fid,
+          grup: cmGrup,
+          data: cmData,
+          tp_afectat: tpAfectat,
+          motiu: 'Cobertura manual',
+        });
+        if (tpAfectat && !esFutura) {
+          await api.saveDeuteTP({
+            escola_id: escola.id,
+            docent_nom: cmCobrint,
+            data_deute: cmData,
+            motiu: `Cobertura manual (${cmAbsent})`,
+            retornat: false,
+            minuts: 30,
+          });
+        }
+      }
+
+      // 3. Blocar el mestre cobrint a infoExtra perquè la IA no el proposi
+      const franjesLabel = frangesArr.map(fid => schoolFranjesAct.find(x => x.id === fid)?.sub?.split('–')[0]?.trim() || fid).join(', ');
+      const novaLlista = [...infoExtra, {
+        titol: `Cobertura ${cmGrup}`,
+        resum: `${cmCobrint} cobreix ${cmAbsent} al grup ${cmGrup}`,
+        context: `${cmCobrint} ja té cobertura manual assignada per ${cmGrup}`,
+        data_inici: cmData,
+        data_fi: cmData,
+        docentsBlocats: [{ nom: cmCobrint, hores: franjesLabel }],
+      }];
+      await api.saveInfoExtra(novaLlista);
+      setInfoExtra(novaLlista);
+
+      // 4. Correu al mestre cobrint
+      if (cobrintDocent?.email) {
+        sendEmail(
+          cobrintDocent.email,
+          `📋 Cobertura assignada — ${cmData}`,
+          emailCobertura({ cobrint: cmCobrint, absent: cmAbsent, data: cmData, frangesIds: frangesArr, isOriol, grup: cmGrup, esFutura, notes: null })
+        );
+      }
+
+      showToast('✓ Cobertura manual registrada');
+      setShowCoberturaManual(false);
+      setCmAbsent(''); setCmData(new Date().toISOString().split('T')[0]); setCmFranges(new Set()); setCmCobrint(''); setCmGrup('');
+      load();
+    } catch (e) {
+      showToast('Error: ' + e.message);
+    } finally {
+      setCmSaving(false);
+    }
+  }
+
   async function processarInfoExtra() {
     if (!infoNotes.trim() && !infoFitxer) return showToast('Escriu unes notes o adjunta un document');
     setInfoLoading(true);
@@ -105,7 +289,10 @@ export default function AvisosPage() {
       setShowInfoPanel(false);
       setInfoNotes('');
       setInfoFitxer(null);
-      showToast('✓ Informació extra guardada');
+      // Detectar si algun docent blocat té classes descobertes
+      const descoberts = detectarClassesDescobertes(result);
+      if (descoberts.length > 0) setAvisosDescoberts(descoberts);
+      else showToast('✓ Informació extra guardada');
     } catch (e) {
       showToast('Error analitzant: ' + e.message);
     } finally {
@@ -128,6 +315,16 @@ export default function AvisosPage() {
       setInfoExtra(novaLlista);
       setEditingInfoIdx(null);
       showToast('✓ Informació actualitzada');
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
+  async function confirmarDates(idx) {
+    try {
+      const novaLlista = infoExtra.map((ie, i) => i === idx ? { ...ie, data_inici: editingDateInici, data_fi: editingDateFi || editingDateInici } : ie);
+      await api.saveInfoExtra(novaLlista);
+      setInfoExtra(novaLlista);
+      setEditingDateIdx(null);
+      showToast('✓ Dates actualitzades');
     } catch (e) { showToast('Error: ' + e.message); }
   }
 
@@ -291,16 +488,25 @@ export default function AvisosPage() {
         <p>Notificacions d'absències pendents</p>
       </div>
 
-      {/* Botó i panel d'informació extra del dia */}
+      {/* Botons acció del dia + panells */}
       <div style={{ marginBottom: 12 }}>
-        <button
-          className="btn btn-ghost btn-sm"
-          style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
-          onClick={() => { setShowInfoPanel(p => !p); setInfoNotes(''); setInfoFitxer(null); }}
-        >
-          📋 Afegir informació extra del dia
-          {infoExtra.length > 0 && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--amber)', display: 'inline-block' }} />}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: infoExtra.length > 0 ? 8 : 0 }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+            onClick={() => { setShowInfoPanel(p => !p); setShowCoberturaManual(false); setInfoNotes(''); setInfoFitxer(null); }}
+          >
+            📋 Afegir informació extra del dia
+            {infoExtra.length > 0 && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--amber)', display: 'inline-block' }} />}
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+            onClick={() => { setShowCoberturaManual(p => !p); setShowInfoPanel(false); }}
+          >
+            ✍️ Cobertura manual
+          </button>
+        </div>
 
         {/* Llista d'entrades info extra actives */}
         {infoExtra.map((ie, idx) => {
@@ -316,13 +522,8 @@ export default function AvisosPage() {
                 {/* Esquerra: etiqueta + badge dies + chips mestres */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>
-                    Activitat especial
+                    {ie.titol || 'Activitat especial'}
                   </span>
-                  {ie.data_fi && ie.data_fi !== ie.data_inici && (
-                    <span style={{ background: 'var(--amber)', color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 10, flexShrink: 0 }}>
-                      fins {new Date(ie.data_fi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
-                    </span>
-                  )}
                   {ie.docentsBlocats?.map((b, i) => {
                     const nom = b.nom || b;
                     const hores = b.hores || '';
@@ -334,8 +535,30 @@ export default function AvisosPage() {
                     );
                   })}
                 </div>
-                {/* Dreta: botons + chevron */}
+                {/* Dreta: data + botons + chevron */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  {ie.data_inici && editingDateIdx === idx ? (
+                    <>
+                      <input type="date" value={editingDateInici} onChange={e => setEditingDateInici(e.target.value)}
+                        style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, width: 110 }} />
+                      <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>–</span>
+                      <input type="date" value={editingDateFi} onChange={e => setEditingDateFi(e.target.value)}
+                        style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, width: 110 }} />
+                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 6px', color: 'var(--green)', fontWeight: 700 }} onClick={() => confirmarDates(idx)}>✓</button>
+                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setEditingDateIdx(null)}>✕</button>
+                    </>
+                  ) : ie.data_inici ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 11, color: 'var(--ink-3)', marginRight: 2, fontWeight: 500, padding: '2px 6px' }}
+                      title="Editar dates"
+                      onClick={() => { setEditingDateIdx(idx); setEditingDateInici(ie.data_inici); setEditingDateFi(ie.data_fi || ie.data_inici); }}
+                    >
+                      {ie.data_fi && ie.data_fi !== ie.data_inici
+                        ? `${new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })} – ${new Date(ie.data_fi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}`
+                        : new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
+                    </button>
+                  ) : null}
                   <button
                     className="btn btn-ghost btn-sm"
                     style={{ fontSize: 11, padding: '3px 8px' }}
@@ -424,6 +647,111 @@ export default function AvisosPage() {
             </div>
           </div>
         )}
+
+        {/* Avís classes descobertes */}
+        {avisosDescoberts.length > 0 && (
+          <div style={{ marginTop: 8, background: '#FFF8E7', border: '1px solid #F0D5A8', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>
+                  S'han detectat {avisosDescoberts.length} classe{avisosDescoberts.length > 1 ? 's' : ''} sense cobrir
+                </div>
+                {avisosDescoberts.map((av, i) => {
+                  const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+                  const frangesLabel = av.franges.map(fid => schoolFranjesAct.find(f => f.id === fid)?.label || fid).join(', ');
+                  const dataFmt = new Date(av.data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+                  return (
+                    <div key={i} style={{ fontSize: 12, color: 'var(--ink-2)', marginBottom: 2 }}>
+                      · <strong>{av.nom}</strong> — {dataFmt} ({frangesLabel})
+                    </div>
+                  );
+                })}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button
+                    className="btn btn-sm"
+                    style={{ background: 'var(--amber)', color: '#fff', borderColor: 'var(--amber)', fontSize: 12, fontWeight: 600, padding: '6px 14px' }}
+                    onClick={crearAvisosAutomatics}
+                    disabled={creantAvisos}
+                  >
+                    {creantAvisos ? 'Creant...' : '+ Crear avisos'}
+                  </button>
+                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => setAvisosDescoberts([])}>
+                    Ignorar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Panel cobertura manual */}
+        {showCoberturaManual && (() => {
+          const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+          const docentsSorted = [...(docents || [])].sort((a, b) => a.nom.localeCompare(b.nom));
+          return (
+            <div className="card" style={{ marginTop: 8 }}>
+              <div className="card-head" style={{ padding: '10px 14px' }}>
+                <h3 style={{ fontSize: 13 }}>✍️ Registrar cobertura manual</h3>
+                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setShowCoberturaManual(false)}>✕</button>
+              </div>
+              <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <label className="f-label" style={{ marginBottom: 4 }}>Data</label>
+                    <input type="date" className="f-ctrl" value={cmData} onChange={e => setCmData(e.target.value)} style={{ fontSize: 13 }} />
+                  </div>
+                  <div style={{ flex: 2, minWidth: 160 }}>
+                    <label className="f-label" style={{ marginBottom: 4 }}>Mestre absent</label>
+                    <select className="f-ctrl" value={cmAbsent} style={{ fontSize: 13 }}
+                      onChange={e => {
+                        setCmAbsent(e.target.value);
+                        const d = docents.find(x => x.nom === e.target.value);
+                        if (d?.grup_principal) setCmGrup(d.grup_principal);
+                      }}>
+                      <option value="">Selecciona...</option>
+                      {docentsSorted.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: 2, minWidth: 160 }}>
+                    <label className="f-label" style={{ marginBottom: 4 }}>Mestre que cobreix</label>
+                    <select className="f-ctrl" value={cmCobrint} onChange={e => setCmCobrint(e.target.value)} style={{ fontSize: 13 }}>
+                      <option value="">Selecciona...</option>
+                      {docentsSorted.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label className="f-label" style={{ marginBottom: 4 }}>Grup</label>
+                    <input type="text" className="f-ctrl" placeholder="Ex: I5, 3rA..." value={cmGrup} onChange={e => setCmGrup(e.target.value)} style={{ fontSize: 13 }} />
+                  </div>
+                </div>
+                <div>
+                  <label className="f-label" style={{ marginBottom: 6 }}>Franges afectades</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {schoolFranjesAct.filter(f => !f.patio).map(f => {
+                      const sel = cmFranges.has(f.id);
+                      return (
+                        <button key={f.id} type="button"
+                          onClick={() => setCmFranges(prev => { const n = new Set(prev); sel ? n.delete(f.id) : n.add(f.id); return n; })}
+                          style={{ fontSize: 12, padding: '5px 10px', borderRadius: 20, border: `1.5px solid ${sel ? 'var(--blue)' : 'var(--border)'}`, background: sel ? 'var(--blue-bg)' : 'var(--bg)', color: sel ? 'var(--blue)' : 'var(--ink-2)', fontWeight: sel ? 600 : 400, cursor: 'pointer' }}>
+                          {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <button
+                  className="btn btn-full"
+                  style={{ padding: 12, fontSize: 14, fontWeight: 600, background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', opacity: cmSaving ? .6 : 1 }}
+                  disabled={cmSaving}
+                  onClick={guardarCoberturaManual}
+                >
+                  {cmSaving ? <><Spinner size={14} /> Guardant...</> : '✓ Guardar cobertura'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* IA Section — just below header */}
