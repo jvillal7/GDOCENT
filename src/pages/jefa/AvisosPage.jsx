@@ -50,6 +50,7 @@ export default function AvisosPage() {
   // Avisos descoberts des d'infoExtra
   const [avisosDescoberts, setAvisosDescoberts] = useState([]);
   const [creantAvisos,     setCreantAvisos]     = useState(false);
+  const [coberturesPerId,  setCoberturesPerId]  = useState({});
   const infoFileRef = useRef(null);
 
   useEffect(() => { if (api) load(); }, [api]);
@@ -79,7 +80,19 @@ export default function AvisosPage() {
       if (passades.length > 0) {
         await Promise.all(passades.map(a => api.patchAbsencia(a.id, { estat: 'arxivat' })));
       }
-      setAbsencies(actives.filter(a => !passades.find(p => p.id === a.id)));
+      const restants = actives.filter(a => !passades.find(p => p.id === a.id));
+      restants.sort((a, b) => (a.data || '') < (b.data || '') ? -1 : (a.data || '') > (b.data || '') ? 1 : 0);
+      setAbsencies(restants);
+      // Carregar cobertures per a les absències no-pendents (per mostrar qui cobreix)
+      const nopendes = restants.filter(a => a.estat !== 'pendent');
+      if (nopendes.length > 0) {
+        const cobsArray = await Promise.all(nopendes.map(a => api.getCoberturesByAbsencia(a.id).catch(() => [])));
+        const map = {};
+        nopendes.forEach((a, i) => { map[a.id] = cobsArray[i] || []; });
+        setCoberturesPerId(map);
+      } else {
+        setCoberturesPerId({});
+      }
     } catch { setAbsencies([]); }
   }
 
@@ -155,11 +168,16 @@ export default function AvisosPage() {
       // MESI/MEE: les seves activitats són sempre suport, no cal cobertura
       const gp = (docent.grup_principal || '').toUpperCase();
       if (gp.includes('MESI') || gp.includes('MEE')) continue;
+      const esTutor = !!docent.grup_principal && !gp.includes('SIEI');
       const frangesBloquejades = horaAFranges(blocked.hores, schoolFranjesAct);
       for (const { iso, dia } of dates) {
         const horariDia = docent.horari[dia] || {};
-        const afectades = frangesBloquejades.filter(fid => needsCoverage(horariDia[fid]));
-        if (afectades.length > 0) results.push({ nom, data: iso, dia, franges: afectades });
+        // Tutor: el grup ha d'estar cobert tota la jornada — inclou TP, buit, Pati...
+        // Especialista: només les franges on fa classe (needsCoverage)
+        const afectades = esTutor
+          ? frangesBloquejades.filter(fid => (horariDia[fid] || '').toLowerCase() !== 'lliure')
+          : frangesBloquejades.filter(fid => needsCoverage(horariDia[fid]));
+        if (afectades.length > 0) results.push({ nom, data: iso, dia, franges: afectades, motiu: entrada.titol || entrada.resum?.split(' ').slice(0, 4).join(' ') || 'Activitat especial' });
       }
     }
     return results;
@@ -174,7 +192,7 @@ export default function AvisosPage() {
           docent_nom: av.nom,
           data: av.data,
           franges: JSON.stringify(av.franges),
-          motiu: 'Activitat especial',
+          motiu: av.motiu || 'Activitat especial',
           estat: 'pendent',
         });
       }
@@ -490,117 +508,21 @@ export default function AvisosPage() {
 
       {/* Botons acció del dia + panells */}
       <div style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: infoExtra.length > 0 ? 8 : 0 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: infoExtra.length > 0 ? 10 : 4 }}>
           <button
-            className="btn btn-ghost btn-sm"
-            style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, borderRadius: 10, cursor: 'pointer', border: '1.5px solid #a5d6a7', background: showInfoPanel ? '#c8e6c9' : '#e8f5e9', color: '#2e7d32', transition: 'background .15s' }}
             onClick={() => { setShowInfoPanel(p => !p); setShowCoberturaManual(false); setInfoNotes(''); setInfoFitxer(null); }}
           >
-            📋 Afegir informació extra del dia
-            {infoExtra.length > 0 && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--amber)', display: 'inline-block' }} />}
+            📋 Informació extra del dia
+            {infoExtra.length > 0 && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2e7d32', display: 'inline-block', flexShrink: 0 }} />}
           </button>
           <button
-            className="btn btn-ghost btn-sm"
-            style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, borderRadius: 10, cursor: 'pointer', border: '1.5px solid #80cbc4', background: showCoberturaManual ? '#b2dfdb' : '#e0f2f1', color: '#00695c', transition: 'background .15s' }}
             onClick={() => { setShowCoberturaManual(p => !p); setShowInfoPanel(false); }}
           >
             ✍️ Cobertura manual
           </button>
         </div>
-
-        {/* Llista d'entrades info extra actives */}
-        {infoExtra.map((ie, idx) => {
-          const isExpanded = expandedInfoIdxs.has(idx);
-          const isEditing  = editingInfoIdx === idx;
-          return (
-            <div key={idx} style={{ marginTop: 8, background: 'var(--amber-bg)', border: '1px solid #F0D5A8', borderRadius: 10, overflow: 'hidden' }}>
-              {/* Fila compacta */}
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', cursor: 'pointer', userSelect: 'none' }}
-                onClick={() => toggleInfoExtra(idx)}
-              >
-                {/* Esquerra: etiqueta + badge dies + chips mestres */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>
-                    {ie.titol || 'Activitat especial'}
-                  </span>
-                  {ie.docentsBlocats?.map((b, i) => {
-                    const nom = b.nom || b;
-                    const hores = b.hores || '';
-                    return (
-                      <span key={i} style={{ background: '#fff', border: '1px solid #F0D5A8', borderRadius: 20, padding: '2px 7px', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                        {nom.split(' ')[0]}
-                        {hores && <span style={{ fontSize: 10, color: 'var(--amber)', fontWeight: 500 }}>{hores}</span>}
-                      </span>
-                    );
-                  })}
-                </div>
-                {/* Dreta: data + botons + chevron */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                  {ie.data_inici && editingDateIdx === idx ? (
-                    <>
-                      <input type="date" value={editingDateInici} onChange={e => setEditingDateInici(e.target.value)}
-                        style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, width: 110 }} />
-                      <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>–</span>
-                      <input type="date" value={editingDateFi} onChange={e => setEditingDateFi(e.target.value)}
-                        style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, width: 110 }} />
-                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 6px', color: 'var(--green)', fontWeight: 700 }} onClick={() => confirmarDates(idx)}>✓</button>
-                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setEditingDateIdx(null)}>✕</button>
-                    </>
-                  ) : ie.data_inici ? (
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: 11, color: 'var(--ink-3)', marginRight: 2, fontWeight: 500, padding: '2px 6px' }}
-                      title="Editar dates"
-                      onClick={() => { setEditingDateIdx(idx); setEditingDateInici(ie.data_inici); setEditingDateFi(ie.data_fi || ie.data_inici); }}
-                    >
-                      {ie.data_fi && ie.data_fi !== ie.data_inici
-                        ? `${new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })} – ${new Date(ie.data_fi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}`
-                        : new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
-                    </button>
-                  ) : null}
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: 11, padding: '3px 8px' }}
-                    onClick={() => { setEditingInfoIdx(idx); setEditingText(ie.resum || ''); if (!isExpanded) toggleInfoExtra(idx); }}
-                    title="Editar"
-                  >✏️</button>
-                  <button
-                    className="btn btn-red-soft btn-sm"
-                    style={{ fontSize: 11, padding: '3px 8px' }}
-                    onClick={() => eliminarInfoExtra(idx)}
-                    title="Eliminar"
-                  >🗑️</button>
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--amber)', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
-              </div>
-
-              {/* Contingut expandit */}
-              {isExpanded && !isEditing && (
-                <div style={{ padding: '0 12px 10px', borderTop: '1px solid #F0D5A8' }}>
-                  <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--ink-2)' }}>{ie.resum}</p>
-                </div>
-              )}
-
-              {/* Mode edició */}
-              {isEditing && (
-                <div style={{ padding: '8px 12px 12px', borderTop: '1px solid #F0D5A8', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <textarea
-                    className="f-ctrl"
-                    rows={3}
-                    style={{ fontSize: 13 }}
-                    value={editingText}
-                    onChange={e => setEditingText(e.target.value)}
-                  />
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-green btn-sm btn-full" onClick={() => editarInfoExtra(idx, editingText)}>✓ Guardar</button>
-                    <button className="btn btn-ghost btn-sm btn-full" onClick={() => setEditingInfoIdx(null)}>Cancel·lar</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
 
         {/* Panel d'entrada */}
         {showInfoPanel && (
@@ -752,6 +674,101 @@ export default function AvisosPage() {
             </div>
           );
         })()}
+
+        {/* Llista d'entrades info extra actives */}
+        {infoExtra.map((ie, idx) => {
+          const isExpanded = expandedInfoIdxs.has(idx);
+          const isEditing  = editingInfoIdx === idx;
+          return (
+            <div key={idx} style={{ marginTop: 8, background: 'var(--amber-bg)', border: '1px solid #F0D5A8', borderRadius: 10, overflow: 'hidden' }}>
+              {/* Fila compacta */}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => toggleInfoExtra(idx)}
+              >
+                {/* Esquerra: etiqueta + badge dies + chips mestres */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>
+                    {ie.titol || (ie.resum ? ie.resum.split(' ').slice(0, 4).join(' ') : 'Activitat especial')}
+                  </span>
+                  {ie.docentsBlocats?.map((b, i) => {
+                    const nom = b.nom || b;
+                    const hores = b.hores || '';
+                    return (
+                      <span key={i} style={{ background: '#fff', border: '1px solid #F0D5A8', borderRadius: 20, padding: '2px 7px', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                        {nom.split(' ')[0]}
+                        {hores && <span style={{ fontSize: 10, color: 'var(--amber)', fontWeight: 500 }}>{hores}</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+                {/* Dreta: data + botons + chevron */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  {ie.data_inici && editingDateIdx === idx ? (
+                    <>
+                      <input type="date" value={editingDateInici} onChange={e => setEditingDateInici(e.target.value)}
+                        style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, width: 110 }} />
+                      <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>–</span>
+                      <input type="date" value={editingDateFi} onChange={e => setEditingDateFi(e.target.value)}
+                        style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, width: 110 }} />
+                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 6px', color: 'var(--green)', fontWeight: 700 }} onClick={() => confirmarDates(idx)}>✓</button>
+                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setEditingDateIdx(null)}>✕</button>
+                    </>
+                  ) : ie.data_inici ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 11, color: 'var(--ink-3)', marginRight: 2, fontWeight: 500, padding: '2px 6px' }}
+                      title="Editar dates"
+                      onClick={() => { setEditingDateIdx(idx); setEditingDateInici(ie.data_inici); setEditingDateFi(ie.data_fi || ie.data_inici); }}
+                    >
+                      {ie.data_fi && ie.data_fi !== ie.data_inici
+                        ? `${new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })} – ${new Date(ie.data_fi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}`
+                        : new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
+                    </button>
+                  ) : null}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 11, padding: '3px 8px' }}
+                    onClick={() => { setEditingInfoIdx(idx); setEditingText(ie.resum || ''); if (!isExpanded) toggleInfoExtra(idx); }}
+                    title="Editar"
+                  >✏️</button>
+                  <button
+                    className="btn btn-red-soft btn-sm"
+                    style={{ fontSize: 11, padding: '3px 8px' }}
+                    onClick={() => eliminarInfoExtra(idx)}
+                    title="Eliminar"
+                  >🗑️</button>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--amber)', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+              </div>
+
+              {/* Contingut expandit */}
+              {isExpanded && !isEditing && (
+                <div style={{ padding: '0 12px 10px', borderTop: '1px solid #F0D5A8' }}>
+                  <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--ink-2)' }}>{ie.resum}</p>
+                </div>
+              )}
+
+              {/* Mode edició */}
+              {isEditing && (
+                <div style={{ padding: '8px 12px 12px', borderTop: '1px solid #F0D5A8', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <textarea
+                    className="f-ctrl"
+                    rows={3}
+                    style={{ fontSize: 13 }}
+                    value={editingText}
+                    onChange={e => setEditingText(e.target.value)}
+                  />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-green btn-sm btn-full" onClick={() => editarInfoExtra(idx, editingText)}>✓ Guardar</button>
+                    <button className="btn btn-ghost btn-sm btn-full" onClick={() => setEditingInfoIdx(null)}>Cancel·lar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
       </div>
 
       {/* IA Section — just below header */}
@@ -817,70 +834,115 @@ export default function AvisosPage() {
       )}
 
       {(() => {
+        const avui = new Date().toISOString().split('T')[0];
         const absByDocent = {};
         absencies.forEach(a => { absByDocent[a.docent_nom] = (absByDocent[a.docent_nom] || 0) + 1; });
-        return absencies.map(a => {
-        const avui  = new Date().toISOString().split('T')[0];
-        const dObj  = a.data ? new Date(a.data + 'T12:00:00') : new Date();
-        const day   = dObj.getDate();
-        const month = dObj.toLocaleDateString('ca-ES', { month: 'short' }).replace('.','').toUpperCase();
-        const esProvisional = a.estat === 'provisional';
-        const esPendent     = a.estat === 'pendent';
-        const esAvui        = a.data === avui;
-        const diesTotal     = absByDocent[a.docent_nom] || 1;
-        return (
-          <div key={a.id} className={`avis-card${esPendent ? ' pendent' : ''}`}>
-            <div className="ac-top">
-              <div className="date-badge">
-                <div className="db-day">{day}</div>
-                <div className="db-month">{month}</div>
-              </div>
-              <div className="ac-content">
-                <div className="ac-name">{a.docent_nom}</div>
-                <div className="ac-motiu">{a.motiu || 'Sense motiu'}</div>
-              </div>
-              <div className="ac-side">
-                {esPendent     && <span className="sp sp-red">Pendent</span>}
-                {esProvisional && <span className="sp sp-amber">Provisional</span>}
-                {!esPendent && !esProvisional && <span className="sp sp-green">Resolt</span>}
-                {diesTotal > 1 && <span className="sp sp-amber" style={{ marginTop: 3 }}>📅 {diesTotal} dies</span>}
+        const pendentsList   = absencies.filter(a => a.estat === 'pendent');
+        const noPendentsList = absencies.filter(a => a.estat !== 'pendent');
+        const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
 
-                {esPendent     && <button className="btn btn-green btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => marcarResolt(a.id)}>✓ Resolt</button>}
-                {esProvisional && esAvui && <button className="btn btn-green btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => confirmarProvisional(a.id)}>✓ Confirmar</button>}
-                {!esPendent && !esProvisional && <button className="btn btn-red-soft btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar</button>}
+        const renderCard = (a) => {
+          const dObj  = a.data ? new Date(a.data + 'T12:00:00') : new Date();
+          const day   = dObj.getDate();
+          const month = dObj.toLocaleDateString('ca-ES', { month: 'short' }).replace('.','').toUpperCase();
+          const esProvisional = a.estat === 'provisional';
+          const esPendent     = a.estat === 'pendent';
+          const esAvui        = a.data === avui;
+          const totalAvís     = absByDocent[a.docent_nom] || 1;
+
+          // Cobridors: agrupar franges per nom de docent cobrint
+          const cobsCard = coberturesPerId[a.id] || [];
+          const perDocent = {};
+          for (const c of cobsCard) {
+            if (!perDocent[c.docent_cobrint_nom]) perDocent[c.docent_cobrint_nom] = [];
+            perDocent[c.docent_cobrint_nom].push(c.franja);
+          }
+
+          return (
+            <div key={a.id} className={`avis-card${esPendent ? ' pendent' : ''}`}>
+              <div className="ac-top">
+                <div className="date-badge">
+                  <div className="db-day">{day}</div>
+                  <div className="db-month">{month}</div>
+                </div>
+                <div className="ac-content">
+                  <div className="ac-name" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                    <span>{a.docent_nom}</span>
+                    {!esPendent && Object.keys(perDocent).length > 0 && (
+                      <>
+                        <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: 14, lineHeight: 1 }}>→</span>
+                        {Object.entries(perDocent).map(([nom, franges], i) => {
+                          const isTotal = franges.length >= schoolFranjesAct.length;
+                          const hLabel  = isTotal ? null : frangesHorari(franges, isOriol);
+                          return (
+                            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '2px 8px', fontSize: 11.5, fontWeight: 600, color: 'var(--green)' }}>
+                              {nom.split(' ')[0]}
+                              {hLabel && <span style={{ fontSize: 10, fontWeight: 400, opacity: .85 }}>· {hLabel}</span>}
+                            </span>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                  <div className="ac-motiu">{a.motiu || 'Sense motiu'}</div>
+                </div>
+                <div className="ac-side">
+                  {esPendent     && <span className="sp sp-red">Pendent</span>}
+                  {esProvisional && <span className="sp sp-amber">Provisional</span>}
+                  {!esPendent && !esProvisional && <span className="sp sp-green">Resolt</span>}
+                  {totalAvís > 1 && <span className="sp sp-amber" style={{ marginTop: 3 }} title={`${totalAvís} avisos actius per a aquest docent`}>📅 {totalAvís} avisos</span>}
+
+                  {esPendent     && <button className="btn btn-green btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => marcarResolt(a.id)}>✓ Resolt</button>}
+                  {esProvisional && esAvui && <button className="btn btn-green btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => confirmarProvisional(a.id)}>✓ Confirmar</button>}
+                  {!esPendent && !esProvisional && <button className="btn btn-red-soft btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar</button>}
+                </div>
               </div>
+              <div className="ac-bottom">{frangesChips(a.franges, isOriol)}</div>
+
+              {esProvisional && (
+                <div style={{ padding: '4px 16px 10px', fontSize: 11.5, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  📅 Cobertura provisional — {esAvui ? 'confirma avui' : `prevista per al ${dObj.toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })}`}
+                </div>
+              )}
+              {(esPendent || esProvisional) && (
+                <div style={{ padding: '0 16px 14px', display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn btn-ghost btn-sm btn-full"
+                    style={{ fontSize: 12 }}
+                    onClick={() => generarIA(a)}
+                  >
+                    {esProvisional ? '↺ Canviar proposta IA' : '🤖 Generar proposta IA'}
+                  </button>
+                  <button
+                    className="btn btn-red-soft btn-sm"
+                    style={{ fontSize: 13, flexShrink: 0, paddingInline: 10 }}
+                    onClick={() => arxivar(a.id)}
+                    title="Eliminar avis"
+                  >🗑️</button>
+                </div>
+              )}
+              {!esPendent && !esProvisional && (
+                <div style={{ padding: '0 16px 14px' }}>
+                  <button className="btn btn-ghost btn-sm btn-full" style={{ fontSize: 12 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar del registre</button>
+                </div>
+              )}
             </div>
-            <div className="ac-bottom">{frangesChips(a.franges, isOriol)}</div>
-            {esProvisional && (
-              <div style={{ padding: '4px 16px 10px', fontSize: 11.5, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                📅 Cobertura provisional — {esAvui ? 'confirma avui' : `prevista per al ${dObj.toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })}`}
+          );
+        };
+
+        const nPendents = pendentsList.length;
+        const nConfirm  = noPendentsList.length;
+        return (
+          <>
+            {absencies.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                {nPendents > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)', background: 'var(--red-bg)', borderRadius: 20, padding: '3px 10px' }}>{nPendents} pendent{nPendents > 1 ? 's' : ''}</span>}
+                {nConfirm  > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-bg)', borderRadius: 20, padding: '3px 10px' }}>{nConfirm} coberta{nConfirm > 1 ? 's' : ''}</span>}
               </div>
             )}
-            {(esPendent || esProvisional) && (
-              <div style={{ padding: '0 16px 14px', display: 'flex', gap: 6 }}>
-                <button
-                  className="btn btn-ghost btn-sm btn-full"
-                  style={{ fontSize: 12 }}
-                  onClick={() => generarIA(a)}
-                >
-                  {esProvisional ? '↺ Canviar proposta IA' : '🤖 Generar proposta IA'}
-                </button>
-                <button
-                  className="btn btn-red-soft btn-sm"
-                  style={{ fontSize: 13, flexShrink: 0, paddingInline: 10 }}
-                  onClick={() => arxivar(a.id)}
-                  title="Eliminar avis"
-                >🗑️</button>
-              </div>
-            )}
-            {!esPendent && !esProvisional && (
-              <div style={{ padding: '0 16px 14px' }}>
-                <button className="btn btn-ghost btn-sm btn-full" style={{ fontSize: 12 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar del registre</button>
-              </div>
-            )}
-          </div>
+            {absencies.map(renderCard)}
+          </>
         );
-      });
       })()}
 
     </>
