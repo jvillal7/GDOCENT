@@ -3,20 +3,10 @@ import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL } from '../../lib/constants';
 import { proposarCobertura, analitzarInfoExtra } from '../../lib/claude';
 import { sendEmail } from '../../lib/api';
-import { parseFranges } from '../../lib/utils';
+import { parseFranges, escHtml, frangesHorari } from '../../lib/utils';
+import FrangesChips from '../../components/FrangesChips';
 import Spinner from '../../components/Spinner';
 
-function frangesChips(frangesJson, isOriol) {
-  const ids = parseFranges(frangesJson);
-  const franjesAct = isOriol ? FRANJES_ORIOL : FRANJES;
-  const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
-  const selected = franjesAct.filter(f => ids.includes(f.id));
-  const isAllDay = ids.length >= schoolFranjesAct.length;
-  if (isAllDay) return <span className="slot-chip all-day">✨ Tot el dia</span>;
-  const seen = new Set();
-  return selected.filter(f => { if (seen.has(f.label)) return false; seen.add(f.label); return true; })
-    .map(f => <span key={f.label} className={`slot-chip${f.patio ? ' patio' : ''}`}>{f.label}</span>);
-}
 
 export default function AvisosPage() {
   const { api, docents, normes, escola, showToast } = useApp();
@@ -440,6 +430,7 @@ export default function AvisosPage() {
         }
         if (p.tp_afectat && !esFutura) {
           await api.saveDeuteTP({
+            escola_id:   escola.id,
             docent_nom:  p.docent,
             data_deute:  absData,
             motiu:       `Cobertura ${p.hores || p.franja} (${iaTarget.docent_nom})`,
@@ -777,62 +768,6 @@ export default function AvisosPage() {
 
       </div>
 
-      {/* IA Section — just below header */}
-      {iaTarget && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-head">
-            <h3>🤖 Proposta IA — {iaTarget.docent_nom}</h3>
-          </div>
-          <div style={{ padding: 16 }}>
-            {iaState === 'loading' && (
-              <div style={{ textAlign: 'center', padding: 20 }}>
-                <Spinner />
-                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 10 }}>La IA analitzant disponibilitat...</p>
-              </div>
-            )}
-            {iaState === 'error' && (
-              <>
-                <div className="f-warn" style={{ marginBottom: 12 }}>⚠ {iaError}</div>
-                <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Tornar a intentar</button>
-              </>
-            )}
-            {iaState === 'done' && iaResult && (
-              <>
-                <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>
-                  💡 {iaResult.resum}
-                </div>
-                <div className="card" style={{ marginBottom: 12 }}>
-                  {(editedProposta || iaResult.proposta).map((p, i) => (
-                    <div key={i} style={{ padding: '10px', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', marginBottom: 5 }}>{p.hores || p.franja}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <select
-                          className="f-ctrl"
-                          style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '6px 8px' }}
-                          value={p.docent}
-                          onChange={e => setEditedProposta(prev => prev.map((x, j) => j === i ? { ...x, docent: e.target.value } : x))}
-                        >
-                          {docents.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
-                        </select>
-                        {p.tp_afectat && <span className="sp sp-amber" style={{ fontSize: 10, flexShrink: 0 }}>⚠ TP</span>}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>{p.motiu}</div>
-                      {p.franges_ids?.length > 1 && (
-                        <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 2 }}>Cobreix {p.franges_ids.length} franges ({p.franges_ids.length * 30} min)</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button className="btn btn-green btn-full" onClick={confirmarCobertura}>✓ Confirmar i enviar notificacions</button>
-                  <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Generar una altra proposta</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {absencies.length === 0 && (
         <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 14 }}>
           Cap absència registrada encara.
@@ -903,7 +838,7 @@ export default function AvisosPage() {
                   {!esPendent && !esProvisional && <button className="btn btn-red-soft btn-sm" style={{ fontWeight: 600, marginTop: 4 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar</button>}
                 </div>
               </div>
-              <div className="ac-bottom">{frangesChips(a.franges, isOriol)}</div>
+              <div className="ac-bottom"><FrangesChips frangesJson={a.franges} isOriol={isOriol} /></div>
 
               {esProvisional && (
                 <div style={{ padding: '4px 16px 10px', fontSize: 11.5, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -932,6 +867,55 @@ export default function AvisosPage() {
                   <button className="btn btn-ghost btn-sm btn-full" style={{ fontSize: 12 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar del registre</button>
                 </div>
               )}
+              {iaTarget?.id === a.id && (
+                <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {iaState === 'loading' && (
+                    <div style={{ textAlign: 'center', padding: 20 }}>
+                      <Spinner />
+                      <p style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 10 }}>La IA analitzant disponibilitat...</p>
+                    </div>
+                  )}
+                  {iaState === 'error' && (
+                    <>
+                      <div className="f-warn" style={{ marginBottom: 4 }}>⚠ {iaError}</div>
+                      <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Tornar a intentar</button>
+                    </>
+                  )}
+                  {iaState === 'done' && iaResult && (
+                    <>
+                      <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--green)' }}>
+                        💡 {iaResult.resum}
+                      </div>
+                      <div className="card">
+                        {(editedProposta || iaResult.proposta).map((p, i) => (
+                          <div key={i} style={{ padding: '10px', borderBottom: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', marginBottom: 5 }}>{p.hores || p.franja}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <select
+                                className="f-ctrl"
+                                style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '6px 8px' }}
+                                value={p.docent}
+                                onChange={e => setEditedProposta(prev => prev.map((x, j) => j === i ? { ...x, docent: e.target.value } : x))}
+                              >
+                                {docents.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
+                              </select>
+                              {p.tp_afectat && <span className="sp sp-amber" style={{ fontSize: 10, flexShrink: 0 }}>⚠ TP</span>}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>{p.motiu}</div>
+                            {p.franges_ids?.length > 1 && (
+                              <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 2 }}>Cobreix {p.franges_ids.length} franges ({p.franges_ids.length * 30} min)</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <button className="btn btn-green btn-full" onClick={confirmarCobertura}>✓ Confirmar i enviar notificacions</button>
+                        <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Generar una altra proposta</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           );
         };
@@ -955,23 +939,6 @@ export default function AvisosPage() {
   );
 }
 
-function escHtml(s) {
-  return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function frangesHorari(ids, isOriol) {
-  const allFranjes = isOriol ? FRANJES_ORIOL : FRANJES;
-  const sel = allFranjes.filter(f => ids.includes(f.id));
-  if (!sel.length) return '';
-  const start = sel[0].sub.split('–')[0].trim();
-  const end   = sel[sel.length - 1].sub.split('–')[1]?.trim() || '';
-  return end ? `${start}–${end}` : start;
-}
 
 function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFutura, notes }) {
   const escolaKey = isOriol ? 'oriol' : 'rivo';

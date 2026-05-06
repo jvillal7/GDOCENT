@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../../lib/constants';
+import { parseFranges } from '../../../lib/utils';
 import Spinner from '../../../components/Spinner';
 
 function generarAutoText(absencies) {
@@ -9,8 +10,7 @@ function generarAutoText(absencies) {
   const todayAbs = absencies.filter(a => a.data === avui && a.estat !== 'arxivat');
   if (!todayAbs.length) return '';
   return todayAbs.map(a => {
-    let frangesIds = [];
-    try { frangesIds = JSON.parse(a.franges || '[]'); } catch {}
+    const frangesIds = parseFranges(a.franges);
     const isTotElDia = frangesIds.length >= SCHOOL_FRANJES_ORIOL.length;
     if (isTotElDia) return `• ${a.docent_nom}: tot el dia`;
     const labels = [...new Set(

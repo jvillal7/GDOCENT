@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SIEI_ALUMNES, FRANJES_ORIOL, GRUPS_ORIOL, BLOCS_ORIOL } from '../../lib/constants';
-import { normGrup } from '../../lib/utils';
+import { normGrup, parseFranges } from '../../lib/utils';
 import Spinner from '../../components/Spinner';
 
 const GRUPS_RIVO = ['I3A','I3B','I4A','I4B','I5A','I5B','1rA','1rB','2nA','2nB','3rA','3rB','4tA','4tB','5eA','5eB','6eA','6eB'];
@@ -64,8 +64,7 @@ export default function AvuiPage() {
         const grupNorm = normGrup(docent.grup_principal);
         const colGrup  = GRUPS.find(g => normGrup(g) === grupNorm);
         if (!colGrup) return;
-        let franges = [];
-        try { franges = JSON.parse(a.franges || '[]'); } catch {}
+        const franges = parseFranges(a.franges);
         franges.forEach(fid => {
           const key = `${colGrup}__${fid}`;
           if (a.estat === 'pendent') {
@@ -85,8 +84,7 @@ export default function AvuiPage() {
         (absencies || []).forEach(a => {
           const docent = docents.find(d => d.nom === a.docent_nom);
           if (!docent?.horari) return;
-          let franges = [];
-          try { franges = JSON.parse(a.franges || '[]'); } catch {}
+          const franges = parseFranges(a.franges);
           franges.forEach(fid => {
             const val = (docent.horari?.[todayDia]?.[fid] || '').toUpperCase();
             const matched = sieiStudents.find(s => val.includes(s));
@@ -106,8 +104,8 @@ export default function AvuiPage() {
     } catch (e) { console.error('loadAvuiData:', e); }
   }
 
-  const groupSpans = computeSpans(GRUPS, cells, BLOCS);
-  const sieiSpans  = computeSpans(SIEI_ALUMNES.rivo || [], sieiCells, BLOCS);
+  const groupSpans = useMemo(() => computeSpans(GRUPS, cells, BLOCS), [cells, isOriol]);
+  const sieiSpans  = useMemo(() => computeSpans(SIEI_ALUMNES.rivo || [], sieiCells, BLOCS), [sieiCells, isOriol]);
 
   return (
     <>

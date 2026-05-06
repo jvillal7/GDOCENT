@@ -1,5 +1,15 @@
 import { SUPA_URL, SUPA_KEY } from './constants';
 
+const _cache = new Map();
+const CACHE_TTL = 120_000;
+function cacheGet(key) {
+  const e = _cache.get(key);
+  if (!e || Date.now() - e.ts > CACHE_TTL) { _cache.delete(key); return null; }
+  return e.data;
+}
+function cacheSet(key, data) { _cache.set(key, { data, ts: Date.now() }); }
+function cacheDel(...keys) { keys.forEach(k => _cache.delete(k)); }
+
 export async function sendEmail(to, subject, html) {
   try {
     const res = await fetch(`${SUPA_URL}/functions/v1/send-email`, {
@@ -76,17 +86,28 @@ export function makeApi(escolaId) {
   const f = (path, opts) => supaFetch(path, opts, escolaId);
   const avui = () => new Date().toISOString().split('T')[0];
   return {
-    getDocents:          ()    => f('docents?select=*&actiu=eq.true&order=nom'),
-    saveDocent:          d     => d.id
-      ? f(`docents?id=eq.${d.id}`, { method: 'PATCH', body: JSON.stringify(d) })
-      : f('docents', { method: 'POST', body: JSON.stringify(d) }),
-    deleteDocent:        id    => f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actiu: false }) }),
+    getDocents: () => {
+      const k = `doc_${escolaId}`;
+      const cached = cacheGet(k);
+      if (cached) return Promise.resolve(cached);
+      return f('docents?select=*&actiu=eq.true&order=nom').then(d => { cacheSet(k, d); return d; });
+    },
+    saveDocent: d => {
+      cacheDel(`doc_${escolaId}`);
+      return d.id
+        ? f(`docents?id=eq.${d.id}`, { method: 'PATCH', body: JSON.stringify(d) })
+        : f('docents', { method: 'POST', body: JSON.stringify(d) });
+    },
+    deleteDocent: id => {
+      cacheDel(`doc_${escolaId}`);
+      return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actiu: false }) });
+    },
     getAbsenciesAvui:    ()    => f(`absencies?data=eq.${avui()}&order=creat_el.desc`),
     getAbsencies:        ()    => f('absencies?order=creat_el.desc&limit=50'),
     getAbsenciaById:     id    => f(`absencies?id=eq.${id}`),
-    saveAbsencia:        a     => f('absencies', { method: 'POST', body: JSON.stringify(a) }),
-    patchAbsencia:       (id,d) => f(`absencies?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
-    saveCobertura:       c     => f('cobertures', { method: 'POST', body: JSON.stringify(c) }),
+    saveAbsencia: a => { cacheDel(`abs_${escolaId}`); return f('absencies', { method: 'POST', body: JSON.stringify(a) }); },
+    patchAbsencia: (id, d) => { cacheDel(`abs_${escolaId}`); return f(`absencies?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(d) }); },
+    saveCobertura: c => { cacheDel(`cob_${escolaId}`); return f('cobertures', { method: 'POST', body: JSON.stringify(c) }); },
     getCobertures:       ()    => f('cobertures?order=data.desc&limit=100'),
     getCoberturesByAbsencia: id => f(`cobertures?absencia_id=eq.${id}`),
     getCoberturasAvui:   ()    => f(`cobertures?data=eq.${avui()}`),
@@ -106,6 +127,10 @@ export function makeApi(escolaId) {
     saveOriolReunions:   d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_reunions: d }), bypassSchoolId: true }),
     saveOriolCeepsir:    d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_ceepsir: d }),  bypassSchoolId: true }),
     saveOriolBaixes:     d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_baixes: d }),   bypassSchoolId: true }),
+    syncDirectiuPin: (nom, pin) => f(`directius?escola_id=eq.${escolaId}&nom=eq.${encodeURIComponent(nom)}`, { method: 'PATCH', body: JSON.stringify({ pin }), bypassSchoolId: true }),
+    getAbsenciesByDocent: nom => f(`absencies?docent_nom=eq.${encodeURIComponent(nom)}&estat=neq.arxivat&order=data.desc&limit=10`),
+    getCoberturesForAbsent: nom => f(`cobertures?docent_absent_nom=eq.${encodeURIComponent(nom)}&order=data.desc&limit=30`),
+    getAbsenciesHistorial: (offset = 0, limit = 50) => f(`absencies?order=data.desc&limit=${limit}&offset=${offset}`),
     getAbsenciesProvisionals: () => {
       const tom = new Date(); tom.setDate(tom.getDate() + 1);
       return f(`absencies?estat=eq.provisional&data=eq.${tom.toISOString().split('T')[0]}&order=creat_el.desc`);

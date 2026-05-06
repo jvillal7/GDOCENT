@@ -33,11 +33,10 @@ export default function AvisarPage() {
 
   async function loadMeusAvisos() {
     try {
-      const [abs, cobs] = await Promise.all([
-        api.getAbsencies(),
-        api.getCobertures(),
+      const [meves, cobs] = await Promise.all([
+        api.getAbsenciesByDocent(perfil.nom),
+        api.getCoberturesForAbsent(perfil.nom),
       ]);
-      const meves = (abs || []).filter(a => a.docent_nom === perfil.nom && a.estat !== 'arxivat');
       const cobsMap = {};
       (cobs || []).forEach(c => {
         if (c.absencia_id) {
@@ -45,7 +44,7 @@ export default function AvisarPage() {
           cobsMap[c.absencia_id].push(c.docent_cobrint_nom);
         }
       });
-      setMeusAvisos(meves.slice(0, 6).map(a => ({ ...a, cobrants: cobsMap[a.id] || [] })));
+      setMeusAvisos((meves || []).slice(0, 6).map(a => ({ ...a, cobrants: cobsMap[a.id] || [] })));
     } catch { setMeusAvisos([]); }
   }
 

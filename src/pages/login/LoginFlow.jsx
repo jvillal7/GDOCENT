@@ -35,8 +35,7 @@ function autoTextAbsents(absencies) {
   const llista = absencies.filter(a => a.data === avui && a.estat !== 'arxivat');
   if (!llista.length) return '';
   return llista.map(a => {
-    let ids = [];
-    try { ids = JSON.parse(a.franges || '[]'); } catch {}
+    const ids = (() => { try { return JSON.parse(a.franges || '[]'); } catch { return Array.isArray(a.franges) ? a.franges : []; } })();
     const tot = ids.length >= SCHOOL_FRANJES_ORIOL.length;
     if (tot) return `• ${a.docent_nom}: tot el dia`;
     const labels = [...new Set(ids.map(fid => FRANJES_ORIOL.find(f => f.id === fid)?.label).filter(Boolean))];
@@ -166,8 +165,16 @@ export default function LoginFlow() {
         const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=eq.vetllador`);
         setUsers(data || []);
       } else {
+        // Intentar carregar des de la taula `directius` a Supabase (si existeix).
+        // SQL per crear-la: CREATE TABLE directius (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        // escola_id uuid REFERENCES escoles(id), nom text, rol text, grup_principal text, pin text, actiu boolean DEFAULT true);
         const key = school.nom.toLowerCase().includes('rivo') ? 'rivo' : 'oriol';
-        setUsers((MANAGEMENT_USERS[key] || []).map(u => ({ ...u, escola_id: school.id })));
+        let mgmt = null;
+        try {
+          const fromDb = await supaFetch(`directius?actiu=eq.true&escola_id=eq.${school.id}&order=posicio`, { bypassSchoolId: true });
+          if (fromDb?.length) mgmt = fromDb.map(u => ({ ...u, escola_id: school.id }));
+        } catch { /* taula no existeix encara, usar hardcoded */ }
+        setUsers(mgmt || (MANAGEMENT_USERS[key] || []).map(u => ({ ...u, escola_id: school.id })));
       }
     } catch {
       setError('Error carregant usuaris.');
@@ -466,9 +473,6 @@ export default function LoginFlow() {
                 onKeyDown={e => e.key === 'Enter' && doLogin()}
               />
               <button className="btn-accedir" onClick={doLogin}>Accedir →</button>
-              <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--ink-4)', marginTop: 10 }}>
-                Codi de prova: 1234
-              </p>
             </div>
           </div>
         )}

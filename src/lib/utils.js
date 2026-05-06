@@ -65,6 +65,24 @@ export function frangesText(ids, isOriol) {
   return `${labels} · ${start}–${end}`;
 }
 
+export function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function frangesHorari(ids, isOriol) {
+  const allFranjes = isOriol ? FRANJES_ORIOL : FRANJES;
+  const sel = allFranjes.filter(f => ids.includes(f.id));
+  if (!sel.length) return '';
+  const start = sel[0].sub.split('–')[0].trim();
+  const end   = sel[sel.length - 1].sub.split('–')[1]?.trim() || '';
+  return end ? `${start}–${end}` : start;
+}
+
 export function emailAbsencia({ nom, dates, franges, motiu, isOriol, escola }) {
   const escolaKey = escola?.nom?.toLowerCase().includes('oriol') ? 'oriol' : 'rivo';
   const jefaUser = MANAGEMENT_USERS[escolaKey]?.find(u => u.rol === 'jefa');

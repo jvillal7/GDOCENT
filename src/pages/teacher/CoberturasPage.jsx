@@ -8,10 +8,14 @@ export default function CoberturasPage() {
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const FRANJES_ACT = isOriol ? FRANJES_ORIOL : FRANJES;
   const [data,    setData]    = useState(null);
-  const [notesFn, setNotesFn] = useState(null); // { absenciaId, absent, grup }
+  const [notesFn, setNotesFn] = useState(null);
   const [notes,   setNotes]   = useState(null);
   const [fitxers, setFitxers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [vists, setVists] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('gd_cobs_vistes') || '[]')); }
+    catch { return new Set(); }
+  });
 
   useEffect(() => { if (api && perfil) load(); }, [api, perfil]);
 
@@ -30,6 +34,15 @@ export default function CoberturasPage() {
     } catch (e) {
       setData({ cobertures: [], me: null, todayCat: '', today: new Date() });
     }
+  }
+
+  function marcarVist(cobId) {
+    setVists(prev => {
+      const next = new Set(prev);
+      next.add(String(cobId));
+      localStorage.setItem('gd_cobs_vistes', JSON.stringify([...next]));
+      return next;
+    });
   }
 
   async function openNotes(absenciaId, absent, grup) {
@@ -161,6 +174,16 @@ export default function CoberturasPage() {
                 {isModified && <span className="as-tag">Modificació</span>}
                 <div className="as-label">{label}</div>
                 <div className="as-sub">{sub}</div>
+                {isModified && (() => {
+                  const cobKey = cob.id ? String(cob.id) : `${cob.absencia_id}_${cob.franja}`;
+                  const vist = vists.has(cobKey);
+                  return vist
+                    ? <span style={{ fontSize: 10, color: 'var(--green)', fontWeight: 700, marginTop: 4, display: 'block' }}>✓ Vista</span>
+                    : <button
+                        onClick={e => { e.stopPropagation(); marcarVist(cobKey); }}
+                        style={{ marginTop: 6, fontSize: 10.5, padding: '3px 10px', borderRadius: 20, border: '1.5px solid var(--green)', background: 'var(--green-bg)', color: 'var(--green)', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'block' }}
+                      >He vist la cobertura ✓</button>;
+                })()}
               </div>
             </div>
           );

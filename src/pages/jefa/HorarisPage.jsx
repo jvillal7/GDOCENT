@@ -63,6 +63,8 @@ export default function HorarisPage() {
   const [confirmData, setConfirm]   = useState(null);
   const [uploads, setUploads]   = useState([]);
   const [expanded, setExpanded] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const confirmResolveRef = useRef(null);
   const [showBaixes,  setShowBaixes]  = useState(false);
   const [baixes,      setBaixes]      = useState([]);
   const [baixesLoaded, setBaixesLoaded] = useState(false);
@@ -140,9 +142,8 @@ export default function HorarisPage() {
         const result = await extractHorariFromPDF(base64, franjes, file.type);
         setUploads(prev => prev.map(u => u.id === id ? { ...u, status: 'done', msg: 'Llest' } : u));
         setConfirm(result);
-        // Wait for user to confirm before processing next file
         await new Promise(resolve => {
-          window._horariResolve = resolve;
+          confirmResolveRef.current = resolve;
         });
       } catch (err) {
         setUploads(prev => prev.map(u => u.id === id ? { ...u, status: 'error', msg: '⚠ Error: ' + err.message } : u));
@@ -184,22 +185,31 @@ export default function HorarisPage() {
             : d
         ));
       }
+      if (data.rol === 'directiu' && data.pin) {
+        api.syncDirectiuPin(nom, data.pin).catch(() => {});
+      }
       showToast(`Horari de ${nom} ${existing ? 'actualitzat' : 'afegit'}`);
       setConfirm(null);
-      if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; }
+      if (confirmResolveRef.current) { confirmResolveRef.current(); confirmResolveRef.current = null; }
     } catch (e) {
       showToast('Error guardant: ' + e.message);
     }
   }
 
-  async function eliminar(id, nom) {
-    if (!confirm(`Eliminar ${nom}?`)) return;
+  function confirmarEliminar(id, nom) {
+    setDeleteTarget({ id, nom });
+  }
+
+  async function eliminar() {
+    if (!deleteTarget) return;
+    const { id, nom } = deleteTarget;
+    setDeleteTarget(null);
     setDocents(prev => prev.filter(d => d.id !== id));
     try { await api.deleteDocent(id); showToast(`Docent ${nom} eliminat`); }
     catch (e) { showToast('Error eliminant: ' + e.message); reload(); }
   }
 
-  if (confirmData) return <ConfirmHorari data={confirmData} franjes={franjes} onSave={saveHorari} onCancel={() => { setConfirm(null); if (window._horariResolve) { window._horariResolve(); window._horariResolve = null; } }} />;
+  if (confirmData) return <ConfirmHorari data={confirmData} franjes={franjes} onSave={saveHorari} onCancel={() => { setConfirm(null); if (confirmResolveRef.current) { confirmResolveRef.current(); confirmResolveRef.current = null; } }} />;
 
   // Group docents by nivell
   const groups = {};
@@ -215,6 +225,20 @@ export default function HorarisPage() {
 
   return (
     <>
+      {deleteTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 16, padding: 24, maxWidth: 340, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: 'var(--ink)' }}>Eliminar docent</div>
+            <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginBottom: 20, lineHeight: 1.5 }}>
+              Segur que vols eliminar <strong>{deleteTarget.nom}</strong>? Aquesta acció no es pot desfer.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-ghost btn-full" onClick={() => setDeleteTarget(null)}>Cancel·lar</button>
+              <button className="btn btn-full" style={{ background: 'var(--red)', color: '#fff', border: 'none', fontWeight: 600 }} onClick={eliminar}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="page-hdr">
         <div>
           <h1>Personal del centre</h1>
@@ -343,7 +367,7 @@ export default function HorarisPage() {
                             </button>
                           )}
                           <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12 }} onClick={() => setConfirm(d)}>✏️ Editar</button>
-                          <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => eliminar(d.id, d.nom)}>✕</button>
+                          <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => confirmarEliminar(d.id, d.nom)}>✕</button>
                         </div>
                       </div>
                       {isOpen && teHorari && <HorariInline horari={d.horari} tpFranges={d.tp_franges} franjes={franjes} />}

@@ -2,6 +2,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import LoginFlow from './pages/login/LoginFlow';
 import AppShell from './components/AppShell';
 import Toast from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function Inner() {
   const { role } = useApp();
@@ -15,8 +16,10 @@ function Inner() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <Inner />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <Inner />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
