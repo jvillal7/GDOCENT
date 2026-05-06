@@ -38,7 +38,7 @@ const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
 function isCoordVal(v) { return COORD_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
 
 const TP_KW = ['tp', 't.p.', 'treball personal', 'temps personal', 'treball pers.', 't.personal'];
-const SUPORT_KW = ['suport', 'mee', 'mesi', 'siei', 'aci', 'acis'];
+const SUPORT_KW = ['suport', 'mee', 'mesi', 'siei', 'aci', 'acis', 'sup', 'pati', 'tallers'];
 function isSuportVal(v) { return SUPORT_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
 
 function estatHorari(val) {
@@ -57,6 +57,17 @@ function normG(s) {
     .replace(/[èéê]/g,'e').replace(/[àáâ]/g,'a').replace(/[òóô]/g,'o')
     .replace(/[úùû]/g,'u').replace(/[íìï]/g,'i')
     .replace(/\s+/g,'').replace(/[·.\-/]/g,'');
+}
+
+// Detecta si un valor d'horari fa referència al grup absent.
+// Gestiona "5È A/B" → normG → "5eab" que conté "5b" via patró /5[a-z]+b/.
+function matchesAbsentGroup(raw, absentGrupCore) {
+  if (!absentGrupCore) return false;
+  const n = normG(raw);
+  if (n.includes(absentGrupCore)) return true;
+  // "5È A/B" → "5eab": buscar /5[a-z]+b/ per detectar notació combinada A/B
+  const m = absentGrupCore.match(/^(\d+)([a-z])$/);
+  return m ? new RegExp(m[1] + '[a-z]+' + m[2]).test(n) : false;
 }
 
 export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
@@ -84,17 +95,49 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
   // Identificar grups afectats i tutors per cada bloc
   const absentDocent = docents.find(d => d.nom === absentNom);
   const absentHorariDia = absentDocent?.horari?.[dia] || {};
+  // Codi curt del grup absent (ex: "5è B" → "5b") per detectar qui ja treballa amb ell
+  const absentGrupCore = (() => {
+    const m = (absentDocent?.grup_principal || '').match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
+    return m ? `${m[1]}${m[2].toLowerCase()}` : '';
+  })();
 
   const infoGrupsAfectats = dia ? blocs.map(b => {
     const acts = [...new Set(b.ids.map(fid => absentHorariDia[fid]).filter(v => v))];
     if (!acts.length) return null;
+
+    // DESDOBLAMENT: si la tutora absent tenia un desdoblament, l'especialista assumeix tot el grup
+    const desdoblVal = acts.find(v => /desdobl/i.test(v));
+    if (desdoblVal) {
+      const specialist = docents.find(d =>
+        d.nom !== absentNom && d.horari &&
+        b.ids.some(fid => matchesAbsentGroup(d.horari?.[dia]?.[fid] || '', absentGrupCore))
+      );
+      const who = specialist ? specialist.nom : "l'especialista del desdoblament";
+      return `• ${b.hora} (${desdoblVal}): ⚡ DESDOBLAMENT — ${who} ja té mig grup. Quan ${absentNom} falta, ${who} assumeix TOT el grup → inclou'l a la proposta per aquesta franja, NO busquis cap altre docent`;
+    }
+
     const tutorsAfectats = docents.filter(d => {
       if (!d.grup_principal || !d.horari) return false;
+      if (d.nom === absentNom) return false;
       const gpN = normG(d.grup_principal);
       if (gpN.length < 2) return false;
       return acts.some(act => normG(act).includes(gpN));
     });
-    if (!tutorsAfectats.length) return `• ${b.hora} (${acts.join(' / ')}): cap tutor identificat — buscar al mateix cicle`;
+    // Detectar docents que ja treballen amb el grup absent en aquest bloc (inclou "5È A/B")
+    const jaAmbGrup = absentGrupCore ? docents.filter(d => {
+      if (!d.horari || d.nom === absentNom) return false;
+      if (tutorsAfectats.some(t => t.nom === d.nom)) return false;
+      return b.ids.some(fid => matchesAbsentGroup(d.horari?.[dia]?.[fid] || '', absentGrupCore));
+    }) : [];
+
+    const linesJaAmb = jaAmbGrup.map(t => {
+      const vals = b.ids.map(fid => t.horari?.[dia]?.[fid]).filter(Boolean).join(', ');
+      return `  → ${t.nom} (${t.grup_principal}): ✅ JA ÉS AMB EL GRUP (${vals}) — pot quedar-se de referent`;
+    }).join('\n');
+
+    if (!tutorsAfectats.length && !jaAmbGrup.length)
+      return `• ${b.hora} (${acts.join(' / ')}): cap tutor identificat — buscar al mateix cicle`;
+
     const lines = tutorsAfectats.map(t => {
       const estats = b.ids.map(fid => estatHorari(t.horari?.[dia]?.[fid]));
       const esFora = estats.some(e => e.estat === 'fora');
@@ -104,21 +147,30 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
       if (potCobrir) return `  → TUTOR/A ${t.nom} (${t.grup_principal}): ✅ PRIMERA OPCIÓ — interrompre (${detail}) i quedar-se amb el seu grup`;
       return `  → TUTOR/A ${t.nom} (${t.grup_principal}): ❌ ja ensenya un altre grup (${detail}) — buscar alternativa`;
     }).join('\n');
-    return `• ${b.hora} (${acts.join(' / ')}):\n${lines}`;
+
+    const allLines = [lines, linesJaAmb].filter(Boolean).join('\n');
+    return `• ${b.hora} (${acts.join(' / ')}):\n${allLines}`;
   }).filter(Boolean).join('\n') : '';
 
   // Per cada docent, mostrar disponibilitat a TOTS els blocs d'hora
-  const disponibilitatDocents = docents.filter(d => d.horari).map(d => {
-    const totsEstats = blocs.flatMap(b =>
-      b.ids.map(fid => (dia ? estatHorari(d.horari?.[dia]?.[fid]) : { estat: 'ocupat', text: '?' }))
-    );
+  const disponibilitatDocents = docents.filter(d => d.horari && d.nom !== absentNom).map(d => {
+    // Si el docent ja treballa amb el grup absent en una franja → tractar-la com "suport"
+    const estatCtx = (fid) => {
+      const raw = dia ? d.horari?.[dia]?.[fid] : null;
+      if (!raw) return dia ? estatHorari(raw) : { estat: 'ocupat', text: '?' };
+      if (matchesAbsentGroup(raw, absentGrupCore))
+        return { estat: 'suport', text: `Ja és amb el grup de ${absentNom}: ${raw}` };
+      return estatHorari(raw);
+    };
+
+    const totsEstats = blocs.flatMap(b => b.ids.map(fid => estatCtx(fid)));
 
     if (totsEstats.some(e => e.estat === 'fora')) {
       return `  · ${d.nom} (${d.grup_principal || '?'}): ❌ FORA DEL CENTRE — no proposar`;
     }
 
     const blocsInfo = blocs.map(b => {
-      const { text } = dia ? estatHorari(d.horari?.[dia]?.[b.ids[0]]) : { text: '?' };
+      const { text } = estatCtx(b.ids[0]);
       return `${b.hora}=${text}`;
     }).join(', ');
 
@@ -166,7 +218,11 @@ JERARQUIA DE PRIORITATS per a cada bloc (ordre estricte):
 REGLES ADDICIONALS:
 - ❌ "FORA DEL CENTRE" = MAI proposar. Ignora'l completament.
 - ❌ "OCUPAT" = ensenya un altre grup. No proposar (excepte si és el tutor del grup afectat que ja és amb el seu grup).
-- Mínim de docents possible: un sol docent per a TOTA l'absència si pot. Si no, un per bloc d'hora (mai per franja de 30 min).
+- ❌ NO proposis mai a ${absentNom} — és el/la docent absent i no pot cobrir-se a si mateix/a.
+- ANTI-SOLAPAMENT CRÍTIC: Cada franja_id ha d'aparèixer en MÀXIM UNA entrada de la proposta. La suma de tots els franges_ids de totes les entrades = exactament ${JSON.stringify(frangesIds)} sense repeticions ni omissions.
+- Mínim de docents possible: un sol docent per a TOTA l'absència si pot. Si les normes del centre limiten hores per persona, divideix en blocs complets (mai per franja de 30 min aïllada).
+- DESDOBLAMENT: Si GRUPS AFECTATS indica "⚡ DESDOBLAMENT", el grup estava dividit a la meitat i l'especialista ja tenia mig grup. Quan la tutora falta, l'especialista mencionat assumeix TOT el grup. Afegeix-lo a la proposta per aquella franja. NO busquis cap altre docent.
+- SUPORT AMB GRUP: Un docent marcat "Ja és amb el grup" (fa "Suport 5è A/B" o similar) JA és al grup i POT cobrir l'absència per aquella franja — és una opció molt bona, prioritza'l.
 - tp_afectat:true si el docent proposat tenia TP en aquelles franges.
 - Aplica les NORMES DEL CENTRE per a restriccions addicionals.
 

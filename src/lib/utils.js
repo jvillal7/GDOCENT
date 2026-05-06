@@ -17,6 +17,12 @@ export function normGrup(s) {
 
 export const todayISO = () => new Date().toISOString().split('T')[0];
 
+// Supabase retorna `franges` com a array natiu (jsonb) o string (text antic).
+export function parseFranges(v) {
+  if (Array.isArray(v)) return v;
+  try { return JSON.parse(v || '[]'); } catch { return []; }
+}
+
 export function formatDate(dateStr, opts = {}) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('ca-ES', opts);

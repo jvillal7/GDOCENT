@@ -3,10 +3,11 @@ import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL } from '../../lib/constants';
 import { proposarCobertura, analitzarInfoExtra } from '../../lib/claude';
 import { sendEmail } from '../../lib/api';
+import { parseFranges } from '../../lib/utils';
 import Spinner from '../../components/Spinner';
 
 function frangesChips(frangesJson, isOriol) {
-  const ids = (() => { try { return JSON.parse(frangesJson || '[]'); } catch { return []; } })();
+  const ids = parseFranges(frangesJson);
   const franjesAct = isOriol ? FRANJES_ORIOL : FRANJES;
   const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
   const selected = franjesAct.filter(f => ids.includes(f.id));
@@ -371,7 +372,12 @@ export default function AvisosPage() {
     setEditedProposta(null);
     setIaError('');
     try {
-      const frangesIds = (() => { try { return JSON.parse(avis.franges || '[]'); } catch { return []; } })();
+      const frangesIds = parseFranges(avis.franges);
+      if (frangesIds.length === 0) {
+        setIaState('error');
+        setIaError("Aquesta absència no té franges horàries. Edita-la i torna-la a enviar.");
+        return;
+      }
       // Excloure mestres que ja estan cobrint alguna franja d'avui
       const cobsAvui = await api.getCoberturasAvui().catch(() => []);
       const frangesSet = new Set(frangesIds);

@@ -1,8 +1,10 @@
+import { parseFranges } from '../lib/utils';
+
 export default function MeusAvisosCard({ avisos, franjesAct, schoolFranjesAct }) {
   if (!avisos || avisos.length === 0) return null;
 
   function frangesResum(frangesJson) {
-    const ids = (() => { try { return JSON.parse(frangesJson || '[]'); } catch { return []; } })();
+    const ids = parseFranges(frangesJson);
     if (ids.length >= schoolFranjesAct.length) return <span className="slot-chip all-day">Tot el dia</span>;
     const selected = franjesAct.filter(f => ids.includes(f.id));
     const seen = new Set();
