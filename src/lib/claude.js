@@ -59,15 +59,34 @@ function normG(s) {
     .replace(/\s+/g,'').replace(/[·.\-/]/g,'');
 }
 
+function getCicle(gp) {
+  const n = normG(gp);
+  if (/^i[345]/.test(n) || n.includes('infantil')) return 'Infantil';
+  if (/^[12]/.test(n)) return 'Cicle Inicial';
+  if (/^[34]/.test(n)) return 'Cicle Mitjà';
+  if (/^[56]/.test(n)) return 'Cicle Superior';
+  return null;
+}
+
+// Detecta si un valor d'horari és un "mig grup" (desdoblament de l'especialista)
+// i extreu el grup principal per comprovar si és del mateix cicle
+function migGrupCicle(raw) {
+  if (!/mig\s*grup/i.test(raw)) return null;
+  // "1rA · ORAL Anglès / Mig grup" → agafar el primer token com a grup
+  const m = raw.match(/^([^\s·\/·]+)/);
+  return m ? getCicle(m[1]) : null;
+}
+
 // Detecta si un valor d'horari fa referència al grup absent.
 // Gestiona "5È A/B" → normG → "5eab" que conté "5b" via patró /5[a-z]+b/.
 function matchesAbsentGroup(raw, absentGrupCore) {
   if (!absentGrupCore) return false;
   const n = normG(raw);
   if (n.includes(absentGrupCore)) return true;
-  // "5È A/B" → "5eab": buscar /5[a-z]+b/ per detectar notació combinada A/B
+  // "5È A/B" → "5eab": buscar /5[a-z]{1,3}b/ per detectar notació combinada A/B
+  // Limitem a màxim 3 caràcters per evitar falsos positius (ex: "b" de "Biblioteca")
   const m = absentGrupCore.match(/^(\d+)([a-z])$/);
-  return m ? new RegExp(m[1] + '[a-z]+' + m[2]).test(n) : false;
+  return m ? new RegExp(m[1] + '[a-z]{1,3}' + m[2]).test(n) : false;
 }
 
 export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
@@ -100,6 +119,7 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     const m = (absentDocent?.grup_principal || '').match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
     return m ? `${m[1]}${m[2].toLowerCase()}` : '';
   })();
+  const absentCicle = getCicle(absentDocent?.grup_principal);
 
   const infoGrupsAfectats = dia ? blocs.map(b => {
     const acts = [...new Set(b.ids.map(fid => absentHorariDia[fid]).filter(v => v))];
@@ -152,14 +172,25 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     return `• ${b.hora} (${acts.join(' / ')}):\n${allLines}`;
   }).filter(Boolean).join('\n') : '';
 
-  // Per cada docent, mostrar disponibilitat a TOTS els blocs d'hora
-  const disponibilitatDocents = docents.filter(d => d.horari && d.nom !== absentNom).map(d => {
+  // Per cada docent, mostrar disponibilitat a TOTS els blocs d'hora (mateix cicle primer)
+  const disponibilitatDocents = docents
+    .filter(d => d.horari && d.nom !== absentNom)
+    .sort((a, b) => {
+      const sa = absentCicle && getCicle(a.grup_principal) === absentCicle;
+      const sb = absentCicle && getCicle(b.grup_principal) === absentCicle;
+      return sa === sb ? 0 : sa ? -1 : 1;
+    })
+    .map(d => {
     // Si el docent ja treballa amb el grup absent en una franja → tractar-la com "suport"
     const estatCtx = (fid) => {
       const raw = dia ? d.horari?.[dia]?.[fid] : null;
       if (!raw) return dia ? estatHorari(raw) : { estat: 'ocupat', text: '?' };
       if (matchesAbsentGroup(raw, absentGrupCore))
         return { estat: 'suport', text: `Ja és amb el grup de ${absentNom}: ${raw}` };
+      // Mig grup del mateix cicle → pot assumir el grup complet
+      const mgCicle = migGrupCicle(raw);
+      if (mgCicle && absentCicle && mgCicle === absentCicle)
+        return { estat: 'migGrup', text: `Mig grup (${raw}) — pot assumir grup complet` };
       return estatHorari(raw);
     };
 
@@ -175,17 +206,23 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     }).join(', ');
 
     const estats = totsEstats.map(e => e.estat);
-    const totLliure = estats.every(e => e === 'lliure');
-    const potCobrir = estats.every(e => ['lliure', 'tp', 'carec', 'suport'].includes(e));
-    const ambTP     = estats.some(e => e === 'tp');
-    const ambSuport = estats.some(e => e === 'suport');
+    const totLliure  = estats.every(e => e === 'lliure');
+    const potCobrir  = estats.every(e => ['lliure', 'tp', 'carec', 'suport', 'migGrup'].includes(e));
+    const ambTP      = estats.some(e => e === 'tp');
+    const ambSuport  = estats.some(e => e === 'suport');
+    const ambMigGrup = estats.some(e => e === 'migGrup');
 
-    const base = `  · ${d.nom} (${d.grup_principal || '?'}): cob.mes=${d.cobertures_mes || 0} |`;
-    if (totLliure)              return `${base} ✅ DISPONIBLE TOT EL BLOC (al centre, sense classe)`;
-    if (potCobrir && ambSuport) return `${base} ✅ POT COBRIR (Suport, flexible) — ${blocsInfo}`;
-    if (potCobrir && ambTP)     return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
-    if (potCobrir)              return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
-                                return `${base} ❌ OCUPAT — ${blocsInfo}`;
+    const cicle = getCicle(d.grup_principal);
+    const cicleTag = cicle
+      ? (cicle === absentCicle ? ' ★MATEIX CICLE' : ` [${cicle}]`)
+      : '';
+    const base = `  · ${d.nom} (${d.grup_principal || '?'})${cicleTag}: cob.mes=${d.cobertures_mes || 0} |`;
+    if (totLliure)               return `${base} ✅ DISPONIBLE TOT EL BLOC (al centre, sense classe)`;
+    if (potCobrir && ambMigGrup) return `${base} ✅ POT COBRIR (Mig grup → assumeix grup complet) — ${blocsInfo}`;
+    if (potCobrir && ambSuport)  return `${base} ✅ POT COBRIR (Suport, flexible) — ${blocsInfo}`;
+    if (potCobrir && ambTP)      return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
+    if (potCobrir)               return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
+                                 return `${base} ❌ OCUPAT — ${blocsInfo}`;
   }).join('\n');
 
   const contextExtra = infoExtra?.context
@@ -209,10 +246,10 @@ DURADA: ${durada} — Blocs horaris: ${blocsDesc}
 NORMES DEL CENTRE:
 ${regles}${contextExtra}${contextBaixes}${contextGrups}
 
-JERARQUIA DE PRIORITATS per a cada bloc (ordre estricte):
-1. TUTOR/A DEL GRUP AFECTAT marcats com "PRIMERA OPCIÓ": si fan TP, coordinació o suport → INTERROMPRE i quedar-se amb el seu grup. Un tutor/a sempre prefereix quedar-se amb el seu propi grup.
-2. Docent del MATEIX cicle (Infantil I3-I5 · Cicle Inicial 1r-2n · Cicle Mitjà 3r-4t · Cicle Superior 5è-6è) amb disponibilitat (✅).
-3. Docent d'un cicle diferent — ÚLTIM RECURS absolut. Només si cap opció anterior existeix.
+JERARQUIA DE PRIORITATS per a cada bloc (ordre ESTRICTAMENT obligatori):
+1. TUTOR/A DEL GRUP AFECTAT marcats com "PRIMERA OPCIÓ": si fan TP, coordinació o suport → INTERROMPRE i quedar-se amb el seu grup.
+2. Docent marcat ★MATEIX CICLE amb disponibilitat (✅) — OBLIGATORI triar-los ABANS que qualsevol docent d'un altre cicle, FINS I TOT si aquell altre fa menys cobertures o no usa TP.
+3. Docent d'un cicle diferent — ÚLTIM RECURS absolut. PROHIBIT si existeix qualsevol opció ★MATEIX CICLE disponible (✅).
 4. Si ningú disponible per un bloc → indicar "GRUP DESCOBERT" al resum, no inventar ningú.
 
 REGLES ADDICIONALS:
@@ -223,6 +260,7 @@ REGLES ADDICIONALS:
 - Mínim de docents possible: un sol docent per a TOTA l'absència si pot. Si les normes del centre limiten hores per persona, divideix en blocs complets (mai per franja de 30 min aïllada).
 - DESDOBLAMENT: Si GRUPS AFECTATS indica "⚡ DESDOBLAMENT", el grup estava dividit a la meitat i l'especialista ja tenia mig grup. Quan la tutora falta, l'especialista mencionat assumeix TOT el grup. Afegeix-lo a la proposta per aquella franja. NO busquis cap altre docent.
 - SUPORT AMB GRUP: Un docent marcat "Ja és amb el grup" (fa "Suport 5è A/B" o similar) JA és al grup i POT cobrir l'absència per aquella franja — és una opció molt bona, prioritza'l.
+- MIG GRUP: Un docent marcat "✅ POT COBRIR (Mig grup → assumeix grup complet)" ja treballa amb la meitat del grup del MATEIX CICLE. Quan el docent absent falta, assumeix tot el grup en lloc de fer el mig grup. PRIORITZAR per sobre de docents que fan TP (que genera deute).
 - tp_afectat:true si el docent proposat tenia TP en aquelles franges.
 - Aplica les NORMES DEL CENTRE per a restriccions addicionals.
 

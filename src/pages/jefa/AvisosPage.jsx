@@ -380,11 +380,14 @@ export default function AvisosPage() {
       );
       const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei', 'suport', 'directiu']);
       const docentsFiltrats = docents.filter(d =>
-        !jaAssignats.has(d.nom) &&
-        !blocatsExtra.has(d.nom.toLowerCase()) &&
-        !ROLS_EXCLOSOS.has(d.rol) &&
-        !['SIEI', 'SIEI+'].includes(d.grup_principal) &&
-        d.horari
+        d.nom === avis.docent_nom || // sempre incloure l'absent per poder llegir el seu grup/horari
+        (
+          !jaAssignats.has(d.nom) &&
+          !blocatsExtra.has(d.nom.toLowerCase()) &&
+          !ROLS_EXCLOSOS.has(d.rol) &&
+          !['SIEI', 'SIEI+'].includes(d.grup_principal) &&
+          d.horari
+        )
       );
       // Passar totes les entrades d'info extra a la IA (contexte combinat)
       const infoExtraCombinada = infoExtra.length
