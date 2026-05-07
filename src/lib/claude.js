@@ -157,8 +157,17 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     }) : [];
 
     const linesJaAmb = jaAmbGrup.map(t => {
-      const vals = b.ids.map(fid => t.horari?.[dia]?.[fid]).filter(Boolean).join(', ');
-      return `  → ${t.nom} (${t.grup_principal}): ✅ JA ÉS AMB EL GRUP (${vals}) — pot quedar-se de referent`;
+      const isMesi = /mesi|mee/i.test(t.grup_principal || '');
+      // Determinar exactament quines franges dins del bloc té amb el grup
+      const franjesAmb = b.ids.filter(fid => matchesAbsentGroup(t.horari?.[dia]?.[fid] || '', absentGrupCore));
+      const frangesLabel = franjesAmb.map(fid => FRANJES_ACT.find(x => x.id === fid)?.sub || fid).join('+');
+      const vals = b.ids.map(fid => {
+        const v = t.horari?.[dia]?.[fid]; if (!v) return null;
+        const f = FRANJES_ACT.find(x => x.id === fid);
+        return `${f?.sub || fid}: ${v}`;
+      }).filter(Boolean).join(', ');
+      if (isMesi) return `  → ${t.nom} (${t.grup_principal}): ⚠️ MESI al grup (${vals}) — ÚLTIMA OPCIÓ: usar SOLS si no hi ha cap suport regular del cicle disponible`;
+      return `  → ${t.nom} (${t.grup_principal}): ✅ JA ÉS AMB EL GRUP a ${frangesLabel} (${vals}) — proposar ÚNICAMENT per a ${frangesLabel}; per a les franges restants del bloc, buscar altre docent`;
     }).join('\n');
 
     if (!tutorsAfectats.length && !jaAmbGrup.length)
@@ -187,12 +196,16 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
       return sa === sb ? 0 : sa ? -1 : 1;
     })
     .map(d => {
+    const isMesiDocent = /mesi|mee/i.test(d.grup_principal || '');
     // Si el docent ja treballa amb el grup absent en una franja → tractar-la com "suport"
+    // MESI: rep estat 'mesiAmb' (última opció) en lloc de 'suport'
     const estatCtx = (fid) => {
       const raw = dia ? d.horari?.[dia]?.[fid] : null;
       if (!raw) return dia ? estatHorari(raw) : { estat: 'ocupat', text: '?' };
-      if (matchesAbsentGroup(raw, absentGrupCore))
+      if (matchesAbsentGroup(raw, absentGrupCore)) {
+        if (isMesiDocent) return { estat: 'mesiAmb', text: `MESI ja és al grup (${raw}) — última opció` };
         return { estat: 'suport', text: `Ja és amb el grup de ${absentNom}: ${raw}` };
+      }
       // Mig grup del mateix cicle → pot assumir el grup complet
       const mgCicle = migGrupCicle(raw);
       if (mgCicle && absentCicle && mgCicle === absentCicle)
@@ -206,32 +219,43 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
       return `  · ${d.nom} (${d.grup_principal || '?'}): ❌ FORA DEL CENTRE — no proposar`;
     }
 
+    // Mostrar per-franja dins de cada bloc (clau quan f1a i f1b del mateix bloc tenen disponibilitats diferents)
     const blocsInfo = blocs.map(b => {
-      const { text } = estatCtx(b.ids[0]);
-      return `${b.hora}=${text}`;
+      if (b.ids.length === 1) {
+        const { text } = estatCtx(b.ids[0]);
+        return `${b.hora}=${text}`;
+      }
+      const detall = b.ids.map(fid => {
+        const { text } = estatCtx(fid);
+        const f = FRANJES_ACT.find(x => x.id === fid);
+        return `${f?.sub || fid}: ${text}`;
+      }).join(' | ');
+      return `${b.hora}(${detall})`;
     }).join(', ');
 
     const estats = totsEstats.map(e => e.estat);
-    const COBRIBLE = new Set(['lliure', 'tp', 'carec', 'suport', 'migGrup']);
+    const COBRIBLE = new Set(['lliure', 'tp', 'carec', 'suport', 'migGrup', 'mesiAmb']);
     const totLliure    = estats.every(e => e === 'lliure');
     const potCobrir    = estats.every(e => COBRIBLE.has(e));
     const parcial      = !potCobrir && estats.some(e => COBRIBLE.has(e));
     const ambTP        = estats.some(e => e === 'tp');
     const ambSuport    = estats.some(e => e === 'suport');
     const ambMigGrup   = estats.some(e => e === 'migGrup');
+    const ambMesiAmb   = estats.some(e => e === 'mesiAmb');
 
     const cicle = getCicle(d.grup_principal);
     const cicleTag = cicle
       ? (cicle === absentCicle ? ' ★MATEIX CICLE' : ` [${cicle}]`)
       : '';
     const base = `  · ${d.nom} (${d.grup_principal || '?'})${cicleTag}: cob.mes=${d.cobertures_mes || 0} |`;
-    if (totLliure)               return `${base} ✅ DISPONIBLE TOT EL BLOC (al centre, sense classe)`;
-    if (potCobrir && ambMigGrup) return `${base} ✅ POT COBRIR (Mig grup → assumeix grup complet) — ${blocsInfo}`;
-    if (potCobrir && ambSuport)  return `${base} ✅ POT COBRIR (Suport, flexible) — ${blocsInfo}`;
-    if (potCobrir && ambTP)      return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
-    if (potCobrir)               return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
-    if (parcial)                 return `${base} ⚡ PARCIALMENT DISPONIBLE — pot cobrir els blocs marcats ✅ — ${blocsInfo}`;
-                                 return `${base} ❌ OCUPAT — ${blocsInfo}`;
+    if (totLliure)                             return `${base} ✅ DISPONIBLE TOT EL BLOC (al centre, sense classe)`;
+    if (potCobrir && ambMigGrup)               return `${base} ✅ POT COBRIR (Mig grup → assumeix grup complet) — ${blocsInfo}`;
+    if (potCobrir && ambSuport && !ambMesiAmb) return `${base} ✅ POT COBRIR (Suport, flexible) — ${blocsInfo}`;
+    if (potCobrir && ambTP && !ambMesiAmb)     return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
+    if (potCobrir && !ambMesiAmb)              return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
+    if (potCobrir && ambMesiAmb)               return `${base} ⚠️ MESI AMB GRUP (última opció — no interrompre si hi ha alternativa) — ${blocsInfo}`;
+    if (parcial)                               return `${base} ⚡ PARCIALMENT DISPONIBLE — pot cobrir els blocs marcats ✅ — ${blocsInfo}`;
+                                               return `${base} ❌ OCUPAT — ${blocsInfo}`;
   }).join('\n');
 
   const contextExtra = infoExtra?.context
@@ -269,7 +293,8 @@ REGLES ADDICIONALS:
 - ANTI-SOLAPAMENT CRÍTIC: Cada franja_id ha d'aparèixer en MÀXIM UNA entrada de la proposta. La suma de tots els franges_ids de totes les entrades = exactament ${JSON.stringify(frangesIds)} sense repeticions ni omissions.
 - Mínim de docents possible: un sol docent per a TOTA l'absència si pot. Si les normes del centre limiten hores per persona, divideix en blocs complets (mai per franja de 30 min aïllada).
 - DESDOBLAMENT: Si GRUPS AFECTATS indica "⚡ DESDOBLAMENT", el grup estava dividit a la meitat i l'especialista ja tenia mig grup. Quan la tutora falta, l'especialista mencionat assumeix TOT el grup. Afegeix-lo a la proposta per aquella franja. NO busquis cap altre docent.
-- SUPORT AMB GRUP: Un docent marcat "Ja és amb el grup" (fa "Suport 5è A/B" o similar) JA és al grup i POT cobrir l'absència per aquella franja — és una opció molt bona, prioritza'l.
+- JA ÉS AMB EL GRUP (franja específica): un docent pot ser amb el grup ÚNICAMENT a certes franges del bloc (ex: 9:00–9:30 però no 9:30–10:00). Proposa'l SOLS per a les franges concretes indicades. Per a les franges restants del mateix bloc, busca un altre docent — NO estenguis automàticament la cobertura.
+- MESI AMB GRUP (⚠️): el docent MESI és al grup però la seva tasca amb alumnes específics és prioritària. Usar-lo ÚNICAMENT si no hi ha cap suport regular del MATEIX CICLE disponible (★MATEIX CICLE ✅). Si hi ha suport regular disponible, preferir-lo i no interrompre el MESI.
 - MIG GRUP: Un docent marcat "✅ POT COBRIR (Mig grup → assumeix grup complet)" ja treballa amb la meitat del grup del MATEIX CICLE. Quan el docent absent falta, assumeix tot el grup en lloc de fer el mig grup. PRIORITZAR per sobre de docents que fan TP (que genera deute).
 - tp_afectat:true si el docent proposat tenia TP en aquelles franges.
 - Aplica les NORMES DEL CENTRE per a restriccions addicionals.
