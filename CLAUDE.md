@@ -120,6 +120,6 @@ Les normes (`normes`) vénen de `AppContext.normes` (carregades de `escoles.norm
 ## Dev
 
 ```bash
-npm run dev      # Vite dev server (normalment :5173 o :5174)
+npm run dev      # Vite dev server (normalment :5173 o :8080)
 npm run build    # Build estàtic a dist/
 ```
