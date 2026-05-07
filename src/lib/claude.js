@@ -251,7 +251,7 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     if (totLliure)                             return `${base} ✅ DISPONIBLE TOT EL BLOC (al centre, sense classe)`;
     if (potCobrir && ambMigGrup)               return `${base} ✅ POT COBRIR (Mig grup → assumeix grup complet) — ${blocsInfo}`;
     if (potCobrir && ambSuport && !ambMesiAmb) return `${base} ✅ POT COBRIR (Suport, flexible) — ${blocsInfo}`;
-    if (potCobrir && ambTP && !ambMesiAmb)     return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
+    if (potCobrir && ambTP && !ambMesiAmb)     return `${base} ⚠️ POT COBRIR amb deute TP (DARRER RECURS si no hi ha suport disponible) — ${blocsInfo}`;
     if (potCobrir && !ambMesiAmb)              return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
     if (potCobrir && ambMesiAmb)               return `${base} ⚠️ MESI AMB GRUP (última opció — no interrompre si hi ha alternativa) — ${blocsInfo}`;
     if (parcial)                               return `${base} ⚡ PARCIALMENT DISPONIBLE — pot cobrir els blocs marcats ✅ — ${blocsInfo}`;
@@ -270,28 +270,53 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     ? `\nGRUPS AFECTATS I TUTORS a ${dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : ''}:\n${infoGrupsAfectats}\n`
     : '';
 
-  // Pre-calcula assignacions obligatòries (JA ÉS AMB EL GRUP, exclou MESI)
-  // Agrupem per docent per si cobreix múltiples blocs consecutius (ex: f1b + f2a)
+  // Pre-calcula assignacions obligatòries en dues fases (sense deute TP):
+  // Fase 1 — JA ÉS AMB EL GRUP (non-MESI): màxima prioritat, per franja exacta
+  // Fase 2 — ★CICLE + suport/lliure: evita cridar TP del mateix cicle quan hi ha suport disponible
   const assignacioMap = {};
-  if (dia && absentGrupCore) {
-    for (const b of blocs) {
-      const jaAmb = docents.filter(d => {
-        if (!d.horari || d.nom === absentNom) return false;
-        if (/mesi|mee/i.test(d.grup_principal || '')) return false;
-        return b.ids.some(fid => matchesAbsentGroup(d.horari?.[dia]?.[fid] || '', absentGrupCore));
-      });
-      for (const t of jaAmb) {
-        const fidsAmb = b.ids.filter(fid =>
-          frangesIds.includes(fid) && matchesAbsentGroup(t.horari[dia]?.[fid] || '', absentGrupCore)
-        );
-        if (!fidsAmb.length) continue;
-        if (!assignacioMap[t.nom]) assignacioMap[t.nom] = { fids: [], vals: [] };
-        for (const fid of fidsAmb) {
-          if (!assignacioMap[t.nom].fids.includes(fid)) {
-            assignacioMap[t.nom].fids.push(fid);
-            const v = t.horari[dia][fid];
-            const f = FRANJES_ACT.find(x => x.id === fid);
-            assignacioMap[t.nom].vals.push(`${f?.sub || fid}: ${v}`);
+  const assignedFids = new Set();
+  if (dia) {
+    const doAddFid = (nom, fid, val) => {
+      if (assignedFids.has(fid)) return;
+      const f = FRANJES_ACT.find(x => x.id === fid);
+      if (!assignacioMap[nom]) assignacioMap[nom] = { fids: [], vals: [] };
+      assignacioMap[nom].fids.push(fid);
+      assignacioMap[nom].vals.push(`${f?.sub || fid}: ${val || 'lliure'}`);
+      assignedFids.add(fid);
+    };
+    // Fase 1
+    if (absentGrupCore) {
+      for (const b of blocs) {
+        for (const d of docents) {
+          if (!d.horari || d.nom === absentNom) continue;
+          if (/mesi|mee/i.test(d.grup_principal || '')) continue;
+          for (const fid of b.ids) {
+            if (!frangesIds.includes(fid)) continue;
+            const raw = d.horari?.[dia]?.[fid] || '';
+            if (matchesAbsentGroup(raw, absentGrupCore)) doAddFid(d.nom, fid, raw);
+          }
+        }
+      }
+    }
+    // Fase 2: ★CICLE amb suport o lliure per a les franges no assignades a F1
+    if (absentCicle) {
+      const cicleDocents = docents.filter(d =>
+        d.horari && d.nom !== absentNom &&
+        getCicle(d.grup_principal) === absentCicle &&
+        !/mesi|mee/i.test(d.grup_principal || '')
+      );
+      for (const b of blocs) {
+        for (const fid of b.ids) {
+          if (!frangesIds.includes(fid) || assignedFids.has(fid)) continue;
+          for (const d of cicleDocents) {
+            if (assignedFids.has(fid)) break;
+            const raw = d.horari?.[dia]?.[fid] || '';
+            if (matchesAbsentGroup(raw, absentGrupCore)) continue; // Fase 1 ja ho gestiona
+            const e = estatHorari(raw);
+            const mgC = migGrupCicle(raw);
+            if (e.estat === 'suport' || e.estat === 'lliure' || (mgC && mgC === absentCicle)) {
+              doAddFid(d.nom, fid, raw);
+            }
           }
         }
       }
@@ -301,10 +326,9 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     const horesStr = info.fids.map(fid => FRANJES_ACT.find(x => x.id === fid)?.sub || fid).join(' / ');
     return `  - ${nom} → franges_ids: ${JSON.stringify(info.fids)}, hores: "${horesStr}" (${info.vals.join(', ')})`;
   });
-  const assignedFids = new Set(Object.values(assignacioMap).flatMap(x => x.fids));
   const frangesRestants = frangesIds.filter(fid => !assignedFids.has(fid));
   const contextAssignacio = assignacioLines.length
-    ? `\nASSIGNACIÓ OBLIGATÒRIA — JA ÉS AMB EL GRUP (copia-les DIRECTAMENT a la proposta sense modificar, el cicle i les cobertures no hi compten):\n${assignacioLines.join('\n')}\nFranges RESTANTS a repartir seguint la JERARQUIA: ${JSON.stringify(frangesRestants)}\n`
+    ? `\nASSIGNACIÓ OBLIGATÒRIA (sense deute TP — copia-les DIRECTAMENT a la proposta, no les debatis):\n${assignacioLines.join('\n')}\nFranges RESTANTS (usa TP ★CICLE si cal, altre cicle com a últim recurs): ${JSON.stringify(frangesRestants)}\n`
     : '';
 
   const diaLabel = dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : 'dia no especificat';
