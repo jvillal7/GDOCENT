@@ -82,9 +82,10 @@ function migGrupCicle(raw) {
 function matchesAbsentGroup(raw, absentGrupCore) {
   if (!absentGrupCore) return false;
   const n = normG(raw);
-  if (n.includes(absentGrupCore)) return true;
+  // Evitar fals positiu: "i5b..." conté "5b" com a subcadena però és un grup Infantil diferent
+  const idx = n.indexOf(absentGrupCore);
+  if (idx !== -1 && !/[a-z]/.test(n[idx - 1] || '')) return true;
   // "5È A/B" → "5eab": buscar /5[a-z]{1,3}b/ per detectar notació combinada A/B
-  // Limitem a màxim 3 caràcters per evitar falsos positius (ex: "b" de "Biblioteca")
   const m = absentGrupCore.match(/^(\d+)([a-z])$/);
   return m ? new RegExp(m[1] + '[a-z]{1,3}' + m[2]).test(n) : false;
 }

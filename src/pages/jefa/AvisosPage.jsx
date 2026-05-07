@@ -42,6 +42,7 @@ export default function AvisosPage() {
   const [avisosDescoberts, setAvisosDescoberts] = useState([]);
   const [creantAvisos,     setCreantAvisos]     = useState(false);
   const [coberturesPerId,  setCoberturesPerId]  = useState({});
+  const [tallersPending,   setTallersPending]   = useState(null); // { avis, totsIds, tallersIds }
   const infoFileRef = useRef(null);
 
   useEffect(() => { if (api) load(); }, [api]);
@@ -346,7 +347,24 @@ export default function AvisosPage() {
     } catch (e) { showToast('Error: ' + e.message); }
   }
 
-  async function generarIA(avis) {
+  function decidirTallers(faran) {
+    if (!tallersPending) return;
+    const { avis, totsIds, tallersIds } = tallersPending;
+    setTallersPending(null);
+    const frangesACobrir = faran
+      ? totsIds.filter(fid => !tallersIds.includes(fid))
+      : totsIds;
+    if (frangesACobrir.length === 0) {
+      showToast('Cap franja necessita cobertura — totes eren tallers');
+      setIaState('idle');
+      setIaTarget(null);
+      return;
+    }
+    generarIA(avis, frangesACobrir);
+  }
+
+  async function generarIA(avis, frangesOverride = null) {
+    setTallersPending(null);
     if (avis.data) {
       const diaSetmana = new Date(avis.data + 'T12:00:00').getDay();
       if (diaSetmana === 0 || diaSetmana === 6) {
@@ -356,13 +374,33 @@ export default function AvisosPage() {
         return;
       }
     }
+    // Detectar tallers a l'horari del docent absent (només si no ve d'una decisió anterior)
+    if (!frangesOverride) {
+      const absentDocent = docents.find(d => d.nom === avis.docent_nom);
+      const dia = avis.data
+        ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date(avis.data + 'T12:00:00').getDay()]
+        : null;
+      if (absentDocent?.horari && dia) {
+        const totsIds = parseFranges(avis.franges);
+        const tallersIds = totsIds.filter(fid => /taller/i.test(absentDocent.horari[dia]?.[fid] || ''));
+        if (tallersIds.length > 0) {
+          setIaTarget(avis);
+          setIaState('idle');
+          setIaResult(null);
+          setEditedProposta(null);
+          setIaError('');
+          setTallersPending({ avis, totsIds, tallersIds });
+          return;
+        }
+      }
+    }
     setIaTarget(avis);
     setIaState('loading');
     setIaResult(null);
     setEditedProposta(null);
     setIaError('');
     try {
-      const frangesIds = parseFranges(avis.franges);
+      const frangesIds = frangesOverride || parseFranges(avis.franges);
       if (frangesIds.length === 0) {
         setIaState('error');
         setIaError("Aquesta absència no té franges horàries. Edita-la i torna-la a enviar.");
@@ -872,6 +910,20 @@ export default function AvisosPage() {
               )}
               {iaTarget?.id === a.id && (
                 <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {tallersPending?.avis?.id === a.id && (
+                    <div style={{ background: 'var(--amber-bg)', border: '1px solid #F0D5A8', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                        🎨 Fareu tallers malgrat l'absència de {a.docent_nom}?
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 12, lineHeight: 1.5 }}>
+                        Si es fan els tallers, el grup es distribueix entre les aules i aquelles franges no necessiten cobertura.
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-green btn-full" onClick={() => decidirTallers(true)}>Sí, fem tallers</button>
+                        <button className="btn btn-ghost btn-full" onClick={() => decidirTallers(false)}>No, cal cobrir</button>
+                      </div>
+                    </div>
+                  )}
                   {iaState === 'loading' && (
                     <div style={{ textAlign: 'center', padding: 20 }}>
                       <Spinner />
