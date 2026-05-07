@@ -279,24 +279,24 @@ DURADA: ${durada} — Blocs horaris: ${blocsDesc}
 NORMES DEL CENTRE:
 ${regles}${contextExtra}${contextBaixes}${contextGrups}
 
-JERARQUIA DE PRIORITATS per a cada bloc (ordre ESTRICTAMENT obligatori):
-1. TUTOR/A DEL GRUP AFECTAT marcats com "PRIMERA OPCIÓ": si fan TP, coordinació o suport → INTERROMPRE i quedar-se amb el seu grup.
-2. Docent marcat ★MATEIX CICLE amb disponibilitat (✅) — OBLIGATORI triar-los ABANS que qualsevol docent d'un altre cicle, FINS I TOT si aquell altre fa menys cobertures o no usa TP.
-3. Docent d'un cicle diferent — ÚLTIM RECURS absolut. PROHIBIT si existeix qualsevol opció ★MATEIX CICLE disponible (✅).
-4. Si ningú disponible per un bloc → indicar "GRUP DESCOBERT" al resum, no inventar ningú.
+JERARQUIA DE PRIORITATS (ordre ABSOLUT, no negociable):
+0. ✅ JA ÉS AMB EL GRUP (indicat a GRUPS AFECTATS per franja concreta): MÀXIMA PRIORITAT. Usa'l OBLIGATÒRIAMENT per a aquelles franges exactes. Ni el cicle ni el nombre de cobertures canvien aquesta regla.
+1. Docent que fa SUPORT al MATEIX CICLE (★MATEIX CICLE, amb 'suport' o 'lliure' en aquelles franges, fins i tot si és ⚡): millor que TP perquè no genera deute. Obligatori abans de qualsevol TP.
+2. TUTOR/A DEL GRUP AFECTAT ("PRIMERA OPCIÓ"): interrompre TP/coordinació i quedar-se amb el seu grup.
+3. Docent ★MATEIX CICLE amb TP (deute). Obligatori ABANS de qualsevol altre cicle.
+4. Docent d'un cicle diferent — ÚLTIM RECURS. PROHIBIT si existeix qualsevol opció ★MATEIX CICLE.
+5. Si ningú disponible → "GRUP DESCOBERT" al resum.
 
 REGLES ADDICIONALS:
-- ❌ "FORA DEL CENTRE" = MAI proposar. Ignora'l completament.
-- ❌ "OCUPAT" = ensenya un altre grup. No proposar (excepte si és el tutor del grup afectat que ja és amb el seu grup).
-- ⚡ "PARCIALMENT DISPONIBLE" = pot cobrir ÚNICAMENT els blocs on el seu detall (blocsInfo) mostra 'suport', 'lliure' o 'tp'. Per als blocs on diu 'ocupat' → no proposar. Usa'l per cobrir els blocs disponibles i busca un altre docent per als blocs ocupats.
-- ❌ NO proposis mai a ${absentNom} — és el/la docent absent i no pot cobrir-se a si mateix/a.
-- ANTI-SOLAPAMENT CRÍTIC: Cada franja_id ha d'aparèixer en MÀXIM UNA entrada de la proposta. La suma de tots els franges_ids de totes les entrades = exactament ${JSON.stringify(frangesIds)} sense repeticions ni omissions.
-- Mínim de docents possible: un sol docent per a TOTA l'absència si pot. Si les normes del centre limiten hores per persona, divideix en blocs complets (mai per franja de 30 min aïllada).
-- DESDOBLAMENT: Si GRUPS AFECTATS indica "⚡ DESDOBLAMENT", el grup estava dividit a la meitat i l'especialista ja tenia mig grup. Quan la tutora falta, l'especialista mencionat assumeix TOT el grup. Afegeix-lo a la proposta per aquella franja. NO busquis cap altre docent.
-- JA ÉS AMB EL GRUP (franja específica): un docent pot ser amb el grup ÚNICAMENT a certes franges del bloc (ex: 9:00–9:30 però no 9:30–10:00). Proposa'l SOLS per a les franges concretes indicades. Per a les franges restants del mateix bloc, busca un altre docent — NO estenguis automàticament la cobertura.
-- MESI AMB GRUP (⚠️): el docent MESI és al grup però la seva tasca amb alumnes específics és prioritària. Usar-lo ÚNICAMENT si no hi ha cap suport regular del MATEIX CICLE disponible (★MATEIX CICLE ✅). Si hi ha suport regular disponible, preferir-lo i no interrompre el MESI.
-- MIG GRUP: Un docent marcat "✅ POT COBRIR (Mig grup → assumeix grup complet)" ja treballa amb la meitat del grup del MATEIX CICLE. Quan el docent absent falta, assumeix tot el grup en lloc de fer el mig grup. PRIORITZAR per sobre de docents que fan TP (que genera deute).
-- tp_afectat:true si el docent proposat tenia TP en aquelles franges.
+- ❌ "FORA DEL CENTRE" = MAI proposar.
+- ❌ "OCUPAT" = ensenya un altre grup. No proposar.
+- ⚡ PARCIALMENT DISPONIBLE: tractar-lo com ✅ per als blocs/franges on el seu detall mostra 'suport' o 'lliure'. Per als blocs 'ocupat' → buscar altre docent. NO descartar per no ser ✅ global.
+- ❌ NO proposis mai a ${absentNom}.
+- COBERTURA COMPLETA OBLIGATÒRIA: La proposta ha de cobrir TOTES les franges de l'absència sense excepció. Cada franja_id ha d'aparèixer en EXACTAMENT UNA entrada. La suma = ${JSON.stringify(frangesIds)}. Si after 2h (4 franges) un docent no pot continuar, CONTINUA amb el següent docent fins cobrir-ho tot. Una proposta incompleta és INVÀLIDA.
+- JA ÉS AMB EL GRUP per franja concreta: si el docent és amb el grup a 9:00–9:30 però no a 9:30–10:00, proposa'l SOLS per a 9:00–9:30 i busca un altre per a 9:30–10:00. NO estenguis automàticament.
+- MESI AMB GRUP (⚠️): usar ÚNICAMENTE si no hi ha cap suport regular del MATEIX CICLE disponible. Si hi ha ★MATEIX CICLE amb suport disponible, usar-lo i NO interrompre el MESI.
+- MIG GRUP (✅): assumeix grup complet. Prioritzar per sobre de TP.
+- tp_afectat:true si el docent tenia TP en aquelles franges.
 - Aplica les NORMES DEL CENTRE per a restriccions addicionals.
 
 DISPONIBILITAT DELS DOCENTS a ${diaLabel}:
