@@ -270,6 +270,43 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     ? `\nGRUPS AFECTATS I TUTORS a ${dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : ''}:\n${infoGrupsAfectats}\n`
     : '';
 
+  // Pre-calcula assignacions obligatòries (JA ÉS AMB EL GRUP, exclou MESI)
+  // Agrupem per docent per si cobreix múltiples blocs consecutius (ex: f1b + f2a)
+  const assignacioMap = {};
+  if (dia && absentGrupCore) {
+    for (const b of blocs) {
+      const jaAmb = docents.filter(d => {
+        if (!d.horari || d.nom === absentNom) return false;
+        if (/mesi|mee/i.test(d.grup_principal || '')) return false;
+        return b.ids.some(fid => matchesAbsentGroup(d.horari?.[dia]?.[fid] || '', absentGrupCore));
+      });
+      for (const t of jaAmb) {
+        const fidsAmb = b.ids.filter(fid =>
+          frangesIds.includes(fid) && matchesAbsentGroup(t.horari[dia]?.[fid] || '', absentGrupCore)
+        );
+        if (!fidsAmb.length) continue;
+        if (!assignacioMap[t.nom]) assignacioMap[t.nom] = { fids: [], vals: [] };
+        for (const fid of fidsAmb) {
+          if (!assignacioMap[t.nom].fids.includes(fid)) {
+            assignacioMap[t.nom].fids.push(fid);
+            const v = t.horari[dia][fid];
+            const f = FRANJES_ACT.find(x => x.id === fid);
+            assignacioMap[t.nom].vals.push(`${f?.sub || fid}: ${v}`);
+          }
+        }
+      }
+    }
+  }
+  const assignacioLines = Object.entries(assignacioMap).map(([nom, info]) => {
+    const horesStr = info.fids.map(fid => FRANJES_ACT.find(x => x.id === fid)?.sub || fid).join(' / ');
+    return `  - ${nom} → franges_ids: ${JSON.stringify(info.fids)}, hores: "${horesStr}" (${info.vals.join(', ')})`;
+  });
+  const assignedFids = new Set(Object.values(assignacioMap).flatMap(x => x.fids));
+  const frangesRestants = frangesIds.filter(fid => !assignedFids.has(fid));
+  const contextAssignacio = assignacioLines.length
+    ? `\nASSIGNACIÓ OBLIGATÒRIA — JA ÉS AMB EL GRUP (copia-les DIRECTAMENT a la proposta sense modificar, el cicle i les cobertures no hi compten):\n${assignacioLines.join('\n')}\nFranges RESTANTS a repartir seguint la JERARQUIA: ${JSON.stringify(frangesRestants)}\n`
+    : '';
+
   const diaLabel = dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : 'dia no especificat';
 
   const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària.
@@ -277,8 +314,7 @@ DOCENT ABSENT: ${absentNom}
 DIA DE L'ABSÈNCIA: ${diaLabel}${data ? ` (${data})` : ''}
 DURADA: ${durada} — Blocs horaris: ${blocsDesc}
 NORMES DEL CENTRE:
-${regles}${contextExtra}${contextBaixes}${contextGrups}
-
+${regles}${contextExtra}${contextBaixes}${contextGrups}${contextAssignacio}
 JERARQUIA DE PRIORITATS (ordre ABSOLUT, no negociable):
 0. ✅ JA ÉS AMB EL GRUP (indicat a GRUPS AFECTATS per franja concreta): MÀXIMA PRIORITAT. Usa'l OBLIGATÒRIAMENT per a aquelles franges exactes. Ni el cicle ni el nombre de cobertures canvien aquesta regla.
 1. Docent que fa SUPORT al MATEIX CICLE (★MATEIX CICLE, amb 'suport' o 'lliure' en aquelles franges, fins i tot si és ⚡): millor que TP perquè no genera deute. Obligatori abans de qualsevol TP.
@@ -302,7 +338,8 @@ REGLES ADDICIONALS:
 DISPONIBILITAT DELS DOCENTS a ${diaLabel}:
 ${disponibilitatDocents}
 
-Respon NOMÉS JSON: {"proposta":[{"docent":"Nom Cognom","franges_ids":${JSON.stringify(frangesIds)},"hores":"${blocsDesc}","grup_origen":"GX","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
+IMPORTANT: la proposta HA DE tenir UNA ENTRADA PER DOCENT. Si diversos docents cobreixen franges diferents, cada un té la seva entrada amb el seu subconjunt de franges_ids. La suma de TOTS els franges_ids de totes les entrades = ${JSON.stringify(frangesIds)}.
+Respon NOMÉS JSON: {"proposta":[{"docent":"Nom1","franges_ids":["f1a"],"hores":"9:00–9:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó"},{"docent":"Nom2","franges_ids":["f1b","f2a"],"hores":"9:30–10:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
 
   return callClaude([{ role: 'user', content: prompt }], 1200);
 }
