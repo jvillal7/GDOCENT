@@ -336,6 +336,39 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     ? `\nASSIGNACIÓ OBLIGATÒRIA (sense deute TP — copia-les DIRECTAMENT a la proposta, no les debatis):\n${assignacioLines.join('\n')}\nFranges RESTANTS (usa TP ★CICLE si cal, altre cicle com a últim recurs): ${JSON.stringify(frangesRestants)}\n`
     : '';
 
+  // Resum per franja: per a cada franja de l'absència, llista qui pot cobrir per ordre de prioritat
+  // Permet a la IA veure directament "lliure: Mª Jesús | TP: Chema" sense inferir-ho dels blocs
+  const resumPerFranja = dia ? frangesIds.map(fid => {
+    const f = FRANJES_ACT.find(x => x.id === fid);
+    const gr = { jaAmb: [], suport: [], lliure: [], tp: [], carec: [] };
+    for (const d of docents) {
+      if (!d.horari || d.nom === absentNom) continue;
+      const raw = d.horari?.[dia]?.[fid] || '';
+      const isMesi = /mesi|mee/i.test(d.grup_principal || '');
+      const star = getCicle(d.grup_principal) === absentCicle ? '★' : '';
+      if (matchesAbsentGroup(raw, absentGrupCore) && !isMesi) {
+        gr.jaAmb.push(d.nom + star);
+      } else {
+        const e = estatHorari(raw);
+        if (e.estat === 'fora') continue;
+        if      (e.estat === 'lliure') gr.lliure.push(d.nom + star);
+        else if (e.estat === 'suport') gr.suport.push(`${d.nom}${star} (${raw})`);
+        else if (e.estat === 'tp')     gr.tp.push(d.nom + star);
+        else if (e.estat === 'carec')  gr.carec.push(d.nom + star);
+      }
+    }
+    const parts = [];
+    if (gr.jaAmb.length)  parts.push(`✅JA AMB GRUP: ${gr.jaAmb.join(', ')}`);
+    if (gr.suport.length) parts.push(`✅suport: ${gr.suport.join(', ')}`);
+    if (gr.lliure.length) parts.push(`✅lliure: ${gr.lliure.join(', ')}`);
+    if (gr.tp.length)     parts.push(`⚠️TP(deute): ${gr.tp.join(', ')}`);
+    if (gr.carec.length)  parts.push(`⚠️càrrec: ${gr.carec.join(', ')}`);
+    return `  ${f?.sub || fid}: ${parts.join(' | ') || '❌ ningú disponible'}`;
+  }).join('\n') : '';
+  const contextResumFranja = resumPerFranja
+    ? `\nDISPONIBILITAT PER FRANJA — tria el PRIMER disponible de cada franja (✅ abans de ⚠️, SEMPRE):\n${resumPerFranja}\n`
+    : '';
+
   const diaLabel = dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : 'dia no especificat';
 
   const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària.
@@ -366,7 +399,7 @@ REGLES ADDICIONALS:
 
 DISPONIBILITAT DELS DOCENTS a ${diaLabel}:
 ${disponibilitatDocents}
-
+${contextResumFranja}
 IMPORTANT: la proposta HA DE tenir UNA ENTRADA PER DOCENT. Si diversos docents cobreixen franges diferents, cada un té la seva entrada amb el seu subconjunt de franges_ids. La suma de TOTS els franges_ids de totes les entrades = ${JSON.stringify(frangesIds)}.
 Respon NOMÉS JSON: {"proposta":[{"docent":"Nom1","franges_ids":["f1a"],"hores":"9:00–9:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó"},{"docent":"Nom2","franges_ids":["f1b","f2a"],"hores":"9:30–10:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
 
