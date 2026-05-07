@@ -78,16 +78,21 @@ function migGrupCicle(raw) {
 }
 
 // Detecta si un valor d'horari fa referència al grup absent.
-// Gestiona "5È A/B" → normG → "5eab" que conté "5b" via patró /5[a-z]+b/.
+// Usa lookbehind per evitar que "I5B" (Infantil) coincideixi amb "5B" de 5è primària.
+// Preserva espais per distingir "Suport 5B" (espai separa paraula) de "I5B" (sense espai).
 function matchesAbsentGroup(raw, absentGrupCore) {
   if (!absentGrupCore) return false;
-  const n = normG(raw);
-  // Evitar fals positiu: "i5b..." conté "5b" com a subcadena però és un grup Infantil diferent
-  const idx = n.indexOf(absentGrupCore);
-  if (idx !== -1 && !/[a-z]/.test(n[idx - 1] || '')) return true;
-  // "5È A/B" → "5eab": buscar /5[a-z]{1,3}b/ per detectar notació combinada A/B
   const m = absentGrupCore.match(/^(\d+)([a-z])$/);
-  return m ? new RegExp(m[1] + '[a-z]{1,3}' + m[2]).test(n) : false;
+  if (!m) return normG(raw).includes(absentGrupCore);
+  const [, digit, letter] = m;
+  // Normalitza accents però MANTÉ espais — el lookbehind negatiu descarta "i5b" (lletra enganxada)
+  // [a-z]? absorbeix el sufix ordinal: "5è B" → "5e b" → el patró "5e? b" coincideix
+  const rawNorm = (raw || '').toLowerCase()
+    .replace(/[èéê]/g,'e').replace(/[àáâ]/g,'a').replace(/[òóô]/g,'o')
+    .replace(/[úùû]/g,'u').replace(/[íìï]/g,'i');
+  if (new RegExp('(?<![a-z])' + digit + '[a-z]?\\s*' + letter + '(?![a-z])').test(rawNorm)) return true;
+  // Notació combinada "5È A/B" → normG → "5eab" → /5[a-z]{1,3}b/
+  return new RegExp(digit + '[a-z]{1,3}' + letter).test(normG(raw));
 }
 
 export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
@@ -207,11 +212,13 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     }).join(', ');
 
     const estats = totsEstats.map(e => e.estat);
-    const totLliure  = estats.every(e => e === 'lliure');
-    const potCobrir  = estats.every(e => ['lliure', 'tp', 'carec', 'suport', 'migGrup'].includes(e));
-    const ambTP      = estats.some(e => e === 'tp');
-    const ambSuport  = estats.some(e => e === 'suport');
-    const ambMigGrup = estats.some(e => e === 'migGrup');
+    const COBRIBLE = new Set(['lliure', 'tp', 'carec', 'suport', 'migGrup']);
+    const totLliure    = estats.every(e => e === 'lliure');
+    const potCobrir    = estats.every(e => COBRIBLE.has(e));
+    const parcial      = !potCobrir && estats.some(e => COBRIBLE.has(e));
+    const ambTP        = estats.some(e => e === 'tp');
+    const ambSuport    = estats.some(e => e === 'suport');
+    const ambMigGrup   = estats.some(e => e === 'migGrup');
 
     const cicle = getCicle(d.grup_principal);
     const cicleTag = cicle
@@ -223,6 +230,7 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     if (potCobrir && ambSuport)  return `${base} ✅ POT COBRIR (Suport, flexible) — ${blocsInfo}`;
     if (potCobrir && ambTP)      return `${base} ✅ POT COBRIR amb deute TP — ${blocsInfo}`;
     if (potCobrir)               return `${base} ⚠️ POT COBRIR (Càrrec, últim recurs) — ${blocsInfo}`;
+    if (parcial)                 return `${base} ⚡ PARCIALMENT DISPONIBLE — pot cobrir els blocs marcats ✅ — ${blocsInfo}`;
                                  return `${base} ❌ OCUPAT — ${blocsInfo}`;
   }).join('\n');
 
@@ -256,6 +264,7 @@ JERARQUIA DE PRIORITATS per a cada bloc (ordre ESTRICTAMENT obligatori):
 REGLES ADDICIONALS:
 - ❌ "FORA DEL CENTRE" = MAI proposar. Ignora'l completament.
 - ❌ "OCUPAT" = ensenya un altre grup. No proposar (excepte si és el tutor del grup afectat que ja és amb el seu grup).
+- ⚡ "PARCIALMENT DISPONIBLE" = pot cobrir ÚNICAMENT els blocs on el seu detall (blocsInfo) mostra 'suport', 'lliure' o 'tp'. Per als blocs on diu 'ocupat' → no proposar. Usa'l per cobrir els blocs disponibles i busca un altre docent per als blocs ocupats.
 - ❌ NO proposis mai a ${absentNom} — és el/la docent absent i no pot cobrir-se a si mateix/a.
 - ANTI-SOLAPAMENT CRÍTIC: Cada franja_id ha d'aparèixer en MÀXIM UNA entrada de la proposta. La suma de tots els franges_ids de totes les entrades = exactament ${JSON.stringify(frangesIds)} sense repeticions ni omissions.
 - Mínim de docents possible: un sol docent per a TOTA l'absència si pot. Si les normes del centre limiten hores per persona, divideix en blocs complets (mai per franja de 30 min aïllada).
