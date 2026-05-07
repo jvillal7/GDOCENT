@@ -298,24 +298,29 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
         }
       }
     }
-    // Fase 2: ★CICLE amb suport o lliure per a les franges no assignades a F1
+    // Fase 2: suport del MATEIX CICLE — cicle detectat des de l'entrada d'horari, no del grup_principal
+    // Permet trobar Vero ("SUP 5A") fins i tot si el seu grup_principal és buit o "Equip Directiu"
     if (absentCicle) {
-      const cicleDocents = docents.filter(d =>
-        d.horari && d.nom !== absentNom &&
-        getCicle(d.grup_principal) === absentCicle &&
-        !/mesi|mee/i.test(d.grup_principal || '')
-      );
       for (const b of blocs) {
         for (const fid of b.ids) {
           if (!frangesIds.includes(fid) || assignedFids.has(fid)) continue;
-          for (const d of cicleDocents) {
+          for (const d of docents) {
+            if (!d.horari || d.nom === absentNom) continue;
+            if (/mesi|mee/i.test(d.grup_principal || '')) continue;
             if (assignedFids.has(fid)) break;
             const raw = d.horari?.[dia]?.[fid] || '';
-            if (matchesAbsentGroup(raw, absentGrupCore)) continue; // Fase 1 ja ho gestiona
+            if (matchesAbsentGroup(raw, absentGrupCore)) continue; // ja gestionat a Fase 1
             const e = estatHorari(raw);
-            const mgC = migGrupCicle(raw);
-            if (e.estat === 'suport' || e.estat === 'lliure' || (mgC && mgC === absentCicle)) {
+            if (e.estat === 'suport') {
+              // Extreu grup de l'entrada: "SUP 5A" → "5A" → Cicle Superior
+              const m = raw.match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
+              const cicleEntry = m ? getCicle(`${m[1]}${m[2]}`) : getCicle(d.grup_principal);
+              if (cicleEntry === absentCicle) doAddFid(d.nom, fid, raw);
+            } else if (e.estat === 'lliure' && getCicle(d.grup_principal) === absentCicle) {
               doAddFid(d.nom, fid, raw);
+            } else {
+              const mgC = migGrupCicle(raw);
+              if (mgC && mgC === absentCicle) doAddFid(d.nom, fid, raw);
             }
           }
         }

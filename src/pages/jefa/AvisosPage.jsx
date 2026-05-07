@@ -416,8 +416,8 @@ export default function AvisosPage() {
       const blocatsExtra = new Set(
         infoExtra.flatMap(ie => (ie.docentsBlocats || []).map(b => (b.nom || b).toLowerCase()))
       );
-      // 'directiu' NO exclòs: la jefa/director poden cobrir si fan suport (l'AI ho gestiona via normes)
-      const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei', 'suport']);
+      // 'directiu' i 'suport' NO exclosos: l'AI gestiona via normes qui pot cobrir realment
+      const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei']);
       const docentsFiltrats = docents.filter(d =>
         d.nom === avis.docent_nom || // sempre incloure l'absent per poder llegir el seu grup/horari
         (
