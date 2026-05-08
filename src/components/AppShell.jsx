@@ -62,8 +62,8 @@ export default function AppShell() {
           <div className="sd-top">
             <div className="sd-logo">
               <div className="sd-logo-text">
-                <p>{escola?.nom || 'Gestió Docent'}</p>
-                <span>Gestió Docent</span>
+                <p>{escola?.nom || 'HORARIA'}</p>
+                <span>HORAR<span className="h-ia">IA</span></span>
               </div>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function AppShell() {
     <div id="app">
       <header className="app-header">
         <div className="ah-title">
-          <p>{escola?.nom || 'Gestió Docent'}</p>
+          <p>{escola?.nom || 'HORARIA'}</p>
           <span>{title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

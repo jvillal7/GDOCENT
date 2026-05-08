@@ -43,7 +43,7 @@ export function AppProvider({ children }) {
   // Carregar docents i normes quan hi ha escola (login fresc o sessió restaurada)
   useEffect(() => {
     if (!escola) return;
-    if (saved?.escola) document.title = `Gestió Docent — ${escola.nom}`;
+    if (saved?.escola) document.title = `HORARIA — ${escola.nom}`;
     const a = makeApi(escola.id);
     a.getDocents().then(data => { if (data) setDocents(data); });
     a.getNormesIA().then(data => { if (data?.[0]?.normes_ia) setNormes(data[0].normes_ia); });
@@ -56,7 +56,7 @@ export function AppProvider({ children }) {
     setEscola(e);
     setRole(r);
     setPage(redirect || DEFAULT_PAGE[r] || 'ta');
-    document.title = `Gestió Docent — ${e.nom}`;
+    document.title = `HORARIA — ${e.nom}`;
     localStorage.setItem('gd_session', JSON.stringify({ perfil: p, escola: e, role: r }));
   }, []);
 

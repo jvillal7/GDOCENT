@@ -56,8 +56,10 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--i
 .login-hero{background:#0a1a0f;padding:48px 28px 36px;position:relative;overflow:hidden}
 .login-hero::before{content:'';position:absolute;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(26,122,78,.35) 0%,transparent 70%);top:-80px;right:-60px;pointer-events:none}
 .hero-text{position:relative;z-index:1}
-.hero-text h1{font-family:Georgia,serif;font-size:30px;font-weight:300;color:#fff;line-height:1.15;letter-spacing:-.02em}
+.hero-text h1{font-family:Georgia,serif;font-size:36px;font-weight:300;color:#fff;line-height:1.1;letter-spacing:.04em}
 .hero-text h1 em{font-style:italic;color:var(--green-mid)}
+/* HORARIA — "IA" = Intel·ligència Artificial integrada */
+.h-ia{font-style:italic;background:linear-gradient(135deg,#3B8FF0 0%,#8B5CF6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .hero-text p{font-size:12.5px;color:rgba(255,255,255,.4);margin-top:5px}
 .login-body{flex:1;padding:28px 20px 40px;display:flex;flex-direction:column;gap:12px}
 .login-body h2{font-family:Georgia,serif;font-size:20px;font-weight:400;margin-bottom:2px}

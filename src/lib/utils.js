@@ -105,7 +105,7 @@ export function emailAbsencia({ nom, dates, franges, motiu, isOriol, escola }) {
         </table>
         <div style="margin-top:24px;text-align:center">
           <a href="${deepLink}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            Gestionar cobertura a GDOCENT →
+            Gestionar cobertura a HORARIA →
           </a>
         </div>
       </div>

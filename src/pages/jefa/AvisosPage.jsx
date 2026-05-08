@@ -1022,7 +1022,7 @@ function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFu
         ${notesHtml}
         <div style="margin-top:24px;text-align:center">
           <a href="${APP_URL}?escola=${escolaKey}&page=tc" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            Veure la meva cobertura a GDOCENT →
+            Veure la meva cobertura a HORARIA →
           </a>
         </div>
       </div>
