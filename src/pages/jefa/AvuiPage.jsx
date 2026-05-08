@@ -70,7 +70,7 @@ export default function AvuiPage() {
           if (a.estat === 'pendent') {
             newCells[key] = { estat: 'pendent', avisId: a.id, grup: colGrup, fid };
           } else if (a.estat === 'resolt' || a.estat === 'arxivat') {
-            const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT);
+            const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT, a.docent_nom);
             newCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
           }
         });
@@ -93,7 +93,7 @@ export default function AvuiPage() {
             if (a.estat === 'pendent') {
               newSieiCells[key] = { estat: 'pendent', avisId: a.id, student: matched, fid };
             } else {
-              const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT);
+              const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT, a.docent_nom);
               newSieiCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
             }
           });
@@ -182,16 +182,26 @@ export default function AvuiPage() {
   );
 }
 
-function findCobertura(cobertures, absenciaId, fid, franjesAct) {
+function findCobertura(cobertures, absenciaId, fid, franjesAct, docentAbsentNom) {
   const franjaLabel = franjesAct.find(f => f.id === fid)?.label || '';
   const franjaSub   = franjesAct.find(f => f.id === fid)?.sub   || '';
   const exactFormat = `${franjaLabel} (${franjaSub})`.toLowerCase();
   const matchFn    = cf => cf === fid.toLowerCase() || cf === exactFormat || cf === franjaSub.toLowerCase();
   const fallbackFn = cf => cf === franjaLabel.toLowerCase() || cf.startsWith(franjaLabel.toLowerCase());
-  return (
-    (cobertures || []).find(c => c.absencia_id === absenciaId && matchFn((c.franja || '').toLowerCase())) ||
-    (cobertures || []).find(c => c.absencia_id === absenciaId && fallbackFn((c.franja || '').toLowerCase()))
-  );
+  const pool = cobertures || [];
+
+  // Intent 1: absencia_id exacte + franja
+  const byId = pool.find(c => c.absencia_id === absenciaId && matchFn((c.franja || '').toLowerCase()))
+            || pool.find(c => c.absencia_id === absenciaId && fallbackFn((c.franja || '').toLowerCase()));
+  if (byId) return byId;
+
+  // Intent 2 (fallback): absencia_id null/erroni → buscar per docent absent + franja
+  // Evita mostrar '?' quan absencia_id no coincideix (ex: guardat manualment sense ID)
+  if (docentAbsentNom) {
+    return pool.find(c => c.docent_absent_nom === docentAbsentNom && matchFn((c.franja || '').toLowerCase()))
+        || pool.find(c => c.docent_absent_nom === docentAbsentNom && fallbackFn((c.franja || '').toLowerCase()));
+  }
+  return undefined;
 }
 
 function computeSpans(items, cellsMap, blocs) {
