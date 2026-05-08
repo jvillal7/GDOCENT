@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, FRANJES_ORIOL, DIES } from '../../lib/constants';
+import { FRANJES, FRANJES_ORIOL, DIES, GRUPS_ORIOL } from '../../lib/constants';
 import { initials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
@@ -66,6 +66,8 @@ export default function HorarisPage() {
   const [expanded, setExpanded] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const confirmResolveRef = useRef(null);
+  const [viewMode, setViewMode] = useState('personal');
+  const [selectedGrup, setSelectedGrup] = useState('G1');
   const [showBaixes,  setShowBaixes]  = useState(false);
   const [baixes,      setBaixes]      = useState([]);
   const [baixesLoaded, setBaixesLoaded] = useState(false);
@@ -259,7 +261,20 @@ export default function HorarisPage() {
           <h1>Personal del centre</h1>
           <p>Gestiona el personal: horaris, correus i accés</p>
         </div>
-        {!isOriol && (
+        {isOriol ? (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              className="btn btn-sm"
+              style={viewMode === 'personal' ? { background: 'var(--ink)', color: '#fff', border: 'none', fontWeight: 600 } : {}}
+              onClick={() => setViewMode('personal')}
+            >👥 Personal</button>
+            <button
+              className="btn btn-sm"
+              style={viewMode === 'grups' ? { background: 'var(--ink)', color: '#fff', border: 'none', fontWeight: 600 } : {}}
+              onClick={() => setViewMode('grups')}
+            >📚 Grups</button>
+          </div>
+        ) : (
           <button
             className="btn btn-sm"
             style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderColor: 'var(--amber)', fontSize: 13, fontWeight: 600, padding: '7px 14px', flexShrink: 0 }}
@@ -269,6 +284,11 @@ export default function HorarisPage() {
           </button>
         )}
       </div>
+
+      {viewMode === 'grups' && isOriol && (
+        <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} />
+      )}
+      {(viewMode !== 'grups' || !isOriol) && (<>
 
       {showBaixes && !isOriol && (
         <div className="card" style={{ marginBottom: 14 }}>
@@ -427,6 +447,7 @@ export default function HorarisPage() {
           </div>
         </div>
       )}
+    </>)}
     </>
   );
 }
@@ -683,5 +704,112 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew }) {
         <button className="btn btn-ghost" style={{ fontSize: 13, padding: '7px 12px' }} onClick={onCancel}>Cancel·lar</button>
       </div>
     </div>
+  );
+}
+
+function matchesGrup(val, grup) {
+  const v = (val || '').trim().toLowerCase();
+  const g = grup.toLowerCase();
+  return v === g || v.startsWith(g + ' ') || v.startsWith(g + '-') || v.startsWith(g + '/');
+}
+
+function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
+  const grupHorari = useMemo(() => {
+    const result = {};
+    DIES.forEach(dia => {
+      result[dia] = {};
+      franjes.forEach(f => {
+        result[dia][f.id] = [];
+        docents.forEach(d => {
+          const val = d.horari?.[dia]?.[f.id] || '';
+          if (matchesGrup(val, selectedGrup)) {
+            result[dia][f.id].push({ nom: d.nom, val });
+          }
+        });
+      });
+    });
+    return result;
+  }, [docents, franjes, selectedGrup]);
+
+  const visibleFranjes = franjes.filter(f => !f.lliure);
+  const horaGroups = {};
+  visibleFranjes.forEach(f => {
+    if (!horaGroups[f.hora]) horaGroups[f.hora] = [];
+    horaGroups[f.hora].push(f);
+  });
+
+  const thS = { padding: '6px 8px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 600, color: 'var(--ink-3)', textAlign: 'center', whiteSpace: 'nowrap' };
+  const tdS = { padding: '4px 6px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, color: 'var(--ink-3)', whiteSpace: 'nowrap' };
+
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head"><h3>Selecciona el grup</h3></div>
+        <div style={{ padding: '12px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {GRUPS_ORIOL.map(g => (
+            <button
+              key={g}
+              className="btn btn-sm"
+              style={selectedGrup === g
+                ? { background: 'var(--ink)', color: '#fff', border: 'none', fontWeight: 700, minWidth: 40 }
+                : { background: 'var(--bg-2)', borderColor: 'var(--border)', minWidth: 40 }
+              }
+              onClick={() => onSelectGrup(g)}
+            >{g}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h3>Horari del {selectedGrup}</h3>
+          <span className="sp sp-blue">Docents assignats per franja</span>
+        </div>
+        {docents.length === 0 ? (
+          <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+            No hi ha docents carregats. Primer puja els horaris des de la vista Personal.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: 10 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 440 }}>
+              <thead>
+                <tr>
+                  <th colSpan={2} style={{ ...thS, textAlign: 'left' }}>Franja</th>
+                  {DIES.map(d => <th key={d} style={thS}>{DIE_ABBR[d]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleFranjes.map(f => {
+                  const grp = horaGroups[f.hora] || [];
+                  const isFirst = grp[0]?.id === f.id;
+                  return (
+                    <tr key={f.id}>
+                      {isFirst && (
+                        <td rowSpan={grp.length} style={{ ...tdS, fontWeight: 700, verticalAlign: 'middle', color: 'var(--ink-2)', width: 56 }}>{f.label}</td>
+                      )}
+                      <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
+                      {DIES.map(dia => {
+                        const entries = grupHorari[dia]?.[f.id] || [];
+                        return (
+                          <td key={dia} style={{ padding: '4px 5px', border: '1px solid var(--border)', background: entries.length ? 'var(--blue-bg)' : 'var(--bg)', textAlign: 'center', minWidth: 72 }}>
+                            {entries.length ? entries.map((e, i) => (
+                              <div key={i} title={e.nom} style={{ fontSize: 9.5, color: 'var(--ink-2)', fontWeight: 600, lineHeight: 1.4 }}>
+                                {e.nom.split(' ')[0]}
+                              </div>
+                            )) : (
+                              <span style={{ fontSize: 9, color: 'var(--ink-4)' }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
