@@ -24,7 +24,9 @@ async function callClaude(messages, maxTokens = 1000, retries = 2) {
     else if (data.choices?.[0]?.message) raw = data.choices[0].message.content;
     else throw new Error('Format de resposta IA no reconegut');
     const clean = raw.replace(/```json|```/g, '').trim();
-    const start = clean.indexOf('{');
+    // Cerca {"proposta": o {"franja": o {"nom": per saltar-se text de raonament previ
+    const jsonStart = /\{(?:\s*"(?:proposta|franja|nom|docent|titol|horari)"\s*:)/.exec(clean);
+    const start = jsonStart ? jsonStart.index : clean.indexOf('{');
     const end = clean.lastIndexOf('}');
     if (start === -1 || end === -1) throw new Error('No s\'ha trobat JSON a la resposta IA');
     return JSON.parse(clean.slice(start, end + 1));
@@ -92,7 +94,12 @@ function matchesAbsentGroup(raw, absentGrupCore) {
     .replace(/[úùû]/g,'u').replace(/[íìï]/g,'i');
   if (new RegExp('(?<![a-z])' + digit + '[a-z]?\\s*' + letter + '(?![a-z])').test(rawNorm)) return true;
   // Notació combinada "5È A/B" → normG → "5eab" → /5[a-z]{1,3}b/
-  return new RegExp(digit + '[a-z]{1,3}' + letter).test(normG(raw));
+  if (new RegExp(digit + '[a-z]{1,3}' + letter).test(normG(raw))) return true;
+  // "Racons 5" / "Racons5" → mig grup per curs de primària: dígit immediatament darrere de "racons"
+  // Exclou "Racons I5" (Infantil) i "5è A · Racons" (curs explícit amb grup diferent)
+  const raconsM = (raw || '').match(/racons\s*(\d+)/i);
+  if (raconsM && raconsM[1] === digit) return true;
+  return false;
 }
 
 export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
@@ -131,15 +138,16 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
     const acts = [...new Set(b.ids.map(fid => absentHorariDia[fid]).filter(v => v))];
     if (!acts.length) return null;
 
-    // DESDOBLAMENT: si la tutora absent tenia un desdoblament, l'especialista assumeix tot el grup
-    const desdoblVal = acts.find(v => /desdobl/i.test(v));
+    // DESDOBLAMENT / MIG GRUP RACONS: si la tutora absent tenia un desdoblament o racons compartits, l'especialista assumeix tot el grup
+    const desdoblVal = acts.find(v => /desdobl|racons/i.test(v));
     if (desdoblVal) {
       const specialist = docents.find(d =>
         d.nom !== absentNom && d.horari &&
         b.ids.some(fid => matchesAbsentGroup(d.horari?.[dia]?.[fid] || '', absentGrupCore))
       );
       const who = specialist ? specialist.nom : "l'especialista del desdoblament";
-      return `• ${b.hora} (${desdoblVal}): ⚡ DESDOBLAMENT — ${who} ja té mig grup. Quan ${absentNom} falta, ${who} assumeix TOT el grup → inclou'l a la proposta per aquesta franja, NO busquis cap altre docent`;
+      const tipusMigGrup = /racons/i.test(desdoblVal) ? 'MIG GRUP RACONS' : 'DESDOBLAMENT';
+      return `• ${b.hora} (${desdoblVal}): ⚡ ${tipusMigGrup} — ${who} ja té mig grup. Quan ${absentNom} falta, ${who} assumeix TOT el grup → inclou'l a la proposta per aquesta franja, NO busquis cap altre docent`;
     }
 
     const tutorsAfectats = docents.filter(d => {
@@ -205,6 +213,13 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
       if (matchesAbsentGroup(raw, absentGrupCore)) {
         if (isMesiDocent) return { estat: 'mesiAmb', text: `MESI ja és al grup (${raw}) — última opció` };
         return { estat: 'suport', text: `Ja és amb el grup de ${absentNom}: ${raw}` };
+      }
+      // MESI: fora del seu cicle → no disponible (cada MESI cobreix al seu nivell)
+      if (isMesiDocent) {
+        const mRaw = raw.match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
+        const rawCicle = mRaw ? getCicle(`${mRaw[1]}${mRaw[2]}`) : getCicle(raw);
+        if (!rawCicle || rawCicle !== absentCicle)
+          return { estat: 'ocupat', text: `MESI a cicle diferent (${raw})` };
       }
       // Mig grup del mateix cicle → pot assumir el grup complet
       const mgCicle = migGrupCicle(raw);
@@ -284,56 +299,172 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
       assignacioMap[nom].vals.push(`${f?.sub || fid}: ${val || 'lliure'}`);
       assignedFids.add(fid);
     };
-    // Fase 1
+    // Fase 1: JA ÉS AMB EL GRUP (non-MESI) — selecciona el millor candidat per franja
+    // Prioritat: suport directe (3) > racons/desdoblament (2) > grup combinat tipus "5A/B" (1)
+    // Evita que un docent amb "5 A/B" (nom anterior alfabèticament) guanyi a Vero amb "Suport 5 B"
     if (absentGrupCore) {
-      for (const b of blocs) {
-        for (const d of docents) {
-          if (!d.horari || d.nom === absentNom) continue;
-          if (/mesi|mee/i.test(d.grup_principal || '')) continue;
+      const fase1Cand = {}; // fid → [{nom, raw, priority, di}]
+      for (let di = 0; di < docents.length; di++) {
+        const d = docents[di];
+        if (!d.horari || d.nom === absentNom) continue;
+        if (/mesi|mee/i.test(d.grup_principal || '')) continue;
+        for (const b of blocs) {
           for (const fid of b.ids) {
             if (!frangesIds.includes(fid)) continue;
             const raw = d.horari?.[dia]?.[fid] || '';
-            if (matchesAbsentGroup(raw, absentGrupCore)) doAddFid(d.nom, fid, raw);
+            if (!matchesAbsentGroup(raw, absentGrupCore)) continue;
+            const priority = /suport/i.test(raw) ? 3 : /racons|desdobl/i.test(raw) ? 2 : 1;
+            if (!fase1Cand[fid]) fase1Cand[fid] = [];
+            fase1Cand[fid].push({ nom: d.nom, raw, priority, di });
           }
         }
       }
+      const orderedF1 = blocs.flatMap(b => b.ids).filter(fid => frangesIds.includes(fid));
+      for (const fid of orderedF1) {
+        if (!fase1Cand[fid] || assignedFids.has(fid)) continue;
+        const best = fase1Cand[fid].sort((a, b) => b.priority - a.priority || a.di - b.di)[0];
+        console.log(`[Fase1] ${fid}: ${best.nom} p${best.priority} raw="${best.raw}"`);
+        doAddFid(best.nom, fid, best.raw);
+      }
     }
-    // Fase 2: suport del MATEIX CICLE — cicle detectat des de l'entrada d'horari, no del grup_principal
-    // Permet trobar Vero ("SUP 5A") fins i tot si el seu grup_principal és buit o "Equip Directiu"
-    if (absentCicle) {
-      for (const b of blocs) {
-        for (const fid of b.ids) {
-          if (!frangesIds.includes(fid) || assignedFids.has(fid)) continue;
-          for (const d of docents) {
-            if (!d.horari || d.nom === absentNom) continue;
-            if (/mesi|mee/i.test(d.grup_principal || '')) continue;
-            if (assignedFids.has(fid)) break;
-            const raw = d.horari?.[dia]?.[fid] || '';
-            if (matchesAbsentGroup(raw, absentGrupCore)) continue; // ja gestionat a Fase 1
-            const e = estatHorari(raw);
-            if (e.estat === 'suport') {
-              // Extreu grup de l'entrada: "SUP 5A" → "5A" → Cicle Superior
-              const m = raw.match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
-              const cicleEntry = m ? getCicle(`${m[1]}${m[2]}`) : getCicle(d.grup_principal);
-              if (cicleEntry === absentCicle) doAddFid(d.nom, fid, raw);
-            } else if (e.estat === 'lliure' && getCicle(d.grup_principal) === absentCicle) {
-              doAddFid(d.nom, fid, raw);
-            } else {
-              const mgC = migGrupCicle(raw);
-              if (mgC && mgC === absentCicle) doAddFid(d.nom, fid, raw);
+    // Fase 1.5: Estén assignacions "Racons N" a franges adjacents amb "Racons" (sense número)
+    // Ex: Nil té "Racons 5" a f5a+f5b i "Racons" a f5c → assignar f5c a Nil també
+    if (dia && absentGrupCore) {
+      const ordAll = FRANJES_ACT.map(f => f.id);
+      const f4r = ordAll.indexOf('f4');
+      for (const [nom, info] of Object.entries(assignacioMap)) {
+        const dObj = docents.find(x => x.nom === nom);
+        if (!dObj?.horari) continue;
+        for (const assignedFid of [...info.fids]) {
+          const rawA = dObj.horari?.[dia]?.[assignedFid] || '';
+          if (!/racons\s*\d+/i.test(rawA)) continue;
+          const idxA = ordAll.indexOf(assignedFid);
+          const sideA = idxA < f4r;
+          for (const adjIdx of [idxA - 1, idxA + 1]) {
+            if (adjIdx < 0 || adjIdx >= ordAll.length) continue;
+            const adjFid = ordAll[adjIdx];
+            if (!frangesIds.includes(adjFid) || assignedFids.has(adjFid)) continue;
+            if ((adjIdx < f4r) !== sideA) continue;
+            const rawAdj = dObj.horari?.[dia]?.[adjFid] || '';
+            if (/^racons\s*$/i.test(rawAdj.trim())) {
+              console.log(`[Fase1.5] ${adjFid}: ${nom} (Racons adjacent a ${assignedFid})`);
+              doAddFid(nom, adjFid, rawAdj);
             }
           }
         }
       }
     }
+    // Fase 2: ★CICLE + suport/lliure sense TP
+    // Prioritat: suport al cicle (2) > lliure/migGrup del cicle (1)
+    // Suport guanya a lliure perquè el docent ja és físicament a l'aula del cicle
+    if (absentCicle) {
+      const orderedF2 = blocs.flatMap(b => b.ids).filter(fid => frangesIds.includes(fid));
+      for (const fid of orderedF2) {
+        if (assignedFids.has(fid)) continue;
+        const cands = [];
+        for (let di = 0; di < docents.length; di++) {
+          const d = docents[di];
+          if (!d.horari || d.nom === absentNom) continue;
+          if (/mesi|mee/i.test(d.grup_principal || '')) continue;
+          const raw = d.horari?.[dia]?.[fid] || '';
+          if (matchesAbsentGroup(raw, absentGrupCore)) continue; // ja Fase 1
+          const e = estatHorari(raw);
+          let priority = 0;
+          if (e.estat === 'suport') {
+            const m = raw.match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
+            const cicleEntry = m ? getCicle(`${m[1]}${m[2]}`) : getCicle(d.grup_principal);
+            if (cicleEntry === absentCicle) priority = 2;
+          } else if (e.estat === 'lliure' && getCicle(d.grup_principal) === absentCicle) {
+            priority = 1;
+          } else {
+            const mgC = migGrupCicle(raw);
+            if (mgC && mgC === absentCicle) priority = 1;
+          }
+          if (priority > 0) cands.push({ nom: d.nom, raw, priority, di });
+        }
+        if (cands.length > 0) {
+          const best = cands.sort((a, b) => b.priority - a.priority || a.di - b.di)[0];
+          console.log(`[Fase2] ${fid}: ${best.nom} p${best.priority} raw="${best.raw}"`);
+          doAddFid(best.nom, fid, best.raw);
+        }
+      }
+    }
+    console.log('[Assignació]', JSON.stringify(assignacioMap), '| Restants:', frangesIds.filter(fid => !assignedFids.has(fid)));
   }
   const assignacioLines = Object.entries(assignacioMap).map(([nom, info]) => {
     const horesStr = info.fids.map(fid => FRANJES_ACT.find(x => x.id === fid)?.sub || fid).join(' / ');
     return `  - ${nom} → franges_ids: ${JSON.stringify(info.fids)}, hores: "${horesStr}" (${info.vals.join(', ')})`;
   });
   const frangesRestants = frangesIds.filter(fid => !assignedFids.has(fid));
+
+  // Build pre-assigned entries split by morning/afternoon session (at the f4 Dinar lliure gap)
+  // Les fids s'ordenen cronològicament dins cada sessió (Fase 1 i Fase 2 poden afegir-les en ordre diferent)
+  const preAssigEntries = [];
+  if (assignacioLines.length > 0) {
+    const orderedFids = FRANJES_ACT.map(f => f.id);
+    const f4idx = orderedFids.indexOf('f4');
+    for (const [nom, info] of Object.entries(assignacioMap)) {
+      const pairs = info.fids.map((fid, i) => ({ fid, val: info.vals[i] }));
+      const morning   = pairs.filter(p => orderedFids.indexOf(p.fid) < f4idx).sort((a, b) => orderedFids.indexOf(a.fid) - orderedFids.indexOf(b.fid));
+      const afternoon = pairs.filter(p => orderedFids.indexOf(p.fid) > f4idx).sort((a, b) => orderedFids.indexOf(a.fid) - orderedFids.indexOf(b.fid));
+      for (const session of [morning, afternoon].filter(s => s.length > 0)) {
+        const sessionFids = session.map(p => p.fid);
+        const firstF = FRANJES_ACT.find(f => f.id === sessionFids[0]);
+        const lastF  = FRANJES_ACT.find(f => f.id === sessionFids[sessionFids.length - 1]);
+        const hStart = (firstF?.sub || '').split('–')[0].trim();
+        const hEnd   = ((lastF?.sub  || '').split('–')[1] || '').trim();
+        preAssigEntries.push({
+          docent:     nom,
+          franges_ids: sessionFids,
+          hores:      hStart && hEnd ? `${hStart}–${hEnd}` : sessionFids.map(fid => FRANJES_ACT.find(f => f.id === fid)?.sub || fid).join(', '),
+          grup_origen: absentDocent?.grup_principal || '',
+          tp_afectat: false,
+          motiu:      session.map(p => p.val).join(' / '),
+        });
+      }
+    }
+  }
+
+  // Construir el raonament que explica PER QUÈ cada assignació obligatòria és correcta
+  const assignacioRaonament = Object.entries(assignacioMap).map(([nom, info]) => {
+    const lines = info.fids.map(fid => {
+      const raw = dia ? absentDocent?.horari?.[dia]?.[fid] || '' : '';
+      const f = FRANJES_ACT.find(x => x.id === fid);
+      const label = f?.sub || fid;
+      const isDirectMatch = matchesAbsentGroup(raw, absentGrupCore);
+      // MIG GRUP (Racons/Desdoblament): el docent ja té la meitat del grup absent
+      if (/racons/i.test(raw) && isDirectMatch)
+        return `    ${label}: ${nom} té "${raw}" → Racons ${absentGrupCore ? absentGrupCore.replace(/[a-z]$/,'') : ''} = MIG GRUP del curs de ${absentNom} → quan ${absentNom} falta, ${nom} assumeix el grup complet (PATRÓ 2)`;
+      if (/desdobl/i.test(raw) && isDirectMatch)
+        return `    ${label}: ${nom} té "${raw}" → DESDOBLAMENT del grup de ${absentNom} → quan ${absentNom} falta, ${nom} assumeix el grup complet (PATRÓ 2)`;
+      // Suport directe al grup absent (Fase 1)
+      if (/suport/i.test(raw) && isDirectMatch)
+        return `    ${label}: ${nom} té "${raw}" → suport directe al grup de ${absentNom} → ja és amb ells, millor opció (PATRÓ 1)`;
+      // Suport del mateix cicle però altre grup (Fase 2)
+      if (/suport/i.test(raw)) {
+        const m = raw.match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
+        const cicleEntry = m ? getCicle(`${m[1]}${m[2]}`) : null;
+        return `    ${label}: ${nom} té "${raw}" → suport al ${cicleEntry || 'mateix cicle'} = ★CICLE Superior, disponible sense generar TP (PATRÓ 5a)`;
+      }
+      // Docent lliure del mateix cicle
+      if (!raw) {
+        const cicle = getCicle(docents.find(d => d.nom === nom)?.grup_principal) || '★CICLE';
+        return `    ${label}: ${nom} lliure al centre → ${cicle} disponible sense TP (PATRÓ 5a)`;
+      }
+      // Mig grup d'un altre entrada
+      const cicle = getCicle(docents.find(d => d.nom === nom)?.grup_principal) || '★CICLE';
+      return `    ${label}: ${nom} té "${raw}" → ${cicle} disponible`;
+    }).join('\n');
+    const horesStr = info.fids.map(fid => FRANJES_ACT.find(x => x.id === fid)?.sub || fid).join(' / ');
+    return `  → ${nom} (${horesStr}):\n${lines}`;
+  }).join('\n');
+
   const contextAssignacio = assignacioLines.length
-    ? `\nASSIGNACIÓ OBLIGATÒRIA (sense deute TP — copia-les DIRECTAMENT a la proposta, no les debatis):\n${assignacioLines.join('\n')}\nFranges RESTANTS (usa TP ★CICLE si cal, altre cicle com a últim recurs): ${JSON.stringify(frangesRestants)}\n`
+    ? `\nASSIGNACIONS OBLIGATÒRIES — anàlisi automàtica de qui ja treballa amb el grup de ${absentNom} avui:
+RAONAMENT (interioritza'l per aplicar-lo a altres casos):
+${assignacioRaonament}
+RESULTAT: ${assignacioLines.join('\n')}
+Franges RESTANTS que has de cobrir tu: ${JSON.stringify(frangesRestants)}\n`
     : '';
 
   // Resum per franja: per a cada franja de l'absència, llista qui pot cobrir per ordre de prioritat
@@ -349,6 +480,12 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
       if (matchesAbsentGroup(raw, absentGrupCore) && !isMesi) {
         gr.jaAmb.push(d.nom + star);
       } else {
+        // MESI fora del seu cicle → excloure completament
+        if (isMesi && !matchesAbsentGroup(raw, absentGrupCore)) {
+          const mRaw = raw.match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
+          const rawCicle = mRaw ? getCicle(`${mRaw[1]}${mRaw[2]}`) : getCicle(d.grup_principal);
+          if (!rawCicle || rawCicle !== absentCicle) continue;
+        }
         const e = estatHorari(raw);
         if (e.estat === 'fora') continue;
         if      (e.estat === 'lliure') gr.lliure.push(d.nom + star);
@@ -371,39 +508,81 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
 
   const diaLabel = dia ? dia.charAt(0).toUpperCase() + dia.slice(1) : 'dia no especificat';
 
-  const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària.
-DOCENT ABSENT: ${absentNom}
-DIA DE L'ABSÈNCIA: ${diaLabel}${data ? ` (${data})` : ''}
-DURADA: ${durada} — Blocs horaris: ${blocsDesc}
+  const prompt = `Ets l'assistent de gestió d'un centre educatiu de primària. La teva feina és proposar cobertures raonant pas a pas, com ho faria una cap d'estudis experta.
+
+═══ CONTEXT ═══
+ABSENT: ${absentNom}${absentDocent?.grup_principal ? ` — tutor/a de ${absentDocent.grup_principal}` : ''}${absentCicle ? ` (${absentCicle})` : ''}
+DIA: ${diaLabel}${data ? ` (${data})` : ''}
+FRANGES RESTANTS A COBRIR: ${JSON.stringify(frangesRestants)}
+${contextExtra}${contextBaixes}
 NORMES DEL CENTRE:
-${regles}${contextExtra}${contextBaixes}${contextGrups}${contextAssignacio}
-JERARQUIA DE PRIORITATS (ordre ABSOLUT, no negociable):
-0. ✅ JA ÉS AMB EL GRUP (indicat a GRUPS AFECTATS per franja concreta): MÀXIMA PRIORITAT. Usa'l OBLIGATÒRIAMENT per a aquelles franges exactes. Ni el cicle ni el nombre de cobertures canvien aquesta regla.
-1. Docent que fa SUPORT al MATEIX CICLE (★MATEIX CICLE, amb 'suport' o 'lliure' en aquelles franges, fins i tot si és ⚡): millor que TP perquè no genera deute. Obligatori abans de qualsevol TP.
-2. TUTOR/A DEL GRUP AFECTAT ("PRIMERA OPCIÓ"): interrompre TP/coordinació i quedar-se amb el seu grup.
-3. Docent ★MATEIX CICLE amb TP (deute). Obligatori ABANS de qualsevol altre cicle.
-4. Docent d'un cicle diferent — ÚLTIM RECURS. PROHIBIT si existeix qualsevol opció ★MATEIX CICLE.
-5. Si ningú disponible → "GRUP DESCOBERT" al resum.
+${regles}
+═══ PATRONS DE RAONAMENT (interioritza'ls) ═══
 
-REGLES ADDICIONALS:
-- ❌ "FORA DEL CENTRE" = MAI proposar.
-- ❌ "OCUPAT" = ensenya un altre grup. No proposar.
-- ⚡ PARCIALMENT DISPONIBLE: tractar-lo com ✅ per als blocs/franges on el seu detall mostra 'suport' o 'lliure'. Per als blocs 'ocupat' → buscar altre docent. NO descartar per no ser ✅ global.
-- ❌ NO proposis mai a ${absentNom}.
-- COBERTURA COMPLETA OBLIGATÒRIA: La proposta ha de cobrir TOTES les franges de l'absència sense excepció. Cada franja_id ha d'aparèixer en EXACTAMENT UNA entrada. La suma = ${JSON.stringify(frangesIds)}. Si after 2h (4 franges) un docent no pot continuar, CONTINUA amb el següent docent fins cobrir-ho tot. Una proposta incompleta és INVÀLIDA.
-- JA ÉS AMB EL GRUP per franja concreta: si el docent és amb el grup a 9:00–9:30 però no a 9:30–10:00, proposa'l SOLS per a 9:00–9:30 i busca un altre per a 9:30–10:00. NO estenguis automàticament.
-- MESI AMB GRUP (⚠️): usar ÚNICAMENTE si no hi ha cap suport regular del MATEIX CICLE disponible. Si hi ha ★MATEIX CICLE amb suport disponible, usar-lo i NO interrompre el MESI.
-- MIG GRUP (✅): assumeix grup complet. Prioritzar per sobre de TP.
-- tp_afectat:true si el docent tenia TP en aquelles franges.
-- Aplica les NORMES DEL CENTRE per a restriccions addicionals.
+PATRÓ 1 — Suport directe al grup:
+Si un docent té "Suport [grup]" on [grup] és el grup absent → ja és amb ells → assignació òptima (no genera TP, el coneix).
+Ex: Vero té "Suport 5 B" i la tutora de 5è B falta → Vero és l'opció obligatòria per aquelles franges.
 
-DISPONIBILITAT DELS DOCENTS a ${diaLabel}:
+PATRÓ 2 — Mig grup (Racons / Desdoblament):
+Si un docent té "Racons N" on N és el CURS del grup absent (no l'etapa) → fa la meitat del grup → quan la tutora falta, assumeix el grup COMPLET. NO genera TP.
+Atenció: "Racons 5" = Racons de 5è de primària. "Racons I5" = Racons d'Infantil 5 anys. SÓN GRUPS DIFERENTES.
+Ex: Nil té "Racons 5" i la tutora de 5è B falta → Nil assumeix tot 5è B en aquelles franges.
+
+PATRÓ 3 — MESI (especialista d'inclusió):
+Cada MESI cobreix exclusivament al seu nivell/cicle. Un MESI de Petits/Inicial NO pot cobrir Cicle Superior i viceversa.
+
+PATRÓ 4 — Sessions matí/tarda:
+Si un docent cobreix franges de matí (f1a–f3b) I de tarda (f5a–f5c) → crear DOS entrades separades, no una de sola. El dinar (f4) separa les sessions.
+
+PATRÓ 5 — Jerarquia de prioritats (per les franges sense assignació directa):
+  a) ★CICLE + lliure/suport → millor opció, no genera TP
+  b) Tutor/a del grup afectat (★CICLE) → interromp el seu TP/coordinació
+  c) ★CICLE + TP → genera deute, però preferible a cicle diferent
+  d) Cicle diferent → ÚLTIM RECURS. Prohibit si existeix qualsevol opció ★CICLE.
+  e) Ningú → "GRUP DESCOBERT"
+${contextGrups}${contextAssignacio}
+═══ DISPONIBILITAT a ${diaLabel} ═══
+(★ = mateix cicle que ${absentNom} — prioritzar sempre)
 ${disponibilitatDocents}
 ${contextResumFranja}
-IMPORTANT: la proposta HA DE tenir UNA ENTRADA PER DOCENT. Si diversos docents cobreixen franges diferents, cada un té la seva entrada amb el seu subconjunt de franges_ids. La suma de TOTS els franges_ids de totes les entrades = ${JSON.stringify(frangesIds)}.
-Respon NOMÉS JSON: {"proposta":[{"docent":"Nom1","franges_ids":["f1a"],"hores":"9:00–9:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó"},{"docent":"Nom2","franges_ids":["f1b","f2a"],"hores":"9:30–10:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó"}],"resum":"frase curta"}`;
+═══ PROCEDIMENT ═══
 
-  return callClaude([{ role: 'user', content: prompt }], 1200);
+Segueix ESTRICTAMENT aquest ordre:
+
+1. ASSIGNACIONS JA RESOLTES: Si hi ha secció "ASSIGNACIONS OBLIGATÒRIES", aquelles franges ja estan cobertes pel sistema (el raonament és al "RAONAMENT" de cada una). Inclou-les a la proposta sense modificar-les.
+
+2. FRANGES RESTANTS ${JSON.stringify(frangesRestants)}: Per cada franja, aplica la jerarquia (PATRÓ 5). Consulta "DISPONIBILITAT PER FRANJA" per veure qui hi ha disponible.
+
+3. VALIDACIÓ: Comprova que la suma de tots els franges_ids = ${JSON.stringify(frangesRestants)} (cada franja exactament una vegada).
+
+Escriu 2-3 línies de RAONAMENT explicant per què has triat cada docent per a les franges restants, i llavors el JSON:
+
+{"proposta":[{"docent":"Nom","franges_ids":["f1a"],"hores":"9:00–9:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó concreta"},...],"resum":"frase curta"}`;
+
+  // Ordena la proposta per hora d'inici (primera franja de cada entrada)
+  const _ordFids = FRANJES_ACT.map(f => f.id);
+  const sortProposta = arr => [...arr].sort((a, b) => {
+    const aMin = Math.min(...(a.franges_ids || []).map(fid => _ordFids.indexOf(fid)).filter(i => i >= 0), 999);
+    const bMin = Math.min(...(b.franges_ids || []).map(fid => _ordFids.indexOf(fid)).filter(i => i >= 0), 999);
+    return aMin - bMin;
+  });
+
+  // Short-circuit: if Claude has nothing left to cover, return preAssigEntries directly
+  if (frangesRestants.length === 0) {
+    const sorted = sortProposta(preAssigEntries);
+    return { proposta: sorted, resum: sorted.map(e => `${e.docent}: ${e.hores}`).join(' | ') };
+  }
+
+  const result = await callClaude([{ role: 'user', content: prompt }], 1600);
+
+  // Post-process: elimina entrades de Claude que solapen fids ja assignats, ordena cronològicament
+  const filtered = (result.proposta || []).map(entry => {
+    const fids = (entry.franges_ids || []).filter(fid => !assignedFids.has(fid));
+    return fids.length ? { ...entry, franges_ids: fids } : null;
+  }).filter(Boolean);
+  result.proposta = sortProposta([...preAssigEntries, ...filtered]);
+
+  return result;
 }
 
 export async function proposarCoberturaCella(grup, hora, fid, temps, docents, normes) {
@@ -471,6 +650,13 @@ REGLA CRÍTICA: Si el docent no té res assignat en una franja però SÍ és al 
 "Lliure" és EXCLUSIU per quan el docent no ve al centre aquell dia.
 
 JSON: {"nom":"Nom","rol":"tutor","grup_principal":"G1","horari":{"dilluns":${diaTemplate},"dimarts":${diaTemplate},"dimecres":${diaTemplate},"dijous":${diaTemplate},"divendres":${diaTemplate}},"tp_franges":["divendres-${tpExId}"]}`;
+
+  if (mimeType === 'text/plain') {
+    return callClaude([{
+      role: 'user',
+      content: [{ type: 'text', text: `${prompt}\n\nCONTINGUT DE L'ARXIU WORD:\n${base64}` }],
+    }], 2000);
+  }
 
   const isImage = mimeType.startsWith('image/');
   const fileBlock = isImage
