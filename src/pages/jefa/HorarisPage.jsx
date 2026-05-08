@@ -262,15 +262,23 @@ export default function HorarisPage() {
           <p>Gestiona el personal: horaris, correus i accés</p>
         </div>
         {isOriol ? (
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 4 }}>
             <button
-              className="btn btn-sm"
-              style={viewMode === 'personal' ? { background: 'var(--ink)', color: '#fff', border: 'none', fontWeight: 600 } : {}}
+              style={{
+                padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s',
+                background: viewMode === 'personal' ? 'var(--surface)' : 'transparent',
+                color: viewMode === 'personal' ? 'var(--ink)' : 'var(--ink-3)',
+                boxShadow: viewMode === 'personal' ? '0 1px 4px rgba(0,0,0,.12)' : 'none',
+              }}
               onClick={() => setViewMode('personal')}
             >👥 Personal</button>
             <button
-              className="btn btn-sm"
-              style={viewMode === 'grups' ? { background: 'var(--ink)', color: '#fff', border: 'none', fontWeight: 600 } : {}}
+              style={{
+                padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s',
+                background: viewMode === 'grups' ? 'var(--surface)' : 'transparent',
+                color: viewMode === 'grups' ? 'var(--ink)' : 'var(--ink-3)',
+                boxShadow: viewMode === 'grups' ? '0 1px 4px rgba(0,0,0,.12)' : 'none',
+              }}
               onClick={() => setViewMode('grups')}
             >📚 Grups</button>
           </div>
