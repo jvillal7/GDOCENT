@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, FRANJES_ORIOL, DIES } from '../../lib/constants';
 import { initials, avatarColor, rolLabel } from '../../lib/utils';
@@ -130,16 +131,30 @@ export default function HorarisPage() {
   }
 
   async function handleFiles(files) {
-    const ACCEPTED = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
-    const pdfs = Array.from(files).filter(f => ACCEPTED.includes(f.type));
+    const ACCEPTED = [
+      'application/pdf', 'image/png', 'image/jpeg', 'image/webp',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    const pdfs = Array.from(files).filter(f => ACCEPTED.includes(f.type) || f.name.endsWith('.docx'));
     if (!pdfs.length) return;
     for (const file of pdfs) {
       const id = Date.now() + Math.random();
       setUploads(prev => [...prev, { id, name: file.name, status: 'loading', msg: 'Llegint arxiu...' }]);
       try {
-        const base64 = await fileToBase64(file);
+        const isDocx = file.name.endsWith('.docx') || file.type.includes('wordprocessingml');
+        let base64, mimeType;
+        if (isDocx) {
+          setUploads(prev => prev.map(u => u.id === id ? { ...u, msg: 'Convertint Word...' } : u));
+          const arrayBuffer = await file.arrayBuffer();
+          const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+          base64 = html;
+          mimeType = 'text/plain';
+        } else {
+          base64 = await fileToBase64(file);
+          mimeType = file.type;
+        }
         setUploads(prev => prev.map(u => u.id === id ? { ...u, msg: 'IA analitzant...' } : u));
-        const result = await extractHorariFromPDF(base64, franjes, file.type);
+        const result = await extractHorariFromPDF(base64, franjes, mimeType);
         setUploads(prev => prev.map(u => u.id === id ? { ...u, status: 'done', msg: 'Llest' } : u));
         setConfirm(result);
         await new Promise(resolve => {
@@ -387,10 +402,10 @@ export default function HorarisPage() {
             style={{ border: '2px dashed var(--border-2)', borderRadius: 'var(--r)', padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: 'var(--bg)', marginBottom: 12 }}
             onClick={() => fileRef.current?.click()}
           >
-            <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+            <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF o foto de l'horari</div>
-            <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF · PNG · JPG · Pots pujar-ne diversos alhora</div>
+            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF, foto o Word de l'horari</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF · PNG · JPG · DOCX · Pots pujar-ne diversos alhora</div>
           </div>
           {uploads.map(u => (
             <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 8 }}>
