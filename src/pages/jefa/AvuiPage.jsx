@@ -275,7 +275,7 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                       {bloc.hora}
                     </Td>
                   )}
-                  <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{franja?.sub}</Td>
+                  <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{(franja?.sub || '').split(' · ')[0]}</Td>
                   {items.map(item => {
                     const sp = spans[item]?.[fid] || {};
                     if (sp.skip) return null;

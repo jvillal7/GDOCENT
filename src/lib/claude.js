@@ -45,7 +45,7 @@ function isSuportVal(v) { return SUPORT_KW.some(k => v === k || v.startsWith(k +
 
 function estatHorari(val) {
   const v = (val || '').toLowerCase().trim();
-  if (v === 'lliure' || v === 'libre' || v === 'absent' || v === 'fora' || v.includes('ceepsir')) return { estat: 'fora', text: v.includes('ceepsir') ? 'FORA (CEEPSIR — assistència externa)' : 'FORA del centre' };
+  if (v === 'lliure' || v === 'libre' || v === 'absent' || v === 'fora' || v.includes('ceepsir') || v.includes('piscina')) return { estat: 'fora', text: v.includes('ceepsir') ? 'FORA (CEEPSIR — assistència externa)' : v.includes('piscina') ? 'FORA (Piscina — fora del centre)' : 'FORA del centre' };
   if (!v)                   return { estat: 'lliure', text: 'lliure al centre' };
   if (TP_KW.includes(v))    return { estat: 'tp',     text: 'TP (pot cobrir amb deute)' };
   if (isCoordVal(v))        return { estat: 'carec',  text: `Càrrec: ${val}` };
@@ -646,6 +646,7 @@ VALORS PERMESOS — usa'ls exactament:
 • "càrrec X" → Càrrec directiu (ex: "càrrec direcció")
 • "Racons X" → Sessió de racons (ex: "Racons 3")
 • "CEEPSIR" → docent fora del centre fent assistència a altres escoles (no disponible per cobrir)
+• "Piscina" → docent/grup fora del centre (activitat aquàtica externa, no disponible per cobrir)
 
 REGLA CRÍTICA: Si el docent no té res assignat en una franja però SÍ és al centre → usa "" (buit), MAI "Lliure".
 "Lliure" és EXCLUSIU per quan el docent no ve al centre aquell dia.

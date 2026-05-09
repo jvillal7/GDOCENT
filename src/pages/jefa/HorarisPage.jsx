@@ -18,6 +18,12 @@ const NIVELLS = [
       return (ord[(a.d.grup_principal||'').toLowerCase()] ?? 9) - (ord[(b.d.grup_principal||'').toLowerCase()] ?? 9);
     }
   },
+  { key: 'tutors_cee', label: 'Tutors/es',             match: (g, d) => d.rol === 'tutor' && (/^G\d+/i.test((g||'').trim()) || /^MxI$/i.test((g||'').trim())),
+    sort: (a, b) => {
+      const g2n = g => /^MxI$/i.test((g||'').trim()) ? 999 : parseInt((g||'').match(/\d+/)?.[0] || '99');
+      return g2n(a.d.grup_principal) - g2n(b.d.grup_principal);
+    }
+  },
   { key: 'i3',   label: 'I3',                          match: (g)    => /^I3/i.test((g||'').trim()) },
   { key: 'i4',   label: 'I4',                          match: (g)    => /^I4/i.test((g||'').trim()) },
   { key: 'i5',   label: 'I5',                          match: (g)    => /^I5/i.test((g||'').trim()) },
@@ -44,21 +50,25 @@ const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
 
 function isCoord(v) { return COORD_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
 
+function isTP(v) { return /^tp\b/i.test(v) || v === 'treball personal'; }
+
 function cellBg(val) {
   const v = (val || '').toLowerCase().trim();
-  if (v === 'tp' || v === 'treball personal') return 'var(--amber-bg)';
+  if (isTP(v)) return 'var(--amber-bg)';
   if (isCoord(v)) return 'var(--purple-bg)';
   if (v === 'lliure' || v === 'libre' || v === '') return 'var(--green-bg)';
   if (v === 'pati' || v.startsWith('pati')) return 'var(--bg-3)';
+  if (v.includes('piscina')) return '#EBF5FB';
   if (val) return 'var(--blue-bg)';
   return 'var(--green-bg)';
 }
 
 function cellColor(val) {
   const v = (val || '').toLowerCase().trim();
-  if (v === 'tp' || v === 'treball personal') return 'var(--amber)';
+  if (isTP(v)) return 'var(--amber)';
   if (isCoord(v)) return 'var(--purple)';
   if (v === 'lliure' || v === 'libre' || v === '') return 'var(--green)';
+  if (v.includes('piscina')) return '#1A6E9F';
   return 'var(--ink-2)';
 }
 
@@ -137,6 +147,16 @@ export default function HorarisPage() {
     catch (e) { console.error(e); }
   }
 
+  async function handleCellSave(docent, dia, fid, value) {
+    const updatedHorari = { ...docent.horari, [dia]: { ...docent.horari?.[dia], [fid]: value } };
+    const updated = { ...docent, horari: updatedHorari };
+    try {
+      await api.saveDocent(updated);
+      setDocents(prev => prev.map(d => d.id === docent.id ? updated : d));
+      showToast(`✓ ${docent.nom} actualitzat`);
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
   async function handleFiles(files) {
     const ACCEPTED = [
       'application/pdf', 'image/png', 'image/jpeg', 'image/webp',
@@ -180,7 +200,7 @@ export default function HorarisPage() {
     const tpFranges = [];
     Object.entries(horari).forEach(([dia, franjes]) => {
       Object.entries(franjes || {}).forEach(([franja, val]) => {
-        if ((val || '').toLowerCase() === 'tp' || (val || '').toLowerCase() === 'treball personal') {
+        if (isTP((val || '').toLowerCase())) {
           tpFranges.push(`${dia}-${franja}`);
         }
       });
@@ -299,7 +319,7 @@ export default function HorarisPage() {
       </div>
 
       {viewMode === 'grups' && isOriol && (
-        <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} />
+        <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} onCellSave={handleCellSave} />
       )}
       {(viewMode !== 'grups' || !isOriol) && (<>
 
@@ -406,8 +426,13 @@ export default function HorarisPage() {
                               <span style={{ fontSize: 9.5, background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>CEEPSIR</span>
                             )}
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                            {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                              {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
+                            </span>
+                            {d.rol === 'tutor' && d.grup_principal?.trim() && (
+                              <span style={{ fontSize: 15, background: 'var(--green-bg)', color: 'var(--green)', borderRadius: 5, padding: '2px 7px', fontWeight: 700 }}>{d.grup_principal.trim()}</span>
+                            )}
                           </div>
                           {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
                         </div>
@@ -421,7 +446,7 @@ export default function HorarisPage() {
                           <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => confirmarEliminar(d.id, d.nom)}>✕</button>
                         </div>
                       </div>
-                      {isOpen && teHorari && <HorariInline horari={d.horari} tpFranges={d.tp_franges} franjes={franjes} />}
+                      {isOpen && teHorari && <HorariInline horari={d.horari} tpFranges={d.tp_franges} franjes={franjes} onCellSave={(dia, fid, val) => handleCellSave(d, dia, fid, val)} />}
                     </div>
                   );
                 })}
@@ -468,20 +493,33 @@ export default function HorarisPage() {
   );
 }
 
-function HorariInline({ horari, tpFranges = [], franjes }) {
+function HorariInline({ horari, tpFranges = [], franjes, onCellSave }) {
+  const [editing, setEditing] = useState(null);
+  const [editVal, setEditVal] = useState('');
   const tpSet = new Set(Array.isArray(tpFranges) ? tpFranges : []);
   const horaGroups = {};
   franjes.forEach(f => { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
   const thS = { padding: '4px 4px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 9, fontWeight: 600, color: 'var(--ink-3)', textAlign: 'center', whiteSpace: 'nowrap' };
   const tdS = { padding: '4px 5px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 9, color: 'var(--ink-3)', whiteSpace: 'nowrap' };
+
+  function startEdit(dia, fid, currentVal) {
+    setEditing({ dia, fid });
+    setEditVal(currentVal);
+  }
+  function commitEdit(dia, fid, original) {
+    if (onCellSave && editVal !== original) onCellSave(dia, fid, editVal);
+    setEditing(null);
+  }
+
   return (
     <div style={{ padding: '0 12px 12px', background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
-        {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati']].map(([bg,bc,lbl]) => (
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati'],['#EBF5FB','#A9D4EC','Piscina']].map(([bg,bc,lbl]) => (
           <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, color: 'var(--ink-3)' }}>
             <span style={{ width: 7, height: 7, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />{lbl}
           </span>
         ))}
+        {onCellSave && <span style={{ fontSize: 9, color: 'var(--ink-4)', marginLeft: 4 }}>· Clic a una cel·la per editar</span>}
       </div>
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 440 }}>
@@ -505,11 +543,26 @@ function HorariInline({ horari, tpFranges = [], franjes }) {
                   {DIES.map(dia => {
                     const raw = horari?.[dia]?.[f.id] || '';
                     const val = raw || (tpSet.has(`${dia}-${f.id}`) ? 'TP' : '');
+                    const isEdit = editing?.dia === dia && editing?.fid === f.id;
                     return (
-                      <td key={dia} style={{ padding: '3px 3px', border: '1px solid var(--border)', background: cellBg(val), textAlign: 'center', minWidth: 60 }}>
-                        <span style={{ fontSize: 9, color: cellColor(val), fontWeight: val ? 500 : 400 }}>
-                          {val || ''}
-                        </span>
+                      <td key={dia} style={{ padding: 0, border: '1px solid var(--border)', background: isEdit ? 'var(--surface)' : cellBg(val), textAlign: 'center', minWidth: 60 }}>
+                        {isEdit ? (
+                          <input
+                            autoFocus
+                            value={editVal}
+                            onChange={e => setEditVal(e.target.value)}
+                            onBlur={() => commitEdit(dia, f.id, val)}
+                            onKeyDown={e => { if (e.key === 'Enter') commitEdit(dia, f.id, val); if (e.key === 'Escape') setEditing(null); }}
+                            style={{ width: '100%', border: 'none', outline: '2px solid var(--blue)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '4px 2px', color: 'var(--ink)' }}
+                          />
+                        ) : (
+                          <span
+                            onClick={() => onCellSave && startEdit(dia, f.id, val)}
+                            style={{ fontSize: 9, color: cellColor(val), fontWeight: val ? 500 : 400, display: 'block', padding: '4px 3px', cursor: onCellSave ? 'text' : 'default', minHeight: 20 }}
+                          >
+                            {val || ''}
+                          </span>
+                        )}
                       </td>
                     );
                   })}
@@ -574,7 +627,9 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   function handleSave() {
     if (!nom.trim()) return alert('Introdueix el nom del docent.');
     if (!pin.trim() || pin.length !== 4 || !/^\d{4}$/.test(pin)) return alert('El PIN ha de ser de 4 dígits.');
-    onSave({ id: data.id, nom, rol, grup_principal: grup, horari, pin, email: email.trim() || null });
+    // Si el grup principal és G1–G14 o MxI, el rol ha de ser tutor sempre
+    const rolFinal = /^G\d+/i.test(grup.trim()) || /^MxI$/i.test(grup.trim()) ? 'tutor' : rol;
+    onSave({ id: data.id, nom, rol: rolFinal, grup_principal: grup, horari, pin, email: email.trim() || null });
   }
 
   // Group franjes by hora for rowspan
@@ -758,7 +813,40 @@ function matchesGrup(val, grup) {
   return new RegExp('\\b' + escaped + '\\b').test(v);
 }
 
-function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
+function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave }) {
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editing, setEditing] = useState(null); // { nom, dia, fid, currentVal }
+  const [editVal, setEditVal] = useState('');
+  const [addingEntry, setAddingEntry] = useState(null); // { dia, fid }
+  const [addVal, setAddVal] = useState('');
+
+  function startGroupEdit(nom, dia, fid, currentVal) {
+    setAddingEntry(null);
+    setEditing({ nom, dia, fid, currentVal });
+    setEditVal(currentVal);
+  }
+  function commitGroupEdit() {
+    if (!editing || !onCellSave) { setEditing(null); return; }
+    const docent = docents.find(d => d.nom === editing.nom);
+    if (docent && editVal !== editing.currentVal) onCellSave(docent, editing.dia, editing.fid, editVal);
+    setEditing(null);
+  }
+  function startAddEntry(dia, fid) {
+    setEditing(null);
+    setAddingEntry({ dia, fid });
+    setAddVal('');
+  }
+  function commitAddEntry() {
+    if (!addingEntry || !onCellSave || !addVal.trim()) { setAddingEntry(null); setAddVal(''); return; }
+    const target = docents.find(d =>
+      d.nom.toLowerCase() === addVal.toLowerCase() ||
+      oriolInitials(d.nom).toLowerCase() === addVal.toLowerCase().trim()
+    );
+    if (target) onCellSave(target, addingEntry.dia, addingEntry.fid, selectedGrup);
+    setAddingEntry(null);
+    setAddVal('');
+  }
+
   const grupHorari = useMemo(() => {
     const result = {};
     DIES.forEach(dia => {
@@ -775,6 +863,11 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
     });
     return result;
   }, [docents, franjes, selectedGrup]);
+
+  const tutor = useMemo(() =>
+    docents.find(d => d.rol === 'tutor' && d.grup_principal?.trim().startsWith(selectedGrup)),
+    [docents, selectedGrup]
+  );
 
   const visibleFranjes = franjes.filter(f => !f.lliure);
   const horaGroups = {};
@@ -808,7 +901,19 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
       <div className="card">
         <div className="card-head">
           <h3>Horari del {selectedGrup}</h3>
-          <span className="sp sp-blue">Docents assignats per franja</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {onCellSave && (
+              <button
+                className="btn btn-sm"
+                style={isEditMode
+                  ? { background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 12, fontWeight: 600 }
+                  : { background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12, fontWeight: 600 }
+                }
+                onClick={() => { setIsEditMode(o => !o); setEditing(null); }}
+              >{isEditMode ? '✓ Fet' : '✏️ Editar'}</button>
+            )}
+            <span className="sp sp-blue">Professionals assignats per franja</span>
+          </div>
         </div>
         {docents.length === 0 ? (
           <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
@@ -835,31 +940,95 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
                       <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
                       {DIES.map(dia => {
                         const entries = grupHorari[dia]?.[f.id] || [];
+                        const tutorRawVal    = tutor?.horari?.[dia]?.[f.id] || '';
+                        const tutorVal       = tutorRawVal.toLowerCase();
+                        const isGrupPiscina  = tutorVal.includes('piscina');
+                        const isGrupCeepsir  = tutorVal.includes('ceepsir');
+                        const isGrupActivity = isGrupPiscina || isGrupCeepsir;
+                        const isTutorTrivial = !tutorRawVal || tutorVal === 'lliure' || tutorVal === 'libre' || tutorVal.startsWith('pati') || /^tp\b/i.test(tutorVal);
+                        const showTutorPresence = !isTutorTrivial && !isGrupActivity;
                         const rolBadge = e => extractBadge(e.nom) || (e.rol === 'msuport' ? 'SUP' : null);
                         const primaris = entries.filter(e => !rolBadge(e));
                         const suports  = entries.filter(e =>  rolBadge(e));
-                        return (
-                          <td key={dia} style={{ padding: '3px 4px', border: '1px solid var(--border)', background: entries.length ? 'var(--blue-bg)' : 'var(--bg)', textAlign: 'center', minWidth: 80, overflow: 'visible' }}>
-                            {entries.length ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                                {primaris.map((e, i) => (
-                                  <div key={i} title={e.nom} style={{ fontSize: 9.5, color: 'var(--ink-2)', fontWeight: 700, lineHeight: 1.3, whiteSpace: 'nowrap' }}>
-                                    {oriolInitials(e.nom)}
-                                  </div>
-                                ))}
-                                {suports.map((e, i) => {
-                                  const badge = rolBadge(e);
-                                  const { bg, color } = badgeStyle(badge);
-                                  return (
-                                    <div key={i} title={e.nom} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, lineHeight: 1.3, whiteSpace: 'nowrap' }}>
-                                      <span style={{ fontSize: 9, color, fontWeight: 600 }}>{oriolInitials(e.nom)}</span>
-                                      <span style={{ fontSize: 7.5, background: bg, color, borderRadius: 3, padding: '0 2px', fontWeight: 700, flexShrink: 0 }}>{badge}</span>
-                                    </div>
-                                  );
-                                })}
+                        const renderEntry = (e, i, isSup) => {
+                          const isEditing = isEditMode && editing?.nom === e.nom && editing?.dia === dia && editing?.fid === f.id;
+                          const badge = isSup ? rolBadge(e) : null;
+                          const { bg, color } = badge ? badgeStyle(badge) : {};
+                          if (isEditing) {
+                            return (
+                              <input
+                                key={i}
+                                autoFocus
+                                value={editVal}
+                                onChange={ev => setEditVal(ev.target.value)}
+                                onBlur={commitGroupEdit}
+                                onKeyDown={ev => { if (ev.key === 'Enter') commitGroupEdit(); if (ev.key === 'Escape') setEditing(null); }}
+                                style={{ width: 70, border: 'none', outline: '2px solid var(--blue)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px 2px', color: 'var(--ink)' }}
+                              />
+                            );
+                          }
+                          if (isSup) {
+                            return (
+                              <div key={i} title={e.nom}
+                                onClick={() => isEditMode && startGroupEdit(e.nom, dia, f.id, e.val)}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 2, lineHeight: 1.3, whiteSpace: 'nowrap', cursor: isEditMode ? 'text' : 'default' }}>
+                                <span style={{ fontSize: 9, color, fontWeight: 600 }}>{oriolInitials(e.nom)}</span>
+                                <span style={{ fontSize: 7.5, background: bg, color, borderRadius: 3, padding: '0 2px', fontWeight: 700, flexShrink: 0 }}>{badge}</span>
                               </div>
-                            ) : (
+                            );
+                          }
+                          return (
+                            <div key={i} title={e.nom}
+                              onClick={() => isEditMode && startGroupEdit(e.nom, dia, f.id, e.val)}
+                              style={{ fontSize: 9.5, color: 'var(--ink-2)', fontWeight: 700, lineHeight: 1.3, whiteSpace: 'nowrap', cursor: isEditMode ? 'text' : 'default' }}>
+                              {oriolInitials(e.nom)}
+                            </div>
+                          );
+                        };
+                        return (
+                          <td key={dia} style={{ padding: '3px 4px', border: '1px solid var(--border)', background: isGrupPiscina ? '#EBF5FB' : isGrupCeepsir ? 'var(--blue-bg)' : entries.length ? 'var(--blue-bg)' : showTutorPresence ? 'var(--bg-2)' : isEditMode ? 'var(--bg-2)' : 'var(--bg)', textAlign: 'center', minWidth: 80, overflow: 'visible' }}>
+                            {isGrupActivity && (
+                              <span style={{ fontSize: 9, fontWeight: 700, color: isGrupPiscina ? '#1A6E9F' : 'var(--blue)', display: 'block', marginBottom: entries.length ? 2 : 0 }}>
+                                {isGrupPiscina ? '🏊 Piscina' : 'CEEPSIR'}
+                              </span>
+                            )}
+                            {entries.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                {primaris.map((e, i) => renderEntry(e, i, false))}
+                                {suports.map((e, i) => renderEntry(e, i, true))}
+                              </div>
+                            )}
+                            {entries.length === 0 && !isGrupActivity && !isEditMode && !showTutorPresence && (
                               <span style={{ fontSize: 9, color: 'var(--ink-4)' }}>—</span>
+                            )}
+                            {entries.length === 0 && showTutorPresence && !isEditMode && (
+                              <span style={{ fontSize: 8.5, color: 'var(--ink-2)', fontWeight: 600, display: 'block', lineHeight: 1.3 }}>
+                                {tutorRawVal}
+                              </span>
+                            )}
+                            {isEditMode && (
+                              addingEntry?.dia === dia && addingEntry?.fid === f.id ? (
+                                <>
+                                  <input
+                                    autoFocus
+                                    list="grups-docents-list"
+                                    value={addVal}
+                                    onChange={ev => setAddVal(ev.target.value)}
+                                    onBlur={commitAddEntry}
+                                    onKeyDown={ev => { if (ev.key === 'Enter') commitAddEntry(); if (ev.key === 'Escape') { setAddingEntry(null); setAddVal(''); } }}
+                                    placeholder="Nom..."
+                                    style={{ width: 70, border: 'none', outline: '2px solid var(--green)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
+                                  />
+                                  <datalist id="grups-docents-list">
+                                    {docents.map(d => <option key={d.id} value={d.nom} />)}
+                                  </datalist>
+                                </>
+                              ) : (
+                                <span
+                                  onClick={() => startAddEntry(dia, f.id)}
+                                  style={{ fontSize: 11, color: 'var(--green)', cursor: 'pointer', display: 'block', padding: '1px 0', lineHeight: 1 }}
+                                >+</span>
+                              )
                             )}
                           </td>
                         );

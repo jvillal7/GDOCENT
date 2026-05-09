@@ -109,20 +109,20 @@ export const SIEI_ALUMNES = {
 };
 
 // ── CA N'ORIOL — horari específic ──────────────────────────────────────────
-// Matí: 9:30–13:00  |  Pati A: 10:30–11:00  |  Pati B: 11:00–11:30
+// Matí: 9:30–13:00  |  Pati A (Infantil/Primària): 11:00–11:30  |  Pati B (Secundària): 11:30–12:00
 // Tarda: 15:00–16:30
 export const FRANJES_ORIOL = [
   { id: 'o1a',    label: '1a hora', sub: '9:30–10:00',  hora: '1a hora' },
   { id: 'o1b',    label: '1a hora', sub: '10:00–10:30', hora: '1a hora' },
-  { id: 'opatiA', label: 'Pati A',  sub: '10:30–11:00', hora: 'Pati A',  patio: true },
-  { id: 'opatiB', label: 'Pati B',  sub: '11:00–11:30', hora: 'Pati B',  patio: true },
-  { id: 'o3a',    label: '3a hora', sub: '11:30–12:00', hora: '3a hora' },
-  { id: 'o3b',    label: '3a hora', sub: '12:00–12:30', hora: '3a hora' },
-  { id: 'o3c',    label: '3a hora', sub: '12:30–13:00', hora: '3a hora' },
+  { id: 'o2a',    label: '2a hora', sub: '10:30–11:00', hora: '2a hora' },
+  { id: 'opatiA', label: 'Pati A',  sub: '11:00–11:30 · Infantil/Primària', hora: 'Pati A', patio: true },
+  { id: 'opatiB', label: 'Pati B',  sub: '11:30–12:00 · Secundària',        hora: 'Pati B', patio: true },
+  { id: 'o3a',    label: '3a hora', sub: '12:00–12:30', hora: '3a hora' },
+  { id: 'o3b',    label: '3a hora', sub: '12:30–13:00', hora: '3a hora' },
   { id: 'o4',     label: 'Dinar',   sub: '13:00–15:00', hora: 'Dinar',   lliure: true },
-  { id: 'o5a',    label: 'Tarda', sub: '15:00–15:30', hora: 'Tarda' },
-  { id: 'o5b',    label: 'Tarda', sub: '15:30–16:00', hora: 'Tarda' },
-  { id: 'o5c',    label: 'Tarda', sub: '16:00–16:30', hora: 'Tarda' },
+  { id: 'o5a',    label: 'Tarda',   sub: '15:00–15:30', hora: 'Tarda' },
+  { id: 'o5b',    label: 'Tarda',   sub: '15:30–16:00', hora: 'Tarda' },
+  { id: 'o5c',    label: 'Tarda',   sub: '16:00–16:30', hora: 'Tarda' },
 ];
 
 export const SCHOOL_FRANJES_ORIOL = FRANJES_ORIOL.filter(f => !f.lliure);
@@ -131,9 +131,10 @@ export const GRUPS_ORIOL = ['G1','G2','G3','G4','G5','G6','G7','G8','G9','G10','
 
 export const BLOCS_ORIOL = [
   { hora: '1a hora', slots: ['o1a','o1b'] },
+  { hora: '2a hora', slots: ['o2a'] },
   { hora: 'Pati A',  slots: ['opatiA'] },
   { hora: 'Pati B',  slots: ['opatiB'] },
-  { hora: '3a hora', slots: ['o3a','o3b','o3c'] },
+  { hora: '3a hora', slots: ['o3a','o3b'] },
   { hora: 'Dinar',   slots: ['o4'] },
-  { hora: 'Tarda', slots: ['o5a','o5b','o5c'] },
+  { hora: 'Tarda',   slots: ['o5a','o5b','o5c'] },
 ];
