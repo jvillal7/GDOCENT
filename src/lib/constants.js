@@ -127,7 +127,7 @@ export const FRANJES_ORIOL = [
 
 export const SCHOOL_FRANJES_ORIOL = FRANJES_ORIOL.filter(f => !f.lliure);
 
-export const GRUPS_ORIOL = ['G1','G2','G3','G4','G5','G6','G7','G8','G9','G10','G11','G12','G13','G14','G15','G16'];
+export const GRUPS_ORIOL = ['G1','G2','G3','G4','G5','G6','G7','G8','G9','G10','G11','G12','G13','G14','MxI'];
 
 export const BLOCS_ORIOL = [
   { hora: '1a hora', slots: ['o1a','o1b'] },

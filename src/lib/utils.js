@@ -3,6 +3,11 @@ import { AVATAR_COLORS, FRANJES, FRANJES_ORIOL, MANAGEMENT_USERS, APP_URL } from
 export const initials = nom =>
   (nom || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
+// Noms Ca N'Oriol guardats com "A.Y (PAE)" o "R.E (MALL)" → retorna "A.Y"
+export function oriolInitials(nom) {
+  return (nom || '').replace(/\s*\(.*?\)/g, '').trim();
+}
+
 export const avatarColor = nom =>
   AVATAR_COLORS[Math.abs((nom || '').length) % AVATAR_COLORS.length];
 
@@ -33,7 +38,7 @@ export function rolLabel(rol) {
     jefa: "Cap d'Estudis", director: 'Director', secretaria: 'Secretaria',
     dev: 'Administrador', teacher: 'Docent',
     tutor: 'Tutor/a', especialista: 'Especialista', ee: 'Ed. Especial', directiu: 'Equip Directiu',
-    educador: 'Educador/a', vetllador: 'Vetllador/a',
+    educador: 'Educador/a', vetllador: 'Vetllador/a', msuport: 'Mestre/a de Suport',
   };
   return map[rol] || rol;
 }

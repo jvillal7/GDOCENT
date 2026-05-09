@@ -2,13 +2,14 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, FRANJES_ORIOL, DIES, GRUPS_ORIOL } from '../../lib/constants';
-import { initials, avatarColor, rolLabel } from '../../lib/utils';
+import { initials, oriolInitials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
 
 const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
 
 const ESPECIALISTES_GRUPS = ['Anglès', 'EF', 'Música', 'EI suport'];
+const PAE_ROLS = ['educador', 'vetllador', 'tei', 'suport'];
 
 const NIVELLS = [
   { key: 'dir',  label: 'Equip Directiu',               match: (g, d) => d.rol === 'directiu',
@@ -28,10 +29,14 @@ const NIVELLS = [
   { key: 'p6',   label: '6è',                          match: (g)    => /^6/i.test((g||'').trim()) },
   { key: 'ef',   label: 'Especialistes · Educació Física', match: (g) => g === 'EF' },
   { key: 'ang',  label: 'Especialistes · Anglès',          match: (g) => g === 'Anglès' },
-  { key: 'mus',  label: 'Especialistes · Música',          match: (g) => g === 'Música' },
+  { key: 'mus',  label: 'Especialistes · Música',          match: (g) => /^música$/i.test((g||'').trim()) },
   { key: 'eis',  label: 'Especialistes · EI Suport',       match: (g) => g === 'EI suport' },
   { key: 'siei', label: 'MESI / SIEI',                     match: (g, d) => d.rol === 'ee' || /MESI|SIEI/i.test(g||'') },
-  { key: 'pae',  label: 'Suport d\'Educació Especial',     match: (g, d) => ['educador','vetllador','tei','suport'].includes(d.rol) },
+  { key: 'mall',  label: 'Especialista · Audició i Llenguatge', match: (g, d) => /MALL/i.test(d.nom || '') },
+  { key: 'estim',   label: "Especialista · Estimulació",    match: (g, d) => /ESTIM/i.test(d.nom || '') },
+  { key: 'evip',    label: 'Especialista · Educació Artística', match: (g, d) => /EVIP/i.test(d.nom || '') },
+  { key: 'msuport', label: 'Mestres de Suport',            match: (g, d) => d.rol === 'msuport' },
+  { key: 'pae',     label: 'Suport d\'Educació Especial',  match: (g, d) => ['educador','vetllador','tei','suport'].includes(d.rol) },
   { key: 'ee',   label: 'Altres',                          match: () => true },
 ];
 
@@ -397,6 +402,9 @@ export default function HorarisPage() {
                                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>→ {baixa.substitut}</span>
                               </>
                             )}
+                            {hasCeepsir(d) && (
+                              <span style={{ fontSize: 9.5, background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>CEEPSIR</span>
+                            )}
                           </div>
                           <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
                             {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
@@ -589,6 +597,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
             <select className="f-ctrl" value={rol} onChange={e => setRol(e.target.value)}>
               <option value="tutor">Tutor/a</option>
               <option value="especialista">Especialista</option>
+              <option value="msuport">Mestre/a de Suport</option>
               <option value="ee">Ed. Especial</option>
               <option value="directiu">Equip Directiu</option>
               <option value="educador">Educador/a</option>
@@ -715,10 +724,38 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew }) {
   );
 }
 
+function hasCeepsir(d) {
+  if (!d.horari) return false;
+  return Object.values(d.horari).some(dia =>
+    Object.values(dia || {}).some(v => (v || '').toLowerCase().includes('ceepsir'))
+  );
+}
+
+function extractBadge(nom) {
+  const m = (nom || '').match(/\(([^)]+)\)/);
+  return m ? m[1] : null;
+}
+
+function badgeStyle(badge) {
+  if (!badge) return {};
+  const b = badge.toUpperCase();
+  if (b === 'PAE')  return { bg: 'var(--purple-bg)', color: 'var(--purple)' };
+  if (b === 'MALL') return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  if (b === 'MUS')   return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
+  if (b === 'ESTIM') return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
+  if (b === 'EVIP')  return { bg: 'var(--red-bg)',    color: 'var(--red)'    };
+  if (b === 'SUP')   return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
+}
+
 function matchesGrup(val, grup) {
   const v = (val || '').trim().toLowerCase();
   const g = grup.toLowerCase();
-  return v === g || v.startsWith(g + ' ') || v.startsWith(g + '-') || v.startsWith(g + '/');
+  if (v === g) return true;
+  if (v.startsWith(g + ' ') || v.startsWith(g + '-') || v.startsWith(g + '/')) return true;
+  // Detecta també "Suport. G9", "G9. Suport", etc.
+  const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('\\b' + escaped + '\\b').test(v);
 }
 
 function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
@@ -731,7 +768,7 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
         docents.forEach(d => {
           const val = d.horari?.[dia]?.[f.id] || '';
           if (matchesGrup(val, selectedGrup)) {
-            result[dia][f.id].push({ nom: d.nom, val });
+            result[dia][f.id].push({ nom: d.nom, val, rol: d.rol });
           }
         });
       });
@@ -798,13 +835,30 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup }) {
                       <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
                       {DIES.map(dia => {
                         const entries = grupHorari[dia]?.[f.id] || [];
+                        const rolBadge = e => extractBadge(e.nom) || (e.rol === 'msuport' ? 'SUP' : null);
+                        const primaris = entries.filter(e => !rolBadge(e));
+                        const suports  = entries.filter(e =>  rolBadge(e));
                         return (
-                          <td key={dia} style={{ padding: '4px 5px', border: '1px solid var(--border)', background: entries.length ? 'var(--blue-bg)' : 'var(--bg)', textAlign: 'center', minWidth: 72 }}>
-                            {entries.length ? entries.map((e, i) => (
-                              <div key={i} title={e.nom} style={{ fontSize: 9.5, color: 'var(--ink-2)', fontWeight: 600, lineHeight: 1.4 }}>
-                                {e.nom.split(' ')[0]}
+                          <td key={dia} style={{ padding: '3px 4px', border: '1px solid var(--border)', background: entries.length ? 'var(--blue-bg)' : 'var(--bg)', textAlign: 'center', minWidth: 80, overflow: 'visible' }}>
+                            {entries.length ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                {primaris.map((e, i) => (
+                                  <div key={i} title={e.nom} style={{ fontSize: 9.5, color: 'var(--ink-2)', fontWeight: 700, lineHeight: 1.3, whiteSpace: 'nowrap' }}>
+                                    {oriolInitials(e.nom)}
+                                  </div>
+                                ))}
+                                {suports.map((e, i) => {
+                                  const badge = rolBadge(e);
+                                  const { bg, color } = badgeStyle(badge);
+                                  return (
+                                    <div key={i} title={e.nom} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, lineHeight: 1.3, whiteSpace: 'nowrap' }}>
+                                      <span style={{ fontSize: 9, color, fontWeight: 600 }}>{oriolInitials(e.nom)}</span>
+                                      <span style={{ fontSize: 7.5, background: bg, color, borderRadius: 3, padding: '0 2px', fontWeight: 700, flexShrink: 0 }}>{badge}</span>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            )) : (
+                            ) : (
                               <span style={{ fontSize: 9, color: 'var(--ink-4)' }}>—</span>
                             )}
                           </td>
