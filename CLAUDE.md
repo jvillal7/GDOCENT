@@ -2,6 +2,11 @@
 
 SPA de gestió d'absències i cobertures per a centres educatius de primària. Desenvolupat per Jorge Villalba (jvillal7@xtec.cat).
 
+## Context per escola (llegir al principi de cada sessió)
+
+- [`context/rivo-rubeo.md`](context/rivo-rubeo.md) — CEIP Rivo Rubeo: grups, cicles, normes IA, personal especial
+- [`context/canoriol.md`](context/canoriol.md) — CEE Ca N'Oriol: franges, rols MEE/PAE, Piscina, CEEPSIR, MxI, tutors
+
 ## Stack
 
 - **Frontend**: React 18 + Vite, CSS global (`src/index.css`), routing per estat (sense React Router)
