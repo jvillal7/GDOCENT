@@ -34,8 +34,13 @@ Editable des de Personal → ✏️ Editar → "Coordinador/a de cicle". El badg
 
 ## Normes IA (normes_ia a Supabase — font de veritat)
 
-- En primer lloc, si hi ha un mestre que estigui deslliurat de la seva franja perquè el grup que li toca per horari esta de sortida o fent una activitat fora de l'aula/centre, en segon lloc es fa servir el mestre que estigui fent un suport al mateix grup o nivell (per exemple 3r A i 3r B), en tercer lloc, un suport al mateix cicle, en quart lloc un suport d'un altra cicle i continuació desfer suports que tinguin racons i tallers.
-- Si la norma 1 no la pots complir, assigna un mestre que en aquella franja tingui TP (Treball Personal, 2h setmanals pròpies). Cobrirà l'absència però se li generarà un deute de TP que caldrà retornar-li.
+- NORMA 1 — DOCENT ALLIBERAT PER SORTIDA: Si un docent tenia classe en aquella franja però el seu grup és de sortida o activitat fora del centre i el docent es queda a l'escola, queda lliure i és la primera opció per cobrir. No genera deute TP.
+- NORMA 2 — RACONS (desdoblament de matí per nivells): Els racons són desdoblaments on un especialista agafa alumnes de dos grups del mateix nivell (ex: Racons 1 = 1r, Racons 2 = 2n) i les tutores es queden amb menys alumnes a l'aula. Si falta un TUTOR el dia de racons: l'especialista que feia el racó d'aquell nivell assumeix el grup de la tutora absent i no es fa el desdoblament — és la primera opció, no genera TP. Si no es fan els racons igualment, la mateixa persona va a cobrir la tutora. Si falta l'ESPECIALISTA que fa el racó: no es fa el racó, cada tutora es queda amb el seu grup complet sense desdoblar — NO cal cobrir l'especialista.
+- NORMA 3 — TALLERS (tarda, alumnes barrejats per cicle): Els tallers de tarda barregen alumnes del mateix cicle en grups de 12-15 amb diversos docents. Si falta un TUTOR: el seu taller no es fa i els seus alumnes es distribueixen als altres tallers del cicle — NO cal cobrir la docència. SÍ cal assignar un docent disponible els primers 15 min (15:00-15:15) i els últims (16:15-16:30) per fer l'entrada, repartiment de grups, recollida i retorn a les famílies. Si falta un ESPECIALISTA que fa tallers: el seu taller no es fa i els seus alumnes es queden al taller de la seva tutora — NO cal cobrir l'especialista.
+- NORMA 4 — SUPORT DIRECTE AL GRUP/NIVELL: Usar el docent que en aquella franja fa suport al mateix grup o nivell que el docent absent (ex: si falta el tutor de 3rA, buscar qui fa suport a 3rA o 3rB). No genera deute TP.
+- NORMA 5 — SUPORT AL MATEIX CICLE: Usar el docent que fa suport dins el mateix cicle (Petits: I3-I5 / Mitjans: 1r-3r / Grans: 4t-6è). No genera deute TP.
+- NORMA 6 — SUPORT A CICLE DIFERENT: Usar el docent que fa suport a un cicle diferent. No genera deute TP però és menys ideal.
+- NORMA 7 — TP: Si cap de les normes anteriors es pot complir, assigna un mestre que en aquella franja tingui TP (Treball Personal, 2h setmanals pròpies). Cobrirà l'absència però se li generarà un deute de TP que caldrà retornar-li.
 - IMPORTANT: Lliure a l'horari significa que el docent NO és al centre en aquella franja. No es pot utilitzar mai per cobrir. Lliure = absent del centre.
 - Els especialistes (EF, Anglès, Música, EI Suport, MESI) poden cobrir si en aquella franja tenen una activitat al centre però no tenen grup assignat en aquell moment.
 - Els docents en Càrrec només com a últim recurs (SÍ genera deute). Docent amb coordinació no poden ser contemplats.
@@ -43,12 +48,11 @@ Editable des de Personal → ✏️ Editar → "Coordinador/a de cicle". El badg
 - Educadores (Sònia, Leyre): la seva funció és suport a alumnes específics, no docència general.
 - Vetlladors (Víctor, Isa, Sandra): ídem.
 - Personal SIEI/SIEI+ (Aurora, Clara): atenció als alumnes SIEI, no substituïbles.
-- Preferir tutors del mateix cicle.
 - Màxim 2 hores la mateixa persona per cobrir una absència.
 - Cap membre de l'equip PAE ni Vetlladores no poden cobrir tutors en cap cas.
-- L'equip directiu en cas d'estar fent Equip directiu o coordinació no pot estar disponible. En canvi, sí entren a disposició si són hores de suport.
-- DESDOBLAMENT O MIG GRUP: Quan un mestre té un Desdoblament o Mig grup del MATEIX NIVELL/CICLE que el docent absent → passa de tenir mig grup a tenir el grup complet → NO genera deute TP. PRIORITZAR per davant de qualsevol docent que faci TP.
-- TP CONVALIDACIÓ: Si un especialista cobreix una franja on tenia TP però té una franja de pati o lliure ADJACENT (just abans o just després) dins la mateixa sessió → pot compensar el TP sense generar deute real. Marcar tp_afectat: false, motiu 'TP compensat per franja adjacent lliure'.
+- L'equip directiu en cas d'estar fent Equip directiu o coordinació no pot estar disponible. En canvi, sí que entrarien a disposició si són hores de suport.
+- DESDOBLAMENT O MIG GRUP: Quan un mestre té un Desdoblament o un Mig grup del MATEIX NIVELL o CICLE que el docent absent, passa de tenir mig grup a tenir el grup complet i NO genera deute de TP. PRIORITZAR per davant de qualsevol docent que faci TP.
+- TP CONVALIDACIÓ: Si un especialista cobreix una franja on tenia TP però té una franja de pati o lliure ADJACENT (just abans o just després) dins la mateixa sessió, pot compensar el TP sense generar deute real. Marcar tp_afectat: false, motiu 'TP compensat per franja adjacent lliure'.
 
 ## Notes especials
 
