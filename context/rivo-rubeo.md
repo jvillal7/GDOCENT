@@ -42,16 +42,16 @@ Editable des de Personal → ✏️ Editar → "Coordinador/a de cicle". El badg
 - NORMA 6 — SUPORT A CICLE DIFERENT: Usar el docent que fa suport a un cicle diferent. No genera deute TP però és menys ideal.
 - NORMA 7 — TP: Si cap de les normes anteriors es pot complir, assigna un mestre que en aquella franja tingui TP (Treball Personal, 2h setmanals pròpies). Cobrirà l'absència però se li generarà un deute de TP que caldrà retornar-li.
 - IMPORTANT: Lliure a l'horari significa que el docent NO és al centre en aquella franja. No es pot utilitzar mai per cobrir. Lliure = absent del centre.
-- Els especialistes (EF, Anglès, Música, EI Suport, MESI) poden cobrir si en aquella franja tenen una activitat al centre però no tenen grup assignat en aquell moment.
-- Els docents en Càrrec només com a últim recurs (SÍ genera deute). Docent amb coordinació no poden ser contemplats.
+- Els especialistes (EF, Anglès, Música, EI Suport) poden cobrir si en aquella franja estan al centre però no tenen grup assignat.
+- Els docents que en una franja tinguin hores de Càrrec o Coordinació (coordinadors de cicle, riscos laborals, informàtica...) NO poden cobrir en aquella franja. Si en canvi la franja és de Suport o grup assignat, llavors sí que poden cobrir.
+- L'equip directiu (direcció, cap d'estudis, secretaria): en franges marcades com Equip directiu o Coordinació NO pot cobrir. En franges de Suport + grup, SÍ pot cobrir: primer al mateix nivell, després al mateix cicle, finalment a qualsevol cicle (com a última instància).
 - Personal MESI: pot cobrir absències generals però és l'ÚLTIMA OPCIÓ. Si hi ha suport regular del mateix cicle disponible, usar-lo primer i NO interrompre la tasca MESI.
 - Educadores (Sònia, Leyre): la seva funció és suport a alumnes específics, no docència general.
-- Vetlladors (Víctor, Isa, Sandra): ídem.
+- Vetlladors (Víctor, Isa, Sandra): la seva funció és suport a alumnes específics, no docència general. No poden cobrir tutors en cap cas.
 - Personal SIEI/SIEI+ (Aurora, Clara): atenció als alumnes SIEI, no substituïbles.
-- Màxim 2 hores la mateixa persona per cobrir una absència.
+- Màxim 2 hores la mateixa persona per cobrir una absència durant la jornada escolar diària (matí + tarda comptabilitzats junts).
 - Cap membre de l'equip PAE ni Vetlladores no poden cobrir tutors en cap cas.
-- L'equip directiu en cas d'estar fent Equip directiu o coordinació no pot estar disponible. En canvi, sí que entrarien a disposició si són hores de suport.
-- DESDOBLAMENT O MIG GRUP: Quan un mestre té un Desdoblament o un Mig grup del MATEIX NIVELL o CICLE que el docent absent, passa de tenir mig grup a tenir el grup complet i NO genera deute de TP. PRIORITZAR per davant de qualsevol docent que faci TP.
+- DESDOBLAMENT O MIG GRUP (fora de Racons i Tallers): Quan un mestre té un Desdoblament o Mig grup del MATEIX NIVELL o CICLE que el docent absent, passa de tenir mig grup a tenir el grup complet i NO genera deute de TP. PRIORITZAR per davant de qualsevol docent que faci TP. Per als casos específics de Racons i Tallers, veure Normes 2 i 3.
 - TP CONVALIDACIÓ: Si un especialista cobreix una franja on tenia TP però té una franja de pati o lliure ADJACENT (just abans o just després) dins la mateixa sessió, pot compensar el TP sense generar deute real. Marcar tp_afectat: false, motiu 'TP compensat per franja adjacent lliure'.
 
 ## Notes especials
