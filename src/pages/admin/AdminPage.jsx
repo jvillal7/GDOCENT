@@ -22,6 +22,8 @@ export default function AdminPage() {
   const [saving,       setSaving]       = useState(false);
   const [loaded,       setLoaded]       = useState(false);
   const [defaultOpen,  setDefaultOpen]  = useState(false);
+  const [dragIdx,      setDragIdx]      = useState(null);
+  const [dragOverIdx,  setDragOverIdx]  = useState(null);
 
   useEffect(() => {
     if (normes !== undefined) {
@@ -79,13 +81,29 @@ export default function AdminPage() {
     await persistItems(newItems);
   }
 
-  async function moveItem(i, dir) {
+  function handleDragStart(i) {
+    setDragIdx(i);
+  }
+
+  function handleDragOver(e, i) {
+    e.preventDefault();
+    if (i !== dragOverIdx) setDragOverIdx(i);
+  }
+
+  async function handleDrop(i) {
+    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setDragOverIdx(null); return; }
     const newItems = [...items];
-    const target = i + dir;
-    if (target < 0 || target >= newItems.length) return;
-    [newItems[i], newItems[target]] = [newItems[target], newItems[i]];
+    const [moved] = newItems.splice(dragIdx, 1);
+    newItems.splice(i, 0, moved);
     setItems(newItems);
+    setDragIdx(null);
+    setDragOverIdx(null);
     await persistItems(newItems);
+  }
+
+  function handleDragEnd() {
+    setDragIdx(null);
+    setDragOverIdx(null);
   }
 
   return (
@@ -149,7 +167,19 @@ export default function AdminPage() {
               )}
 
               {items.map((item, i) => (
-                <div key={i}>
+                <div
+                  key={i}
+                  draggable={editing !== i}
+                  onDragStart={() => handleDragStart(i)}
+                  onDragOver={e => handleDragOver(e, i)}
+                  onDrop={() => handleDrop(i)}
+                  onDragEnd={handleDragEnd}
+                  style={{
+                    borderTop: dragOverIdx === i && dragIdx !== i ? '2px solid var(--blue)' : '2px solid transparent',
+                    opacity: dragIdx === i ? 0.4 : 1,
+                    transition: 'opacity .15s',
+                  }}
+                >
                   {editing === i ? (
                     <EditRow
                       value={draft}
@@ -160,11 +190,13 @@ export default function AdminPage() {
                     />
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span
+                        title="Arrossega per reordenar"
+                        style={{ fontSize: 15, color: 'var(--ink-4)', cursor: 'grab', paddingTop: 1, userSelect: 'none', flexShrink: 0 }}
+                      >⠿</span>
                       <span style={{ fontSize: 12, color: 'var(--ink-4)', fontWeight: 700, minWidth: 20, paddingTop: 2 }}>{i + 1}.</span>
                       <span style={{ flex: 1, fontSize: 13, color: 'var(--ink)', lineHeight: 1.5 }}>{item}</span>
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        <button className="btn btn-sm btn-ghost" style={{ fontSize: 11, padding: '3px 7px' }} onClick={() => moveItem(i, -1)} disabled={i === 0} title="Pujar">↑</button>
-                        <button className="btn btn-sm btn-ghost" style={{ fontSize: 11, padding: '3px 7px' }} onClick={() => moveItem(i, 1)} disabled={i === items.length - 1} title="Baixar">↓</button>
                         <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px', background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)' }} onClick={() => startEdit(i)}>Editar</button>
                         <button className="btn btn-sm btn-ghost" style={{ fontSize: 11, padding: '3px 7px', color: 'var(--red)' }} onClick={() => deleteItem(i)}>✕</button>
                       </div>

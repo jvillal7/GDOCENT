@@ -84,8 +84,29 @@ export default function AppShell() {
               <span style={{ color: 'var(--ink-4)', margin: '0 4px' }}>/</span>
               {title}
             </div>
-            <div className="dtb-right">
+            <div className="dtb-right" style={role === 'jefa' ? { flexDirection: 'column', alignItems: 'flex-end', gap: 10 } : {}}>
               <span className={`role-chip ${chipCls}`}>{chipTxt}</span>
+              {role === 'jefa' && (
+                <button
+                  onClick={() => setPage('dv')}
+                  style={{
+                    background: page === 'dv' ? 'var(--border)' : 'var(--bg-2)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 10,
+                    padding: '7px 14px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: 'var(--ink)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  🤖 Normes IA
+                </button>
+              )}
             </div>
           </header>
           <div className="desk-content"><PageRouter /></div>
@@ -103,6 +124,24 @@ export default function AppShell() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={`role-chip ${chipCls}`}>{chipTxt}</span>
+          {role === 'jefa' && (
+            <button
+              onClick={() => setPage('dv')}
+              style={{
+                background: page === 'dv' ? 'var(--border)' : 'var(--bg-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '5px 9px',
+                fontSize: 16,
+                lineHeight: 1,
+                cursor: 'pointer',
+                color: 'var(--ink)',
+              }}
+              title="Normes IA"
+            >
+              🤖
+            </button>
+          )}
           <button className="ah-menu-btn" onClick={() => setDrawerOpen(true)}>☰</button>
         </div>
       </header>

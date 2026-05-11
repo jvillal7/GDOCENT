@@ -16,10 +16,9 @@
 `I3A, I3B, I4A, I4B, I5A, I5B, 1rA, 1rB, 2nA, 2nB, 3rA, 3rB, 4tA, 4tB, 5eA, 5eB, 6eA, 6eB`
 
 **Cicles:**
-- Infantil: I3, I4, I5
-- Cicle Inicial: 1r, 2n
-- Cicle Mitjà: 3r, 4t
-- Cicle Superior: 5è, 6è
+- Infantil (Petits): I3, I4, I5
+- Cicle de Mitjans: 1r, 2n, 3r
+- Cicle de Grans: 4t, 5è, 6è
 
 ## Coordinadors de cicle
 | Nom | Cicle | Camp BD |
