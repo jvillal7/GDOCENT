@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, FRANJES_ORIOL, DIES, GRUPS_ORIOL } from '../../lib/constants';
+import { FRANJES, FRANJES_ORIOL, DIES, GRUPS_ORIOL, COORDINADORS_CICLE } from '../../lib/constants';
 import { initials, oriolInitials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
@@ -214,6 +214,7 @@ export default function HorarisPage() {
       cobertures_mes: existing?.cobertures_mes || 0,
       pin: data.pin,
       email: data.email || null,
+      coordinador_cicle: data.coordinador_cicle || null,
       ...(existing?.id ? { id: existing.id } : {}),
     };
     try {
@@ -425,6 +426,11 @@ export default function HorarisPage() {
                             {hasCeepsir(d) && (
                               <span style={{ fontSize: 9.5, background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>CEEPSIR</span>
                             )}
+                            {(() => { const cicle = cicleCoordinador(d, isOriol); return cicle ? (
+                              <span style={{ fontSize: 9.5, background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>
+                                Coord. {cicle}
+                              </span>
+                            ) : null; })()}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
@@ -602,11 +608,12 @@ function fileToBase64(file) {
 
 // Inline confirm/edit view for a docent horari
 function ConfirmHorari({ data, onSave, onCancel, franjes }) {
-  const [nom,   setNom]   = useState(data.nom || '');
-  const [rol,   setRol]   = useState(data.rol || 'tutor');
-  const [grup,  setGrup]  = useState(data.grup_principal || '');
-  const [pin,   setPin]   = useState(data.pin || '1234');
-  const [email, setEmail] = useState(data.email || '');
+  const [nom,            setNom]            = useState(data.nom || '');
+  const [rol,            setRol]            = useState(data.rol || 'tutor');
+  const [grup,           setGrup]           = useState(data.grup_principal || '');
+  const [pin,            setPin]            = useState(data.pin || '1234');
+  const [email,          setEmail]          = useState(data.email || '');
+  const [coordCicle,     setCoordCicle]     = useState(data.coordinador_cicle ?? null); // null = no coord, string = coord + cicle
   const [horari, setHorari] = useState(() => {
     const h = {};
     const tpSet = new Set(Array.isArray(data.tp_franges) ? data.tp_franges : []);
@@ -629,7 +636,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
     if (!pin.trim() || pin.length !== 4 || !/^\d{4}$/.test(pin)) return alert('El PIN ha de ser de 4 dígits.');
     // Si el grup principal és G1–G14 o MxI, el rol ha de ser tutor sempre
     const rolFinal = /^G\d+/i.test(grup.trim()) || /^MxI$/i.test(grup.trim()) ? 'tutor' : rol;
-    onSave({ id: data.id, nom, rol: rolFinal, grup_principal: grup, horari, pin, email: email.trim() || null });
+    onSave({ id: data.id, nom, rol: rolFinal, grup_principal: grup, horari, pin, email: email.trim() || null, coordinador_cicle: (coordCicle !== null && coordCicle.trim()) ? coordCicle.trim() : null });
   }
 
   // Group franjes by hora for rowspan
@@ -659,9 +666,30 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
               <option value="vetllador">Vetllador/a</option>
             </select>
           </div>
-          <div style={{ gridColumn: 'span 2' }}>
+          <div>
             <label className="f-label">Grup principal</label>
             <input type="text" className="f-ctrl" value={grup} onChange={e => setGrup(e.target.value)} />
+          </div>
+          <div>
+            <label className="f-label">Coordinador/a de cicle</label>
+            <select
+              className="f-ctrl"
+              value={coordCicle !== null ? 'si' : 'no'}
+              onChange={e => setCoordCicle(e.target.value === 'si' ? '' : null)}
+              style={{ marginBottom: coordCicle !== null ? 6 : 0 }}
+            >
+              <option value="no">No</option>
+              <option value="si">Sí</option>
+            </select>
+            {coordCicle !== null && (
+              <input
+                type="text"
+                className="f-ctrl"
+                placeholder="Ex: Petits, Mitjans, Grans, Secundària..."
+                value={coordCicle}
+                onChange={e => setCoordCicle(e.target.value)}
+              />
+            )}
           </div>
           <div>
             <label className="f-label">PIN d'accés (4 dígits)</label>
@@ -784,6 +812,22 @@ function hasCeepsir(d) {
   return Object.values(d.horari).some(dia =>
     Object.values(dia || {}).some(v => (v || '').toLowerCase().includes('ceepsir'))
   );
+}
+
+// Retorna el cicle si el docent és coordinador, o null
+function cicleCoordinador(d, isOriol) {
+  // Prioritat: camp de la base de dades (editable)
+  if (d.coordinador_cicle) return d.coordinador_cicle;
+  // Fallback: llista hardcoded per a docents sense el camp migrat
+  const escola = isOriol ? 'oriol' : 'rivo';
+  const llista = COORDINADORS_CICLE[escola] || [];
+  const nomNet = oriolInitials(d.nom || '').trim();
+  const primer = nomNet.split(/\s+/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  for (const c of llista) {
+    if (c.inicials && nomNet === c.inicials) return c.cicle;
+    if (c.firstName && primer === c.firstName) return c.cicle;
+  }
+  return null;
 }
 
 function extractBadge(nom) {

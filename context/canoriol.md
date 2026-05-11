@@ -32,6 +32,14 @@
 
 **MxI (Moure x Incloure):** Grup d'escolaritat compartida CEE+SIEI. Alumnes parcials. M.V (PAE) és la de referència. Cobertura prioritària.
 
+## Coordinadors de cicle
+| Inicials | Cicle | Camp BD |
+|----------|-------|---------|
+| V.G (MEE) | Infantil-Primària | `coordinador_cicle = "Infantil-Primària"` |
+| S.J | Secundària | `coordinador_cicle = "Secundària"` |
+
+Editable des de Personal → ✏️ Editar → "Coordinador/a de cicle". El badge lila "Coord. Infantil-Primària" etc. apareix al llistat de personal.
+
 ## Rols del personal i lògica de cobertures
 
 ### MEE (Mestre Educació Especial)

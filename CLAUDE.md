@@ -4,8 +4,8 @@ SPA de gestió d'absències i cobertures per a centres educatius de primària. D
 
 ## Context per escola (llegir al principi de cada sessió)
 
-- [`context/rivo-rubeo.md`](context/rivo-rubeo.md) — CEIP Rivo Rubeo: grups, cicles, normes IA, personal especial
-- [`context/canoriol.md`](context/canoriol.md) — CEE Ca N'Oriol: franges, rols MEE/PAE, Piscina, CEEPSIR, MxI, tutors
+- [`context/rivo-rubeo.md`](context/rivo-rubeo.md) — CEIP Rivo Rubeo: grups, cicles, coordinadors, normes IA, personal especial
+- [`context/canoriol.md`](context/canoriol.md) — CEE Ca N'Oriol: franges, rols MEE/PAE, Piscina, CEEPSIR, MxI, coordinadors
 
 ## Stack
 
@@ -55,7 +55,7 @@ Totes les taules (excepte `escoles`) tenen `escola_id` per multi-tenancy. `makeA
 | Taula | Camps rellevants |
 |-------|-----------------|
 | `escoles` | `id`, `nom`, `codi`, `normes_ia` |
-| `docents` | `id`, `nom`, `escola_id`, `actiu`, `rol`, `grup_principal`, `horari` (JSONB), `tp_franges`, `cobertures_mes` |
+| `docents` | `id`, `nom`, `escola_id`, `actiu`, `rol`, `grup_principal`, `horari` (JSONB), `tp_franges`, `cobertures_mes`, `coordinador_cicle` (text, nullable) |
 | `absencies` | `id`, `escola_id`, `docent_id`, `docent_nom`, `data`, `franges` (JSON array), `motiu`, `notes`, `estat` (pendent/resolt/arxivat), `creat_el` |
 | `cobertures` | `id`, `escola_id`, `absencia_id`, `docent_cobrint_nom`, `docent_absent_nom`, `franja`, `grup`, `data`, `tp_afectat`, `motiu` |
 | `deutes_tp` | `id`, `escola_id`, `docent_nom`, `data_deute`, `motiu`, `retornat` |
@@ -112,6 +112,19 @@ Funcions a `claude.js`:
 - `extractHorariFromPDF(base64)` — extreu horari d'un PDF (usa visió de Claude)
 
 Les normes (`normes`) vénen de `AppContext.normes` (carregades de `escoles.normes_ia`). Si buides, s'apliquen les regles per defecte (repartiment equitatiu, prioritzar sense TP).
+
+## Motius d'absència (`MOTIUS_ABSENCIA` a constants.js)
+
+Estructura en dos blocs (optgroups al selector):
+
+- **ATRI · Família / Personal / Maternitat / Reducció de jornada** — Permisos i llicències oficials del portal ATRI (Generalitat). En seleccionar-los, es mostra l'avís `🖥️ No oblidis gestionar aquest permís per ATRI`. Detectats per `esMotuiATRI(motiu)` (comencen per "Permís per", "Llicència" o "Reducció").
+- **Interns · Salut pròpia** — Malaltia, Visita mèdica, Urgència. Mostren avís `📄 Recorda enviar el justificant mèdic a direcció` (via `MOTIUS_AMB_JUSTIFICANT`).
+- **Interns · Centre** — `MOTIU_ACOMPANYAR` ("Acompanyar fill/a activitat escolar") i `MOTIU_FLEXIBILITZACIO` ("Flexibilització Horària"):
+  - `ACOMPANYAR_MAX_USOS = 2` per curs escolar (setembre–agost). Comptador a `AvisarPage`. Si s'esgoten, obliga a triar Flexibilització.
+  - Flexibilització: les hores es recuperen com decideix la cap d'estudis (pati, suport...), **no genera deute TP**.
+- **Interns · Altres** — Assumpte personal, No especificat.
+
+La **cobertura manual** (AvisosPage) també inclou el selector de motiu, que es desa a `absencies.motiu` i `cobertures.motiu`.
 
 ## Convencions de codi
 

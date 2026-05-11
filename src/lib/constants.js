@@ -104,6 +104,96 @@ export const MANAGEMENT_USERS = {
 
 export const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
 
+export const COORDINADORS_CICLE = {
+  rivo: [
+    { firstName: 'lidia',  cicle: 'Petits'  },
+    { firstName: 'lorena', cicle: 'Mitjans' },
+    { firstName: 'chema',  cicle: 'Grans'   },
+  ],
+  oriol: [
+    { inicials: 'V.G', cicle: 'Infantil-Primària' },
+    { inicials: 'S.J', cicle: 'Secundària'        },
+  ],
+};
+
+// Motius interns amb lògica especial
+export const MOTIU_ACOMPANYAR      = "Acompanyar fill/a activitat escolar";
+export const MOTIU_FLEXIBILITZACIO = "Flexibilització Horària";
+export const ACOMPANYAR_MAX_USOS   = 2;
+
+// Motius que cal gestionar per ATRI (es computa a partir de MOTIUS_ABSENCIA, definit avall)
+// S'exporta com a funció per evitar dependències circulars d'inicialització
+export function esMotuiATRI(motiu) {
+  return motiu.startsWith('Permís per') || motiu.startsWith('Llicència') || motiu.startsWith('Reducció');
+}
+
+// Motius que requereixen enviar justificant a direcció
+export const MOTIUS_AMB_JUSTIFICANT = new Set([
+  "Malaltia",
+  "Visita mèdica / Especialista",
+  "Urgència mèdica",
+  "Permís per accident d'un familiar",
+  "Permís per hospitalització d'un familiar",
+  "Permís per malaltia greu d'un familiar",
+  "Permís per examen prenatal / preparació part",
+]);
+
+export const MOTIUS_ABSENCIA = [
+  // ── ATRI ────────────────────────────────────────────────────────────────
+  { grup: "ATRI · Família", opcions: [
+    "Permís per accident d'un familiar",
+    "Permís per hospitalització d'un familiar",
+    "Permís per mort d'un familiar",
+    "Permís per malaltia greu d'un familiar",
+    "Permís per matrimoni d'un fill o familiar fins a 2on grau",
+    "Permís per atendre fill discapacitat",
+    "Permís sense retribució per atendre un familiar",
+  ]},
+  { grup: "ATRI · Personal", opcions: [
+    "Permís per deures inexcusables que comporta substitució",
+    "Permís per exàmens finals en centres oficials",
+    "Permís per examen prenatal / preparació part",
+    "Permís per trasllat de domicili",
+    "Llicència per assumptes propis no remunerats",
+    "Llicència d'estudis no retribuïda (tot un curs)",
+    "Permís per deure inexcusable - candidat electoral",
+    "Permís per matrimoni",
+    "Permís per situació de violència de gènere",
+  ]},
+  { grup: "ATRI · Maternitat / Paternitat", opcions: [
+    "Permís per adopció internacional",
+    "Permís per lactància",
+    "Permís per lactància compactat",
+    "Permís per tràmits adopció / acolliment",
+  ]},
+  { grup: "ATRI · Reducció de jornada", opcions: [
+    "Reducció de jornada compactat per cura d'un fill",
+    "Reducció de jornada per cura menor 12 anys o familiar",
+    "Reducció de jornada per cura de disminuït sense activitat retribuïda",
+    "Reducció de jornada per cura de familiar de primer grau",
+    "Reducció de jornada per cura d'un fill/a menor 6 anys",
+    "Reducció de jornada per cura d'un familiar discapacitat",
+    "Reducció de jornada total retribuïda per discapacitat reconeguda",
+    "Reducció de jornada per adaptació progressiva al lloc de treball",
+    "Reducció de jornada per cura de fill afectat de malaltia greu",
+    "Reducció voluntària de jornada",
+  ]},
+  // ── INTERNS ─────────────────────────────────────────────────────────────
+  { grup: "Interns · Salut pròpia", opcions: [
+    "Malaltia",
+    "Visita mèdica / Especialista",
+    "Urgència mèdica",
+  ]},
+  { grup: "Interns · Centre", opcions: [
+    MOTIU_ACOMPANYAR,
+    MOTIU_FLEXIBILITZACIO,
+  ]},
+  { grup: "Interns · Altres", opcions: [
+    "Assumpte personal",
+    "No especificat",
+  ]},
+];
+
 export const SIEI_ALUMNES = {
   rivo: ['THEO','SEBAS','TYLER','POL','AARON','MOHAMED','CLAUDIA','MAXIM','MIRANDA','ADAM'],
 };

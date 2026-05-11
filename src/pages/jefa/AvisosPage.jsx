@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL } from '../../lib/constants';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL, MOTIUS_ABSENCIA } from '../../lib/constants';
 import { proposarCobertura, analitzarInfoExtra } from '../../lib/claude';
 import { sendEmail } from '../../lib/api';
 import { parseFranges, escHtml, frangesHorari } from '../../lib/utils';
@@ -37,6 +37,7 @@ export default function AvisosPage() {
   const [cmFranges, setCmFranges] = useState(new Set());
   const [cmCobrint, setCmCobrint] = useState('');
   const [cmGrup,    setCmGrup]    = useState('');
+  const [cmMotiu,   setCmMotiu]   = useState('');
   const [cmSaving,  setCmSaving]  = useState(false);
   // Avisos descoberts des d'infoExtra
   const [avisosDescoberts, setAvisosDescoberts] = useState([]);
@@ -213,7 +214,7 @@ export default function AvisosPage() {
         docent_nom: cmAbsent,
         data: cmData,
         franges: JSON.stringify(frangesArr),
-        motiu: 'Cobertura manual',
+        motiu: cmMotiu || 'Cobertura manual',
         estat: esFutura ? 'provisional' : 'resolt',
       });
       const absId = absResult?.[0]?.id || null;
@@ -232,14 +233,14 @@ export default function AvisosPage() {
           grup: cmGrup,
           data: cmData,
           tp_afectat: tpAfectat,
-          motiu: 'Cobertura manual',
+          motiu: cmMotiu || 'Cobertura manual',
         });
         if (tpAfectat && !esFutura) {
           await api.saveDeuteTP({
             escola_id: escola.id,
             docent_nom: cmCobrint,
             data_deute: cmData,
-            motiu: `Cobertura manual (${cmAbsent})`,
+            motiu: `${cmMotiu ? cmMotiu + ' — ' : ''}Cobertura manual (${cmAbsent})`,
             retornat: false,
             minuts: 30,
           });
@@ -270,7 +271,7 @@ export default function AvisosPage() {
 
       showToast('✓ Cobertura manual registrada');
       setShowCoberturaManual(false);
-      setCmAbsent(''); setCmData(new Date().toISOString().split('T')[0]); setCmFranges(new Set()); setCmCobrint(''); setCmGrup('');
+      setCmAbsent(''); setCmData(new Date().toISOString().split('T')[0]); setCmFranges(new Set()); setCmCobrint(''); setCmGrup(''); setCmMotiu('');
       load();
     } catch (e) {
       showToast('Error: ' + e.message);
@@ -700,6 +701,17 @@ export default function AvisosPage() {
                       );
                     })}
                   </div>
+                </div>
+                <div>
+                  <label className="f-label" style={{ marginBottom: 4 }}>Motiu de l'absència</label>
+                  <select className="f-ctrl" value={cmMotiu} onChange={e => setCmMotiu(e.target.value)} style={{ fontSize: 13 }}>
+                    <option value="">Seleccionar...</option>
+                    {MOTIUS_ABSENCIA.map(g => (
+                      <optgroup key={g.grup} label={g.grup}>
+                        {g.opcions.map(o => <option key={o} value={o}>{o}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
                 </div>
                 <button
                   className="btn btn-full"

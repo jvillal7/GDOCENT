@@ -21,6 +21,15 @@
 - Cicle Mitjà: 3r, 4t
 - Cicle Superior: 5è, 6è
 
+## Coordinadors de cicle
+| Nom | Cicle | Camp BD |
+|-----|-------|---------|
+| Lidia | Petits | `coordinador_cicle = "Petits"` |
+| Lorena | Mitjans | `coordinador_cicle = "Mitjans"` |
+| Chema | Grans | `coordinador_cicle = "Grans"` |
+
+Editable des de Personal → ✏️ Editar → "Coordinador/a de cicle". El badge lila "Coord. Petits" etc. apareix al llistat de personal.
+
 ## Alumnes SIEI (no cobribles, atenció especial)
 `THEO, SEBAS, TYLER, POL, AARON, MOHAMED, CLAUDIA, MAXIM, MIRANDA, ADAM`
 

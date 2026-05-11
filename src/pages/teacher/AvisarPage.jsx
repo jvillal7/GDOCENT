@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, JEFA_EMAIL } from '../../lib/constants';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, JEFA_EMAIL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
 import { todayISO, emailAbsencia } from '../../lib/utils';
 import { uploadFitxer, sendEmail } from '../../lib/api';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
@@ -12,8 +12,9 @@ export default function AvisarPage() {
   const schoolFranjesAct  = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
   const [selectedFranjes, setSelectedFranjes] = useState(new Set());
   const [selectedDates,   setSelectedDates]   = useState(new Set([todayISO()]));
-  const [motiu,   setMotiu]   = useState('');
-  const [notes,   setNotes]   = useState('');
+  const [motiu,          setMotiu]          = useState('');
+  const [notes,          setNotes]          = useState('');
+  const [usosAcompanyar, setUsosAcompanyar] = useState(0);
   const [sent,        setSent]        = useState(false);
   const [sending,     setSending]     = useState(false);
   const [imgSrc,      setImgSrc]      = useState(null);
@@ -37,6 +38,15 @@ export default function AvisarPage() {
         api.getAbsenciesByDocent(perfil.nom),
         api.getCoberturesForAbsent(perfil.nom),
       ]);
+      // Comptar usos de "Acompanyar fill/a" al curs actual (setembre–agost)
+      const ara = new Date();
+      const anyInici = ara.getMonth() >= 8 ? ara.getFullYear() : ara.getFullYear() - 1;
+      const iniciCurs = `${anyInici}-09-01`;
+      const usos = (meves || []).filter(a =>
+        a.motiu === MOTIU_ACOMPANYAR && a.data >= iniciCurs && a.estat !== 'arxivat'
+      ).length;
+      setUsosAcompanyar(usos);
+
       const cobsMap = {};
       (cobs || []).forEach(c => {
         if (c.absencia_id) {
@@ -65,6 +75,9 @@ export default function AvisarPage() {
   async function enviar() {
     if (selectedDates.size === 0) return showToast('Selecciona almenys un dia');
     if (selectedFranjes.size === 0) return showToast('Selecciona almenys una franja');
+    if (motiu === MOTIU_ACOMPANYAR && usosAcompanyar >= ACOMPANYAR_MAX_USOS) {
+      return showToast(`Has superat el límit de ${ACOMPANYAR_MAX_USOS} vegades aquest curs. Selecciona "Flexibilització Horària".`);
+    }
     setSending(true);
     try {
       for (const d of Array.from(selectedDates).sort()) {
@@ -290,11 +303,49 @@ export default function AvisarPage() {
           <label className="f-label" style={{ marginBottom: 8 }}>Motiu (opcional)</label>
           <select className="f-ctrl" value={motiu} onChange={e => setMotiu(e.target.value)}>
             <option value="">Seleccionar...</option>
-            <option>Malaltia</option>
-            <option>Metge / Especialista</option>
-            <option>Formació</option>
-            <option>Assumpte personal</option>
+            {MOTIUS_ABSENCIA.map(g => (
+              <optgroup key={g.grup} label={g.grup}>
+                {g.opcions.map(o => <option key={o} value={o}>{o}</option>)}
+              </optgroup>
+            ))}
           </select>
+
+          {/* Avís gestió ATRI */}
+          {esMotuiATRI(motiu) && (
+            <div className="alert alert-amber" style={{ marginTop: 8, fontSize: 12.5 }}>
+              🖥️ No oblidis gestionar aquest permís per ATRI.
+            </div>
+          )}
+
+          {/* Avís justificant mèdic */}
+          {MOTIUS_AMB_JUSTIFICANT.has(motiu) && (
+            <div className="alert alert-amber" style={{ marginTop: 8, fontSize: 12.5 }}>
+              📄 Recorda enviar el justificant mèdic a direcció.
+            </div>
+          )}
+
+          {/* Comptador "Acompanyar fill/a" */}
+          {motiu === MOTIU_ACOMPANYAR && (
+            <div style={{
+              marginTop: 8, fontSize: 12.5, padding: '8px 12px', borderRadius: 8,
+              background: usosAcompanyar >= ACOMPANYAR_MAX_USOS ? 'var(--red-bg)' : 'var(--amber-bg)',
+              border: `1px solid ${usosAcompanyar >= ACOMPANYAR_MAX_USOS ? '#F0C0B8' : '#F0D5A8'}`,
+              color: usosAcompanyar >= ACOMPANYAR_MAX_USOS ? 'var(--red)' : 'var(--amber)',
+              fontWeight: 500,
+            }}>
+              {usosAcompanyar >= ACOMPANYAR_MAX_USOS
+                ? `⚠ Has superat el límit de ${ACOMPANYAR_MAX_USOS} usos aquest curs. Selecciona "Flexibilització Horària".`
+                : `📅 ${usosAcompanyar}/${ACOMPANYAR_MAX_USOS} usos aquest curs · No cal recuperar les hores`
+              }
+            </div>
+          )}
+
+          {/* Avís recuperació hores */}
+          {motiu === MOTIU_FLEXIBILITZACIO && (
+            <div className="alert alert-amber" style={{ marginTop: 8, fontSize: 12.5 }}>
+              ⏱ Les hores d'absència hauran de ser recuperades. La cap d'estudis t'indicarà com.
+            </div>
+          )}
         </div>
 
         {/* Justificant */}
