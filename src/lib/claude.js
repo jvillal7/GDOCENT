@@ -149,7 +149,7 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
           autoresolt.push({ fid, fLabel, raw, motiu: 'Desdoblament — tutor es queda amb el grup complet' });
           return false;
         }
-        if (/^suport/i.test(rawL) || isSuportVal(rawL)) {
+        if (rawL.includes('suport')) {
           autoresolt.push({ fid, fLabel, raw, motiu: "Suport — el tutor principal ja és a l'aula" });
           return false;
         }
