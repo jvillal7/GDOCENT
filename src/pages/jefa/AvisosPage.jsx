@@ -949,7 +949,25 @@ export default function AvisosPage() {
                       <button className="btn btn-ghost btn-full" onClick={() => generarIA(iaTarget)}>↺ Tornar a intentar</button>
                     </>
                   )}
-                  {iaState === 'done' && iaResult && (
+                  {iaState === 'done' && iaResult && iaResult.noCalCobrir && (
+                    <>
+                      <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 10, padding: '14px 16px', fontSize: 14, color: 'var(--green)', fontWeight: 600 }}>
+                        ✅ No cal cobrir cap franja
+                      </div>
+                      {iaResult.autoresolt?.length > 0 && (
+                        <div className="card" style={{ fontSize: 13 }}>
+                          {iaResult.autoresolt.map((a, i) => (
+                            <div key={i} style={{ padding: '8px 12px', borderBottom: i < iaResult.autoresolt.length - 1 ? '1px solid var(--border)' : 'none', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                              <span style={{ color: 'var(--ink-3)', minWidth: 80, fontWeight: 600 }}>{a.fLabel}</span>
+                              <span style={{ color: 'var(--ink-2)' }}>{a.motiu}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <button className="btn btn-green btn-full" onClick={confirmarCobertura}>✓ Marcar com a resolt</button>
+                    </>
+                  )}
+                  {iaState === 'done' && iaResult && !iaResult.noCalCobrir && (
                     <>
                       <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--green)' }}>
                         💡 {iaResult.resum}

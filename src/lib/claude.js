@@ -113,6 +113,55 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
 
   const regles = (normes || '').trim() || REGLES_DEFAULT;
 
+  // Identificar docent absent i dades bàsiques (necessari per al pre-filtre)
+  const absentDocent = docents.find(d => d.nom === absentNom);
+  const absentHorariDia = absentDocent?.horari?.[dia] || {};
+  const absentGrupCore = (() => {
+    const m = (absentDocent?.grup_principal || '').match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
+    return m ? `${m[1]}${m[2].toLowerCase()}` : '';
+  })();
+  const absentCicle = getCicle(absentDocent?.grup_principal);
+
+  // PRE-FILTRE: detectar franges que no necessiten cobertura per norma
+  // Un especialista (sense grup classe) que té Racons/Tallers/Desdoblament/Suport
+  // → els tutors/alumnes se'n fan càrrec, no cal buscar substitut
+  const esEspecialista = !absentGrupCore;
+  const autoresolt = [];
+  if (dia) {
+    frangesIds = frangesIds.filter(fid => {
+      const raw = (absentHorariDia[fid] || '').trim();
+      const rawL = raw.toLowerCase();
+      const fLabel = FRANJES_ACT.find(x => x.id === fid)?.sub || fid;
+      if (TP_KW.some(k => rawL === k)) {
+        autoresolt.push({ fid, fLabel, raw, motiu: 'TP — sense grup assignat en aquesta franja' });
+        return false;
+      }
+      if (esEspecialista) {
+        if (/^racons/i.test(rawL)) {
+          autoresolt.push({ fid, fLabel, raw, motiu: 'Racons — tutors es queden amb el grup complet (Norma 2)' });
+          return false;
+        }
+        if (/^tallers?$/i.test(rawL)) {
+          autoresolt.push({ fid, fLabel, raw, motiu: 'Tallers — alumnes queden amb la seva tutora (Norma 3)' });
+          return false;
+        }
+        if (/desdoblament|mig\s*grup/i.test(rawL)) {
+          autoresolt.push({ fid, fLabel, raw, motiu: 'Desdoblament — tutor es queda amb el grup complet' });
+          return false;
+        }
+        if (/^suport/i.test(rawL) || isSuportVal(rawL)) {
+          autoresolt.push({ fid, fLabel, raw, motiu: "Suport — el tutor principal ja és a l'aula" });
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  if (frangesIds.length === 0) {
+    return { proposta: [], resum: 'No cal cobrir cap franja.', noCalCobrir: true, autoresolt };
+  }
+
   // Agrupar franges per bloc d'hora (f1a+f1b → "1a hora", etc.)
   const blocsMap = {};
   for (const fid of frangesIds) {
@@ -124,16 +173,6 @@ export async function proposarCobertura(absentNom, frangesIds, docents, normes, 
   const blocs = Object.values(blocsMap);
   const blocsDesc = blocs.map(b => b.hora).join(' + ');
   const durada = `${frangesIds.length * 30} min`;
-
-  // Identificar grups afectats i tutors per cada bloc
-  const absentDocent = docents.find(d => d.nom === absentNom);
-  const absentHorariDia = absentDocent?.horari?.[dia] || {};
-  // Codi curt del grup absent (ex: "5è B" → "5b") per detectar qui ja treballa amb ell
-  const absentGrupCore = (() => {
-    const m = (absentDocent?.grup_principal || '').match(/(\d+)\s*[a-zA-ZèéàòíùüÈ]?\s*([a-zA-Z])\b/);
-    return m ? `${m[1]}${m[2].toLowerCase()}` : '';
-  })();
-  const absentCicle = getCicle(absentDocent?.grup_principal);
 
   const infoGrupsAfectats = dia ? blocs.map(b => {
     const acts = [...new Set(b.ids.map(fid => absentHorariDia[fid]).filter(v => v))];
