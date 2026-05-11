@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL, MOTIUS_ABSENCIA } from '../../lib/constants';
-import { proposarCobertura, analitzarInfoExtra } from '../../lib/claude';
+import { proposarCobertura, analitzarInfoExtra, construirContextXat } from '../../lib/claude';
 import { sendEmail } from '../../lib/api';
 import { parseFranges, escHtml, frangesHorari } from '../../lib/utils';
 import FrangesChips from '../../components/FrangesChips';
 import Spinner from '../../components/Spinner';
+import ChatIA from '../../components/ChatIA';
 
 
 export default function AvisosPage() {
@@ -44,6 +45,9 @@ export default function AvisosPage() {
   const [creantAvisos,     setCreantAvisos]     = useState(false);
   const [coberturesPerId,  setCoberturesPerId]  = useState({});
   const [tallersPending,   setTallersPending]   = useState(null); // { avis, totsIds, tallersIds }
+  const [showChat,         setShowChat]         = useState(false);
+  const [chatAvis,         setChatAvis]         = useState(null);
+  const [chatSystemCtx,    setChatSystemCtx]    = useState('');
   const infoFileRef = useRef(null);
 
   useEffect(() => { if (api) load(); }, [api]);
@@ -362,6 +366,22 @@ export default function AvisosPage() {
       return;
     }
     generarIA(avis, frangesACobrir);
+  }
+
+  function obrirChat(avis) {
+    const dia = avis.data
+      ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date(avis.data + 'T12:00:00').getDay()]
+      : null;
+    const ctx = construirContextXat(escola, docents, normes, isOriol, {
+      nom: avis.docent_nom,
+      data: avis.data,
+      dia,
+      frangesIds: parseFranges(avis.franges),
+      motiu: avis.motiu,
+    });
+    setChatSystemCtx(ctx);
+    setChatAvis(avis);
+    setShowChat(true);
   }
 
   async function generarIA(avis, frangesOverride = null) {
@@ -909,6 +929,12 @@ export default function AvisosPage() {
                     {esProvisional ? '↺ Canviar proposta IA' : '🤖 Generar proposta IA'}
                   </button>
                   <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 13, flexShrink: 0, paddingInline: 10 }}
+                    onClick={() => obrirChat(a)}
+                    title="Chatbot IA"
+                  >💬</button>
+                  <button
                     className="btn btn-red-soft btn-sm"
                     style={{ fontSize: 13, flexShrink: 0, paddingInline: 10 }}
                     onClick={() => arxivar(a.id)}
@@ -1020,6 +1046,23 @@ export default function AvisosPage() {
           </>
         );
       })()}
+
+      {showChat && (
+        <ChatIA
+          systemContext={chatSystemCtx}
+          greeting={isOriol ? 'Hola Mireia! Com et puc ajudar avui?' : 'Hola Veronica! Com et puc ajudar avui?'}
+          onAplicarProposta={proposta => {
+            if (chatAvis) {
+              setIaTarget(chatAvis);
+              setIaResult({ proposta, resum: 'Proposta del chatbot IA' });
+              setEditedProposta(proposta);
+              setIaState('done');
+            }
+            setShowChat(false);
+          }}
+          onClose={() => setShowChat(false)}
+        />
+      )}
 
     </>
   );
