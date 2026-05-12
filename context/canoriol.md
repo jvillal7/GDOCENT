@@ -54,6 +54,17 @@ Editable des de Personal → ✏️ Editar → "Coordinador/a de cicle". El badg
 ### MEE (Mestre Educació Especial)
 Professionals principals d'aula. Poden cobrir altres MEE. Treballen en parella amb PAE.
 
+**L.M (MEE) — Mestra de suport sense horari fix (Infantil-Primària):**
+- Tot el seu horari és `Suport` → no té grup assignat → **sempre disponible** per cobrir
+- Àmbit: Infantil-Primària (G1–G6 i MxI)
+- Primera opció per cobrir qualsevol absència d'Infantil-Primària
+- Una de les dues persones autoritzades per entrar a MxI si C.F o M.V falta
+
+**R.S (MEE) — Mestra de suport sense horari fix (Secundària):**
+- Tot el seu horari és `Suport` → no té grup assignat → **sempre disponible** per cobrir
+- Àmbit: Secundària (G7–G14)
+- Primera opció per cobrir qualsevol absència de Secundària
+
 ### PAE (Professional d'Atenció Educativa)
 **REGLA CRÍTICA: Un PAE mai treballa sol.** Sempre ha d'estar acompanyat d'un MEE. No pot ser assignat com a cobertura independent d'un grup.
 
@@ -68,7 +79,11 @@ Professionals principals d'aula. Poden cobrir altres MEE. Treballen en parella a
 Especialista itinerant entre grups.
 
 ### MALL (Mestre Atenció a la Llengua i Lectura / logopeda equivalent)
-Atenció individualitzada o en petit grup.
+Professionals: **A.G (MALL)**, **R.E (MALL)**, **C.P (MALL)**.
+
+Dues regles:
+1. **Si ja entren al grup absent** (apareixen a l'horari del tutor en aquella franja) → poden assumir el grup complet durant l'absència.
+2. **Si NO entren al grup** → són **últim recurs**. No es proposen fins que no hi hagi cap MEE ni msuport disponible.
 
 ### ESTIM (Estimulació)
 Sala d'estimulació sensorial. E.R (ESTIM) porta Estimulació a múltiples grups.

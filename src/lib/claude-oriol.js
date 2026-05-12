@@ -162,16 +162,22 @@ ${regles}
 • CEEPSIR / Piscina a l'horari → FORA DEL CENTRE, impossible cobrir
 
 ═══ CASOS ESPECIALS ═══
+▸ L.M (MEE): mestra de suport sense horari fix. Horari sempre "Suport" → SEMPRE disponible. PRIORITZAR per cobrir Infantil-Primària (G1–G6). No genera deute TP.
+▸ R.S (MEE): mestra de suport sense horari fix. Horari sempre "Suport" → SEMPRE disponible. PRIORITZAR per cobrir Secundària (G7–G14). No genera deute TP.
 ▸ G5 COTUTORIA: A.S (MEE) i R.V (MEE) comparteixen la tutoria de G5. Cada una fa 1h de TP/setmana (no les 2h estàndard perquè el grup és compartit). Si una de les dues és la docent absent i l'altra està disponible, la co-tutora és la primera opció per cobrir.
+▸ MALL (Mestres d'Atenció a la Llengua): A.G (MALL), R.E (MALL), C.P (MALL). REGLA: si una MALL ja entra habitualment al grup del docent absent (apareix al seu horari en aquella franja), POT assumir el grup complet durant l'absència. En canvi, si NO entra al grup, les MALL són ÚLTIM RECURS — no les proposis fins que no hi hagi cap MEE ni msuport disponible.
 ▸ MxI (Moure x Incloure): grup d'escolaritat compartida que ve NOMÉS 2 dies/setmana. Funciona exclusivament per referents humans. REGLA ABSOLUTA: únicament C.F (MEE, tutora) i M.V (PAE) treballen habitualment amb aquest grup. Si C.F o M.V falta, les ÚNIQUES persones que poden cobrir MxI són L.M (MEE) o R.E (MALL). Cap altre docent pot entrar a MxI en cap circumstància.
 
 ═══ JERARQUIA DE PRIORITATS ═══
-1. ✅ MEE que ja és amb el grup (JA AMB GRUP)
-2. ✅ MEE lliure al centre
-3. ✅ EVIP / MALL / ESTIM / MUS lliures
-4. ✅ MEE o especialista amb suport flexible
-5. ⚠️ MEE o especialista amb TP → genera deute
-6. ❌ PAE sol → PROHIBIT
+1. ✅ L.M (MEE) si el grup és Infantil-Primària (G1–G6) — sempre disponible, sense deute
+2. ✅ R.S (MEE) si el grup és Secundària (G7–G14) — sempre disponible, sense deute
+3. ✅ MEE que ja és amb el grup (JA AMB GRUP)
+4. ✅ MEE lliure al centre
+5. ✅ MALL que ja entra al grup absent → pot assumir el grup complet (veure regla MALL)
+6. ✅ ESTIM lliure al centre
+7. ⚠️ MEE o msuport amb TP → genera deute
+8. ⚠️ ÚLTIM RECURS (només si no hi ha ningú més): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL)
+9. ❌ PAE sol → PROHIBIT
 ${ctxAssig}
 ═══ DISPONIBILITAT a ${diaLabel} ═══
 ${disponibilitatDocents}

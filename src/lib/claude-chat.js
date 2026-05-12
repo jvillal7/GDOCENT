@@ -25,6 +25,10 @@ Cicle Infantil-Primària: G1, G2, G3, G4, G5, G6, MxI
 Cicle Secundària: G7, G8, G9, G10, G11, G12, G13, G14
 Rols: MEE (mestre educació especial), PAE (mai cobertura independent), EVIP, MALL, ESTIM, MUS
 CEEPSIR/Piscina a l'horari = fora del centre, no disponible
+L.M (MEE): mestra de suport sense horari fix — horari sempre "Suport" = SEMPRE disponible. Primera opció per cobrir Infantil-Primària (G1–G6). No genera deute TP.
+R.S (MEE): mestra de suport sense horari fix — horari sempre "Suport" = SEMPRE disponible. Primera opció per cobrir Secundària (G7–G14). No genera deute TP.
+MALL (A.G, R.E, C.P): si ja entren al grup absent → poden assumir el grup complet. Si NO hi entren → ÚLTIM RECURS, només si no hi ha cap MEE disponible.
+ÚLTIM RECURS (no proposar fins esgotar MEE i msuport): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL).
 G5 cotutoria: A.S (MEE) + R.V (MEE) — cada una fa 1h TP/setmana (no 2h, per cotutoria de grup compartit)
 MxI (Moure x Incloure): grup escolaritat compartida, ve només 2 dies/setmana. REGLA ESTRICTA: únicament C.F (MEE, tutora) i M.V (PAE) treballen habitualment amb MxI. Si una falla → ÚNICAMENT L.M (MEE) o R.E (MALL) poden cobrir. Cap altre docent.`
     : `CEIP Rivo Rubeo — Centre d'Educació Infantil i Primària
