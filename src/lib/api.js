@@ -114,6 +114,7 @@ export function makeApi(escolaId) {
     getCoberturesByAbsencia: id => f(`cobertures?absencia_id=eq.${id}`),
     getCoberturasAvui:   ()    => f(`cobertures?data=eq.${avui()}`),
     getCoberturesByDocent: nom => f(`cobertures?docent_cobrint_nom=eq.${encodeURIComponent(nom)}&data=eq.${avui()}`),
+    getCoberturesByDocentData: (nom, data) => f(`cobertures?docent_cobrint_nom=eq.${encodeURIComponent(nom)}&data=eq.${data}`),
     getDeutesTP:         ()    => f('deutes_tp?retornat=eq.false&order=data_deute'),
     getMeusDeutesTP:     nom   => f(`deutes_tp?docent_nom=eq.${encodeURIComponent(nom)}&retornat=eq.false`),
     saveDeuteTP:         d     => f('deutes_tp', { method: 'POST', body: JSON.stringify(d) }),

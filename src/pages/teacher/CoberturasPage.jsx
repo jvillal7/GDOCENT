@@ -3,11 +3,27 @@ import { useApp } from '../../context/AppContext';
 import { FRANJES, FRANJES_ORIOL } from '../../lib/constants';
 import Spinner from '../../components/Spinner';
 
+const DAYS_CAT = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'];
+
+function nextWeekday(dateObj, dir) {
+  const d = new Date(dateObj);
+  do { d.setDate(d.getDate() + dir); } while (d.getDay() === 0 || d.getDay() === 6);
+  return d;
+}
+
 export default function CoberturasPage() {
   const { api, perfil, escola } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const FRANJES_ACT = isOriol ? FRANJES_ORIOL : FRANJES;
-  const [data,    setData]    = useState(null);
+
+  const todayISO = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    if (d.getDay() === 0 || d.getDay() === 6) return nextWeekday(d, 1).toISOString().split('T')[0];
+    return d.toISOString().split('T')[0];
+  });
+  const [cobertures, setCobertures] = useState(null);
+  const [me,         setMe]         = useState(null);
   const [notesFn, setNotesFn] = useState(null);
   const [notes,   setNotes]   = useState(null);
   const [fitxers, setFitxers] = useState([]);
@@ -17,23 +33,27 @@ export default function CoberturasPage() {
     catch { return new Set(); }
   });
 
-  useEffect(() => { if (api && perfil) load(); }, [api, perfil]);
+  useEffect(() => { if (api && perfil) loadDocent(); }, [api, perfil]);
+  useEffect(() => { if (api && perfil && me !== undefined) loadCobertures(); }, [api, perfil, selectedDate]);
 
-  async function load() {
+  async function loadDocent() {
     try {
-      const days = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'];
-      const today = new Date();
-      const todayCat = days[today.getDay()];
+      const docents = await api.getDocents();
+      setMe(docents?.find(d => d.nom === perfil.nom) || null);
+    } catch { setMe(null); }
+  }
 
-      const [cobertures, docents] = await Promise.all([
-        api.getCoberturesByDocent(perfil.nom),
-        api.getDocents(),
-      ]);
-      const me = docents?.find(d => d.nom === perfil.nom);
-      setData({ cobertures: cobertures || [], me, todayCat, today });
-    } catch (e) {
-      setData({ cobertures: [], me: null, todayCat: '', today: new Date() });
-    }
+  async function loadCobertures() {
+    try {
+      const cobs = await api.getCoberturesByDocentData(perfil.nom, selectedDate);
+      setCobertures(cobs || []);
+    } catch { setCobertures([]); }
+  }
+
+  function canviarDia(dir) {
+    const d = new Date(selectedDate + 'T12:00:00');
+    setSelectedDate(nextWeekday(d, dir).toISOString().split('T')[0]);
+    setCobertures(null);
   }
 
   function marcarVist(cobId) {
@@ -58,13 +78,15 @@ export default function CoberturasPage() {
     finally { setLoading(false); }
   }
 
-  if (data == null) {
+  const dateObj  = new Date(selectedDate + 'T12:00:00');
+  const diaCat   = DAYS_CAT[dateObj.getDay()];
+  const esAvui   = selectedDate === todayISO;
+
+  if (me === null && cobertures === null) {
     return <><div className="page-hdr"><h1>Les meves cobertures</h1></div><div style={{ padding: 40, textAlign: 'center' }}><Spinner /></div></>;
   }
 
-  const { cobertures, me, todayCat, today } = data;
-
-  if (!me?.horari) {
+  if (me !== null && !me?.horari) {
     return (
       <>
         <div className="page-hdr"><h1>Les meves cobertures</h1></div>
@@ -75,7 +97,7 @@ export default function CoberturasPage() {
     );
   }
 
-  const myHorari = me.horari[todayCat] || {};
+  const myHorari = me?.horari?.[diaCat] || {};
 
   return (
     <>
@@ -125,14 +147,39 @@ export default function CoberturasPage() {
         </div>
       )}
 
+      {/* Navegació de dies */}
       <div style={{ marginBottom: 24, padding: '0 4px' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '.04em' }}>La teva agenda d'avui</div>
-        <div style={{ fontSize: 24, fontWeight: 600, textTransform: 'capitalize', fontFamily: 'Georgia,serif' }}>
-          {todayCat}, {today.toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })}
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '.04em' }}>
+          {esAvui ? 'La teva agenda d\'avui' : 'La teva agenda'}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => canviarDia(-1)}
+            style={{ width: 34, height: 34, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-2)', flexShrink: 0 }}
+          >‹</button>
+          <div style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 600, textTransform: 'capitalize', fontFamily: 'Georgia,serif' }}>
+              {diaCat}, {dateObj.toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })}
+            </div>
+            {!esAvui && (
+              <button
+                onClick={() => { setSelectedDate(todayISO); setCobertures(null); }}
+                style={{ marginTop: 4, fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textDecoration: 'underline' }}
+              >
+                Tornar a avui
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => canviarDia(1)}
+            style={{ width: 34, height: 34, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-2)', flexShrink: 0 }}
+          >›</button>
         </div>
       </div>
 
-      <div className="agenda-wrap">
+      {cobertures === null
+        ? <div style={{ padding: 40, textAlign: 'center' }}><Spinner /></div>
+        : <div className="agenda-wrap">
         {FRANJES_ACT.map(f => {
           const originalVal = myHorari[f.id] || '';
           const cob = cobertures.find(c =>
@@ -188,7 +235,7 @@ export default function CoberturasPage() {
             </div>
           );
         })}
-      </div>
+      </div>}
     </>
   );
 }
