@@ -88,15 +88,19 @@ export default function HorarisPage() {
   const [baixesLoaded, setBaixesLoaded] = useState(false);
   const [baixesSaving, setBaixesSaving] = useState(false);
   const [baixaForm,   setBaixaForm]   = useState(null); // null | 'new' | index
-  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '' });
+  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', tipus: 'malaltia', estat: 'activa' });
+  const [baixaMes,    setBaixaMes]    = useState('actives');
+  const [baixaCobStats, setBaixaCobStats] = useState({});
   const fileRef = useRef(null);
 
   useEffect(() => {
     if (!api) return;
     reload();
     api.getBaixes().then(res => {
-      setBaixes(res?.[0]?.oriol_baixes || []);
+      const list = res?.[0]?.oriol_baixes || [];
+      setBaixes(list);
       setBaixesLoaded(true);
+      if (list.length) loadBaixaCobStats(list);
     }).catch(() => setBaixesLoaded(true));
   }, [api]);
 
@@ -121,16 +125,28 @@ export default function HorarisPage() {
 
   function openBaixaForm(idx) {
     if (idx === 'new') {
-      setBaixaDraft({ absent: '', substitut: '', notes: '', pin: '1234', email: '' });
+      setBaixaDraft({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', tipus: 'malaltia', estat: 'activa' });
     } else {
-      setBaixaDraft({ ...baixes[idx], pin: '1234', email: '' });
+      const b = baixes[idx];
+      setBaixaDraft({ ...b, pin: '1234', email: b.email || '', data_inici: b.data_inici || new Date().toISOString().split('T')[0], data_fi_prevista: b.data_fi_prevista || '', tipus: b.tipus || 'malaltia', estat: b.estat || 'activa' });
     }
     setBaixaForm(idx);
   }
 
   async function confirmBaixaForm() {
     if (!baixaDraft.absent.trim() || !baixaDraft.substitut.trim()) return showToast('Introdueix els dos noms');
-    const item = { absent: baixaDraft.absent.trim(), substitut: baixaDraft.substitut.trim(), notes: baixaDraft.notes.trim() };
+    const existing = baixaForm !== 'new' ? baixes[baixaForm] : null;
+    const item = {
+      id: existing?.id || String(Date.now()),
+      absent: baixaDraft.absent.trim(),
+      substitut: baixaDraft.substitut.trim(),
+      notes: baixaDraft.notes.trim(),
+      data_inici: baixaDraft.data_inici || new Date().toISOString().split('T')[0],
+      data_fi_prevista: baixaDraft.data_fi_prevista || null,
+      data_fi_real: existing?.data_fi_real || null,
+      tipus: baixaDraft.tipus || 'malaltia',
+      estat: existing?.estat || 'activa',
+    };
     const nova = baixaForm === 'new'
       ? [...baixes, item]
       : baixes.map((b, i) => i === baixaForm ? item : b);
@@ -169,6 +185,69 @@ export default function HorarisPage() {
 
   async function deleteBaixa(idx) {
     await saveBaixesList(baixes.filter((_, i) => i !== idx));
+  }
+
+  async function tancarBaixa(idx) {
+    const nova = baixes.map((b, i) => i === idx ? { ...b, estat: 'tancada', data_fi_real: new Date().toISOString().split('T')[0] } : b);
+    await saveBaixesList(nova);
+  }
+
+  async function reobrirBaixa(idx) {
+    const nova = baixes.map((b, i) => i === idx ? { ...b, estat: 'activa', data_fi_real: null } : b);
+    await saveBaixesList(nova);
+  }
+
+  async function loadBaixaCobStats(list) {
+    const items = list || baixes;
+    if (!items.length || !api) return;
+    try {
+      const entries = await Promise.all(
+        items.filter(b => b.absent).map(async b => {
+          const cobs = await api.getCoberturesForAbsent(b.absent).catch(() => []);
+          return [b.absent, cobs?.length || 0];
+        })
+      );
+      setBaixaCobStats(Object.fromEntries(entries));
+    } catch {}
+  }
+
+  function imprimirInforme(baixa, cobCount) {
+    const tipusInfo = TIPUS_BAIXA.find(t => t.key === baixa.tipus) || TIPUS_BAIXA[0];
+    const dies = duradaDies(baixa);
+    const fmtData = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+    const html = `<!DOCTYPE html><html lang="ca"><head><meta charset="utf-8"><title>Baixa – ${baixa.absent}</title>
+<style>
+  body{font-family:Arial,sans-serif;max-width:560px;margin:48px auto;color:#222;line-height:1.5}
+  h1{font-size:22px;margin:0 0 4px}
+  .school{color:#666;font-size:13px;margin-bottom:32px}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px}
+  th{text-align:left;font-size:10px;text-transform:uppercase;color:#888;padding:5px 0;border-bottom:2px solid #eee;letter-spacing:.06em}
+  td{padding:11px 0;border-bottom:1px solid #f0f0f0;font-size:13.5px;vertical-align:top}
+  td:first-child{color:#888;width:160px;font-size:12px}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .activa{background:#dcfce7;color:#166534}.tancada{background:#f3f4f6;color:#6b7280}.tipus{background:#fee2e2;color:#991b1b}
+  .footer{margin-top:40px;padding-top:12px;border-top:1px solid #eee;font-size:10px;color:#aaa;display:flex;justify-content:space-between}
+  @media print{body{margin:20px}}
+</style></head><body>
+<h1>Informe de Baixa Laboral</h1>
+<div class="school">${escola?.nom || 'Centre educatiu'} · Generat el ${new Date().toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+<table>
+  <tr><th>Camp</th><th>Valor</th></tr>
+  <tr><td>Docent de baixa</td><td><strong>${baixa.absent}</strong></td></tr>
+  <tr><td>Substitut/a</td><td>${baixa.substitut || '—'}</td></tr>
+  <tr><td>Tipus de baixa</td><td><span class="badge tipus">${tipusInfo.label}</span></td></tr>
+  <tr><td>Estat</td><td><span class="badge ${baixa.estat === 'tancada' ? 'tancada' : 'activa'}">${baixa.estat === 'tancada' ? 'Tancada' : 'Activa'}</span></td></tr>
+  <tr><td>Data d'inici</td><td>${fmtData(baixa.data_inici)}</td></tr>
+  <tr><td>Fi prevista</td><td>${fmtData(baixa.data_fi_prevista)}</td></tr>
+  <tr><td>Fi real</td><td>${fmtData(baixa.data_fi_real)}</td></tr>
+  ${dies !== null ? `<tr><td>Durada total</td><td><strong>${dies} dies</strong>${dies >= 7 ? ' (' + formatDurada(dies) + ')' : ''}</td></tr>` : ''}
+  ${cobCount > 0 ? `<tr><td>Cobertures generades</td><td><strong>${cobCount}</strong> franges cobertes registrades</td></tr>` : ''}
+  ${baixa.notes ? `<tr><td>Notes</td><td>${baixa.notes}</td></tr>` : ''}
+</table>
+<div class="footer"><span>GDocent · Gestió Docent</span><span>${escola?.nom || ''}</span></div>
+</body></html>`;
+    const w = window.open('', '_blank', 'width=700,height=620');
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400); }
   }
 
   async function reload() {
@@ -298,6 +377,29 @@ export default function HorarisPage() {
     baixes.map(b => [b.substitut.toLowerCase().trim(), b])
   );
 
+  const mesosAcademics = useMemo(() => {
+    const now = new Date();
+    const acadYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    return [
+      ...Array.from({ length: 4 }, (_, i) => `${acadYear}-${String(i + 9).padStart(2, '0')}`),
+      ...Array.from({ length: 7 }, (_, i) => `${acadYear + 1}-${String(i + 1).padStart(2, '0')}`),
+    ];
+  }, []);
+
+  const baixesDelMes = useMemo(() => {
+    if (baixaMes === 'actives') return baixes.filter(b => b.estat !== 'tancada');
+    const [y, m] = baixaMes.split('-').map(Number);
+    const primerDia = new Date(y, m - 1, 1);
+    const ultimDia = new Date(y, m, 0);
+    return baixes.filter(b => {
+      if (!b.data_inici) return b.estat !== 'tancada';
+      const inici = new Date(b.data_inici + 'T12:00:00');
+      if (inici > ultimDia) return false;
+      if (b.data_fi_real) return new Date(b.data_fi_real + 'T12:00:00') >= primerDia;
+      return true;
+    });
+  }, [baixes, baixaMes]);
+
   return (
     <>
       {deleteTarget && (
@@ -349,63 +451,154 @@ export default function HorarisPage() {
 
       {showBaixes && (
         <div className="card" style={{ marginBottom: 14 }}>
+          {/* Capçalera */}
           <div className="card-head">
-            <h3>Baixes amb substitucions</h3>
+            <h3>🩹 Baixes amb substitucions</h3>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {baixaForm !== 'new' && (
                 <button className="btn btn-sm" style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 12, fontWeight: 600 }} onClick={() => openBaixaForm('new')}>
-                  + Afegir baixa
+                  + Nova baixa
                 </button>
               )}
-              <span className="sp sp-amber">{baixes.length} baixes</span>
+              <span className="sp sp-amber">{baixes.filter(b => b.estat !== 'tancada').length} actives</span>
             </div>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--blue)', background: 'var(--blue-bg)', padding: '9px 14px', borderBottom: '1px solid var(--border)' }}>
+
+          <div style={{ fontSize: 12, color: 'var(--blue)', background: 'var(--blue-bg)', padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
             ℹ️ La IA llegeix aquesta llista. El substitut farà l'horari i les cobertures del docent de baixa.
           </div>
 
           {!baixesLoaded ? (
             <div style={{ padding: 24, textAlign: 'center' }}><Spinner /></div>
-          ) : (
-            <>
-              {baixes.length === 0 && baixaForm !== 'new' && (
-                <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Cap baixa registrada.</div>
-              )}
-              {baixes.map((b, idx) => (
-                <div key={idx}>
-                  {baixaForm === idx ? (
-                    <BaixaFormRow
-                      draft={baixaDraft} onChange={setBaixaDraft}
-                      onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)}
-                      saving={baixesSaving} docents={docents}
-                    />
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{b.absent}</span>
-                          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>→</span>
-                          <span style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600 }}>Substitut/a: {b.substitut}</span>
-                        </div>
-                        {b.notes && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>{b.notes}</div>}
+          ) : (<>
+
+            {/* Navegació mensual */}
+            <div style={{ display: 'flex', gap: 5, padding: '10px 14px', borderBottom: '1px solid var(--border)', overflowX: 'auto', scrollbarWidth: 'none' }}>
+              <button
+                onClick={() => setBaixaMes('actives')}
+                style={{ padding: '4px 11px', borderRadius: 20, border: '1.5px solid', flexShrink: 0, fontFamily: 'inherit', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', borderColor: baixaMes === 'actives' ? 'var(--green)' : 'var(--border)', background: baixaMes === 'actives' ? 'var(--green-bg)' : 'var(--bg)', color: baixaMes === 'actives' ? 'var(--green)' : 'var(--ink-3)' }}
+              >● Actives ({baixes.filter(b => b.estat !== 'tancada').length})</button>
+              {mesosAcademics.map(mes => {
+                const [y, m] = mes.split('-').map(Number);
+                const primerDia = new Date(y, m - 1, 1);
+                const ultimDia = new Date(y, m, 0);
+                const count = baixes.filter(b => {
+                  if (!b.data_inici) return false;
+                  const inici = new Date(b.data_inici + 'T12:00:00');
+                  if (inici > ultimDia) return false;
+                  if (b.data_fi_real) return new Date(b.data_fi_real + 'T12:00:00') >= primerDia;
+                  return true;
+                }).length;
+                const isFutur = mes > new Date().toISOString().slice(0, 7);
+                if (count === 0 && isFutur) return null;
+                const isSel = baixaMes === mes;
+                return (
+                  <button key={mes}
+                    onClick={() => setBaixaMes(mes)}
+                    style={{ padding: '4px 11px', borderRadius: 20, border: '1.5px solid', flexShrink: 0, fontFamily: 'inherit', cursor: 'pointer', fontSize: 11.5, whiteSpace: 'nowrap', fontWeight: isSel ? 700 : count > 0 ? 500 : 400, borderColor: isSel ? 'var(--amber)' : count > 0 ? 'var(--border)' : 'transparent', background: isSel ? 'var(--amber-bg)' : 'var(--bg)', color: isSel ? 'var(--amber)' : count > 0 ? 'var(--ink-2)' : 'var(--ink-4)' }}
+                  >{MESOS_NOM[m - 1].slice(0, 3)} {String(y).slice(2)}{count > 0 ? ` (${count})` : ''}</button>
+                );
+              })}
+            </div>
+
+            {/* KPIs del mes */}
+            {baixesDelMes.length > 0 && (() => {
+              const actives  = baixesDelMes.filter(b => b.estat !== 'tancada').length;
+              const tancades = baixesDelMes.filter(b => b.estat === 'tancada').length;
+              const diesTot  = baixesDelMes.reduce((s, b) => s + (duradaDies(b) || 0), 0);
+              const cobsTot  = baixesDelMes.reduce((s, b) => s + (baixaCobStats[b.absent] || 0), 0);
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: '1px solid var(--border)' }}>
+                  {[['Actives', actives, 'var(--amber)'], ['Tancades', tancades, 'var(--ink-3)'], ['Dies totals', diesTot, 'var(--blue)'], ['Cobertures', cobsTot, 'var(--green)']].map(([lbl, val, col]) => (
+                    <div key={lbl} style={{ padding: '10px 6px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: col }}>{val}</div>
+                      <div style={{ fontSize: 9, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{lbl}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Formulari nova baixa */}
+            {baixaForm === 'new' && (
+              <BaixaFormRow draft={baixaDraft} onChange={setBaixaDraft} onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)} saving={baixesSaving} isNew docents={docents} />
+            )}
+
+            {/* Llista buida */}
+            {baixesDelMes.length === 0 && baixaForm !== 'new' && (
+              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+                {baixaMes === 'actives' ? 'Cap baixa activa ara mateix.' : 'Cap baixa registrada per a aquest mes.'}
+              </div>
+            )}
+
+            {/* Cards de baixes */}
+            {baixesDelMes.map(b => {
+              const idx = baixes.indexOf(b);
+              const tipusInfo = TIPUS_BAIXA.find(t => t.key === b.tipus) || TIPUS_BAIXA[0];
+              const dies = duradaDies(b);
+              const isActiva = b.estat !== 'tancada';
+              const cobCount = baixaCobStats[b.absent] ?? 0;
+
+              if (baixaForm === idx) {
+                return <BaixaFormRow key={idx} draft={baixaDraft} onChange={setBaixaDraft} onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)} saving={baixesSaving} docents={docents} />;
+              }
+
+              return (
+                <div key={b.id || idx} style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', background: isActiva ? undefined : 'var(--bg-2)', opacity: isActiva ? 1 : 0.75 }}>
+                  {/* Nom + badges */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: isActiva ? 'var(--amber)' : 'var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                      {initials(b.absent)}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{b.absent}</span>
+                        <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 20, fontWeight: 700, background: tipusInfo.color + '18', color: tipusInfo.color, border: `1px solid ${tipusInfo.color}35` }}>{tipusInfo.label}</span>
+                        {isActiva
+                          ? <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 20, fontWeight: 700, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)' }}>● Activa</span>
+                          : <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 20, fontWeight: 700, background: 'var(--bg-3)', color: 'var(--ink-4)', border: '1px solid var(--border)' }}>Tancada</span>
+                        }
                       </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => openBaixaForm(idx)}>✏️</button>
-                        <button className="btn btn-red-soft btn-sm" style={{ fontSize: 12 }} onClick={() => deleteBaixa(idx)}>🗑️</button>
+                      <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 3 }}>
+                        Substitut/a: <span style={{ color: 'var(--green)', fontWeight: 600 }}>{b.substitut}</span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Dates i stats */}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {[
+                      b.data_inici         && ['Inici',       new Date(b.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }), 'var(--ink-2)'],
+                      b.data_fi_prevista   && ['Fi prevista', new Date(b.data_fi_prevista + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }), 'var(--ink-3)'],
+                      b.data_fi_real       && ['Fi real',     new Date(b.data_fi_real + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }), 'var(--green)'],
+                      dies !== null        && ['Durada',       formatDurada(dies), 'var(--amber)'],
+                      cobCount > 0         && ['Cobertures',   String(cobCount), 'var(--blue)'],
+                    ].filter(Boolean).map(([lbl, val, col]) => (
+                      <div key={lbl} style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '6px 10px', background: 'var(--bg-2)', borderRadius: 8, minWidth: 60 }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{lbl}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: col }}>{val}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {b.notes && (
+                    <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 10, padding: '6px 10px', background: 'var(--bg-2)', borderRadius: 6 }}>{b.notes}</div>
                   )}
+
+                  {/* Accions */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11.5 }} onClick={() => openBaixaForm(idx)}>✏️ Editar</button>
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11.5 }} onClick={() => imprimirInforme(b, cobCount)}>📄 Informe</button>
+                    {isActiva
+                      ? <button className="btn btn-sm" style={{ fontSize: 11.5, background: 'var(--bg-2)', color: 'var(--ink-3)', borderColor: 'var(--border)' }} onClick={() => tancarBaixa(idx)}>✓ Tancar baixa</button>
+                      : <button className="btn btn-sm" style={{ fontSize: 11.5, background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)' }} onClick={() => reobrirBaixa(idx)}>↩ Reobrir</button>
+                    }
+                    <button className="btn btn-red-soft btn-sm" style={{ fontSize: 11.5 }} onClick={() => deleteBaixa(idx)}>🗑️</button>
+                  </div>
                 </div>
-              ))}
-              {baixaForm === 'new' && (
-                <BaixaFormRow
-                  draft={baixaDraft} onChange={setBaixaDraft}
-                  onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)}
-                  saving={baixesSaving} isNew docents={docents}
-                />
-              )}
-            </>
-          )}
+              );
+            })}
+          </>)}
         </div>
       )}
 
@@ -813,8 +1006,12 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docent
   const mostraCrearCompte = isNew && draft.substitut.trim() && !substitutJaExisteix;
 
   return (
-    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {isNew && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Nova baixa</div>}
+    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12, background: isNew ? 'var(--green-bg)' : 'var(--bg-2)' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: isNew ? 'var(--green)' : 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+        {isNew ? '+ Nova baixa' : '✏️ Editant baixa'}
+      </div>
+
+      {/* Fila 1: Docent i Substitut */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div>
           <label className="f-label">Docent de baixa</label>
@@ -827,22 +1024,37 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docent
           <label className="f-label">Substitut/a</label>
           <input className="f-ctrl" placeholder="Nom del substitut/a" value={draft.substitut} onChange={e => onChange(d => ({ ...d, substitut: e.target.value }))} />
         </div>
-        <div style={{ gridColumn: 'span 2' }}>
-          <label className="f-label">Notes (opcional)</label>
-          <input className="f-ctrl" placeholder="Ex: Baixa des del 01/03/2026" value={draft.notes} onChange={e => onChange(d => ({ ...d, notes: e.target.value }))} />
+      </div>
+
+      {/* Fila 2: Tipus + Dates */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        <div>
+          <label className="f-label">Tipus de baixa</label>
+          <select className="f-ctrl" value={draft.tipus || 'malaltia'} onChange={e => onChange(d => ({ ...d, tipus: e.target.value }))}>
+            {TIPUS_BAIXA.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="f-label">Data d'inici</label>
+          <input type="date" className="f-ctrl" value={draft.data_inici || ''} onChange={e => onChange(d => ({ ...d, data_inici: e.target.value }))} />
+        </div>
+        <div>
+          <label className="f-label">Fi prevista (opcional)</label>
+          <input type="date" className="f-ctrl" value={draft.data_fi_prevista || ''} onChange={e => onChange(d => ({ ...d, data_fi_prevista: e.target.value }))} />
         </div>
       </div>
 
+      {/* Notes */}
+      <div>
+        <label className="f-label">Notes (opcional)</label>
+        <input className="f-ctrl" placeholder="Observacions sobre la baixa..." value={draft.notes} onChange={e => onChange(d => ({ ...d, notes: e.target.value }))} />
+      </div>
+
+      {/* Bloc crear compte substitut */}
       {mostraCrearCompte && (
         <div style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue-mid, #C0D0EE)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue)' }}>
-            🔑 Crear accés per a {draft.substitut}
-          </div>
-          {titular && (
-            <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-              S'importarà l'horari i el grup de <strong>{titular.nom}</strong>
-            </div>
-          )}
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue)' }}>🔑 Crear accés per a {draft.substitut}</div>
+          {titular && <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>S'importarà l'horari i el grup de <strong>{titular.nom}</strong></div>}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
             <div>
               <label className="f-label">PIN (4 dígits)</label>
@@ -854,24 +1066,49 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docent
             </div>
           </div>
           {!titular && draft.absent.trim() && (
-            <div style={{ fontSize: 11, color: 'var(--amber)' }}>⚠ No s'ha trobat el titular al sistema — el compte es crearà sense horari</div>
+            <div style={{ fontSize: 11, color: 'var(--amber)' }}>⚠ Titular no trobat — compte es crearà sense horari</div>
           )}
         </div>
       )}
       {isNew && draft.substitut.trim() && substitutJaExisteix && (
-        <div style={{ fontSize: 11.5, color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 6, padding: '7px 10px' }}>
+        <div style={{ fontSize: 11.5, color: 'var(--green)', background: '#fff', border: '1px solid var(--green-mid)', borderRadius: 6, padding: '7px 10px' }}>
           ✓ {draft.substitut} ja té compte al sistema
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn btn-green" style={{ fontSize: 13, padding: '7px 16px' }} onClick={onSave} disabled={saving || !draft.absent.trim() || !draft.substitut.trim()}>
-          {saving ? 'Guardant...' : '✓ Guardar'}
+          {saving ? 'Guardant...' : '✓ Guardar baixa'}
         </button>
         <button className="btn btn-ghost" style={{ fontSize: 13, padding: '7px 12px' }} onClick={onCancel}>Cancel·lar</button>
       </div>
     </div>
   );
+}
+
+const TIPUS_BAIXA = [
+  { key: 'malaltia',   label: 'Malaltia',             color: '#dc2626' },
+  { key: 'maternitat', label: 'Maternitat/Paternitat', color: '#7c3aed' },
+  { key: 'accident',   label: 'Accident laboral',      color: '#d97706' },
+  { key: 'llicencia',  label: 'Llicència oficial',     color: '#2563eb' },
+  { key: 'altre',      label: 'Altra causa',           color: '#6b7280' },
+];
+
+const MESOS_NOM = ['Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agost','Setembre','Octubre','Novembre','Desembre'];
+
+function duradaDies(b) {
+  if (!b.data_inici) return null;
+  const fi = b.data_fi_real || (b.estat === 'tancada' ? null : new Date().toISOString().split('T')[0]);
+  if (!fi) return null;
+  return Math.max(0, Math.round((new Date(fi + 'T12:00:00') - new Date(b.data_inici + 'T12:00:00')) / 86400000));
+}
+
+function formatDurada(dies) {
+  if (dies === null || dies === undefined) return null;
+  if (dies === 0) return '0 dies';
+  if (dies < 7) return `${dies} d`;
+  const s = Math.floor(dies / 7), r = dies % 7;
+  return r === 0 ? `${s} setm.` : `${s}s ${r}d`;
 }
 
 function hasCeepsir(d) {
