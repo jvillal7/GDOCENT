@@ -88,13 +88,13 @@ export default function HorarisPage() {
   const [baixesLoaded, setBaixesLoaded] = useState(false);
   const [baixesSaving, setBaixesSaving] = useState(false);
   const [baixaForm,   setBaixaForm]   = useState(null); // null | 'new' | index
-  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '' });
+  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '' });
   const fileRef = useRef(null);
 
   useEffect(() => {
     if (!api) return;
     reload();
-    if (!isOriol) api.getBaixes().then(res => {
+    api.getBaixes().then(res => {
       setBaixes(res?.[0]?.oriol_baixes || []);
       setBaixesLoaded(true);
     }).catch(() => setBaixesLoaded(true));
@@ -121,9 +121,9 @@ export default function HorarisPage() {
 
   function openBaixaForm(idx) {
     if (idx === 'new') {
-      setBaixaDraft({ absent: '', substitut: '', notes: '' });
+      setBaixaDraft({ absent: '', substitut: '', notes: '', pin: '1234', email: '' });
     } else {
-      setBaixaDraft({ ...baixes[idx] });
+      setBaixaDraft({ ...baixes[idx], pin: '1234', email: '' });
     }
     setBaixaForm(idx);
   }
@@ -136,6 +136,35 @@ export default function HorarisPage() {
       : baixes.map((b, i) => i === baixaForm ? item : b);
     setBaixaForm(null);
     await saveBaixesList(nova);
+
+    // Crear docent substitut si és nova baixa i no existeix ja al sistema
+    if (baixaForm === 'new') {
+      const nomSubstitut = baixaDraft.substitut.trim();
+      const jaExisteix = docents.some(d => d.nom.toLowerCase() === nomSubstitut.toLowerCase());
+      if (!jaExisteix && baixaDraft.pin.length === 4) {
+        const titular = docents.find(d => d.nom.toLowerCase() === baixaDraft.absent.toLowerCase().trim());
+        if (titular) {
+          try {
+            await api.saveDocent({
+              nom: nomSubstitut,
+              escola_id: escola.id,
+              rol: titular.rol,
+              grup_principal: titular.grup_principal,
+              horari: titular.horari || {},
+              tp_franges: titular.tp_franges || [],
+              cobertures_mes: 0,
+              pin: baixaDraft.pin.trim(),
+              email: baixaDraft.email.trim() || null,
+              actiu: true,
+            });
+            await reload();
+            showToast(`✓ Baixa guardada · ${nomSubstitut} pot fer login al sistema`);
+          } catch (e) {
+            showToast(`Baixa guardada, però error creant compte: ${e.message}`);
+          }
+        }
+      }
+    }
   }
 
   async function deleteBaixa(idx) {
@@ -265,6 +294,9 @@ export default function HorarisPage() {
   const baixesMap = Object.fromEntries(
     baixes.map(b => [b.absent.toLowerCase().trim(), b])
   );
+  const substitutMap = Object.fromEntries(
+    baixes.map(b => [b.substitut.toLowerCase().trim(), b])
+  );
 
   return (
     <>
@@ -287,36 +319,27 @@ export default function HorarisPage() {
           <h1>Personal del centre</h1>
           <p>Gestiona el personal: horaris, correus i accés</p>
         </div>
-        {isOriol ? (
-          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 4 }}>
-            <button
-              style={{
-                padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s',
-                background: viewMode === 'personal' ? 'var(--surface)' : 'transparent',
-                color: viewMode === 'personal' ? 'var(--ink)' : 'var(--ink-3)',
-                boxShadow: viewMode === 'personal' ? '0 1px 4px rgba(0,0,0,.12)' : 'none',
-              }}
-              onClick={() => setViewMode('personal')}
-            >👥 Personal</button>
-            <button
-              style={{
-                padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s',
-                background: viewMode === 'grups' ? 'var(--surface)' : 'transparent',
-                color: viewMode === 'grups' ? 'var(--ink)' : 'var(--ink-3)',
-                boxShadow: viewMode === 'grups' ? '0 1px 4px rgba(0,0,0,.12)' : 'none',
-              }}
-              onClick={() => setViewMode('grups')}
-            >📚 Grups</button>
-          </div>
-        ) : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {isOriol && (
+            <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 4 }}>
+              <button
+                style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'personal' ? 'var(--surface)' : 'transparent', color: viewMode === 'personal' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'personal' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
+                onClick={() => setViewMode('personal')}
+              >👥 Personal</button>
+              <button
+                style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'grups' ? 'var(--surface)' : 'transparent', color: viewMode === 'grups' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'grups' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
+                onClick={() => setViewMode('grups')}
+              >📚 Grups</button>
+            </div>
+          )}
           <button
             className="btn btn-sm"
-            style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderColor: 'var(--amber)', fontSize: 13, fontWeight: 600, padding: '7px 14px', flexShrink: 0 }}
+            style={{ background: showBaixes ? 'var(--amber)' : 'var(--amber-bg)', color: showBaixes ? '#fff' : 'var(--amber)', borderColor: 'var(--amber)', fontSize: 13, fontWeight: 600, padding: '7px 14px', flexShrink: 0 }}
             onClick={() => { setShowBaixes(o => !o); if (!baixesLoaded) loadBaixes(); }}
           >
             🩹 Baixes{baixes.length > 0 ? ` (${baixes.length})` : ''}
           </button>
-        )}
+        </div>
       </div>
 
       {viewMode === 'grups' && isOriol && (
@@ -324,7 +347,7 @@ export default function HorarisPage() {
       )}
       {(viewMode !== 'grups' || !isOriol) && (<>
 
-      {showBaixes && !isOriol && (
+      {showBaixes && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="card-head">
             <h3>Baixes amb substitucions</h3>
@@ -354,7 +377,7 @@ export default function HorarisPage() {
                     <BaixaFormRow
                       draft={baixaDraft} onChange={setBaixaDraft}
                       onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)}
-                      saving={baixesSaving}
+                      saving={baixesSaving} docents={docents}
                     />
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
@@ -378,7 +401,7 @@ export default function HorarisPage() {
                 <BaixaFormRow
                   draft={baixaDraft} onChange={setBaixaDraft}
                   onSave={confirmBaixaForm} onCancel={() => setBaixaForm(null)}
-                  saving={baixesSaving} isNew
+                  saving={baixesSaving} isNew docents={docents}
                 />
               )}
             </>
@@ -408,6 +431,7 @@ export default function HorarisPage() {
                   const isOpen = expanded === (d.id || d.nom);
                   const teHorari = d.horari && Object.keys(d.horari).length > 0;
                   const baixa = baixesMap[d.nom.toLowerCase().trim()];
+                  const esSubstitut = substitutMap[d.nom.toLowerCase().trim()];
                   return (
                     <div key={d.id || d.nom} style={{ borderBottom: '1px solid var(--border)', background: baixa ? 'var(--amber-bg)' : undefined }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px' }}>
@@ -422,6 +446,9 @@ export default function HorarisPage() {
                                 <span className="sp sp-amber" style={{ fontSize: 10 }}>🩹 Baixa</span>
                                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>→ {baixa.substitut}</span>
                               </>
+                            )}
+                            {esSubstitut && (
+                              <span className="sp sp-amber" style={{ fontSize: 10 }}>🔄 Substituint {esSubstitut.absent}</span>
                             )}
                             {hasCeepsir(d) && (
                               <span style={{ fontSize: 9.5, background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>CEEPSIR</span>
@@ -779,14 +806,22 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   );
 }
 
-function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew }) {
+function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docents }) {
+  const docentsSorted = [...(docents || [])].sort((a, b) => a.nom.localeCompare(b.nom));
+  const titular = docentsSorted.find(d => d.nom.toLowerCase() === draft.absent.toLowerCase().trim());
+  const substitutJaExisteix = docentsSorted.some(d => d.nom.toLowerCase() === draft.substitut.toLowerCase().trim());
+  const mostraCrearCompte = isNew && draft.substitut.trim() && !substitutJaExisteix;
+
   return (
     <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
       {isNew && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Nova baixa</div>}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div>
           <label className="f-label">Docent de baixa</label>
-          <input className="f-ctrl" placeholder="Nom complet" value={draft.absent} onChange={e => onChange(d => ({ ...d, absent: e.target.value }))} />
+          <select className="f-ctrl" value={draft.absent} onChange={e => onChange(d => ({ ...d, absent: e.target.value }))}>
+            <option value="">Selecciona...</option>
+            {docentsSorted.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
+          </select>
         </div>
         <div>
           <label className="f-label">Substitut/a</label>
@@ -797,6 +832,38 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew }) {
           <input className="f-ctrl" placeholder="Ex: Baixa des del 01/03/2026" value={draft.notes} onChange={e => onChange(d => ({ ...d, notes: e.target.value }))} />
         </div>
       </div>
+
+      {mostraCrearCompte && (
+        <div style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue-mid, #C0D0EE)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue)' }}>
+            🔑 Crear accés per a {draft.substitut}
+          </div>
+          {titular && (
+            <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+              S'importarà l'horari i el grup de <strong>{titular.nom}</strong>
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
+            <div>
+              <label className="f-label">PIN (4 dígits)</label>
+              <input className="f-ctrl" maxLength={4} placeholder="1234" value={draft.pin || ''} onChange={e => onChange(d => ({ ...d, pin: e.target.value.replace(/[^0-9]/g, '') }))} />
+            </div>
+            <div>
+              <label className="f-label">Correu electrònic</label>
+              <input type="email" className="f-ctrl" placeholder="nom@xtec.cat" value={draft.email || ''} onChange={e => onChange(d => ({ ...d, email: e.target.value }))} />
+            </div>
+          </div>
+          {!titular && draft.absent.trim() && (
+            <div style={{ fontSize: 11, color: 'var(--amber)' }}>⚠ No s'ha trobat el titular al sistema — el compte es crearà sense horari</div>
+          )}
+        </div>
+      )}
+      {isNew && draft.substitut.trim() && substitutJaExisteix && (
+        <div style={{ fontSize: 11.5, color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 6, padding: '7px 10px' }}>
+          ✓ {draft.substitut} ja té compte al sistema
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn btn-green" style={{ fontSize: 13, padding: '7px 16px' }} onClick={onSave} disabled={saving || !draft.absent.trim() || !draft.substitut.trim()}>
           {saving ? 'Guardant...' : '✓ Guardar'}
