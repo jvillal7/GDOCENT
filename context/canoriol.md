@@ -87,6 +87,7 @@ Dues regles:
 
 ### ESTIM (Estimulació)
 Sala d'estimulació sensorial. E.R (ESTIM) porta Estimulació a múltiples grups.
+**Si E.R (ESTIM) és absent:** les franges d'Estimulació no es cobreixen. La tutora de cada grup es queda amb els seus alumnes. No cal proposar cap cobertura.
 
 ### MUS (Música)
 A.G (MUS) fa Música a tots els grups.

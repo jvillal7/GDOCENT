@@ -27,6 +27,7 @@ Rols: MEE (mestre educació especial), PAE (mai cobertura independent), EVIP, MA
 CEEPSIR/Piscina a l'horari = fora del centre, no disponible
 L.M (MEE): mestra de suport sense horari fix — horari sempre "Suport" = SEMPRE disponible. Primera opció per cobrir Infantil-Primària (G1–G6). No genera deute TP.
 R.S (MEE): mestra de suport sense horari fix — horari sempre "Suport" = SEMPRE disponible. Primera opció per cobrir Secundària (G7–G14). No genera deute TP.
+ESTIM absent: les franges d'Estimulació NO es cobreixen — la tutora es queda amb el seu grup. No cal proposar ningú.
 MALL (A.G, R.E, C.P): si ja entren al grup absent → poden assumir el grup complet. Si NO hi entren → ÚLTIM RECURS, només si no hi ha cap MEE disponible.
 ÚLTIM RECURS (no proposar fins esgotar MEE i msuport): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL).
 G5 cotutoria: A.S (MEE) + R.V (MEE) — cada una fa 1h TP/setmana (no 2h, per cotutoria de grup compartit)

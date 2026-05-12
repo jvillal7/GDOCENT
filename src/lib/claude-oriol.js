@@ -165,6 +165,7 @@ ${regles}
 ▸ L.M (MEE): mestra de suport sense horari fix. Horari sempre "Suport" → SEMPRE disponible. PRIORITZAR per cobrir Infantil-Primària (G1–G6). No genera deute TP.
 ▸ R.S (MEE): mestra de suport sense horari fix. Horari sempre "Suport" → SEMPRE disponible. PRIORITZAR per cobrir Secundària (G7–G14). No genera deute TP.
 ▸ G5 COTUTORIA: A.S (MEE) i R.V (MEE) comparteixen la tutoria de G5. Cada una fa 1h de TP/setmana (no les 2h estàndard perquè el grup és compartit). Si una de les dues és la docent absent i l'altra està disponible, la co-tutora és la primera opció per cobrir.
+▸ ESTIM (Estimulació): si E.R (ESTIM) és absent, les franges d'Estimulació NO es cobreixen. La tutora del grup es queda amb els seus alumnes. NO cal proposar cap cobertura per aquestes franges.
 ▸ MALL (Mestres d'Atenció a la Llengua): A.G (MALL), R.E (MALL), C.P (MALL). REGLA: si una MALL ja entra habitualment al grup del docent absent (apareix al seu horari en aquella franja), POT assumir el grup complet durant l'absència. En canvi, si NO entra al grup, les MALL són ÚLTIM RECURS — no les proposis fins que no hi hagi cap MEE ni msuport disponible.
 ▸ MxI (Moure x Incloure): grup d'escolaritat compartida que ve NOMÉS 2 dies/setmana. Funciona exclusivament per referents humans. REGLA ABSOLUTA: únicament C.F (MEE, tutora) i M.V (PAE) treballen habitualment amb aquest grup. Si C.F o M.V falta, les ÚNIQUES persones que poden cobrir MxI són L.M (MEE) o R.E (MALL). Cap altre docent pot entrar a MxI en cap circumstància.
 
