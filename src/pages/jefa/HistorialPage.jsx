@@ -52,7 +52,7 @@ export default function HistorialPage() {
   const topAbsents = useMemo(() => {
     if (!absencies) return [];
     const map = {};
-    absencies.forEach(a => {
+    absencies.filter(a => a.tipus !== 'sortida').forEach(a => {
       if (!map[a.docent_nom]) map[a.docent_nom] = { total: 0, pendents: 0 };
       map[a.docent_nom].total++;
       if (a.estat === 'pendent') map[a.docent_nom].pendents++;
@@ -136,8 +136,9 @@ export default function HistorialPage() {
     return <><div className="page-hdr"><h1>Historial</h1></div><div style={{ padding: 40, textAlign: 'center' }}><Spinner /></div></>;
   }
 
-  const total      = absencies.length;
-  const gestionades = absencies.filter(a => a.estat !== 'pendent').length;
+  const absenciesReals = absencies.filter(a => a.tipus !== 'sortida');
+  const total          = absenciesReals.length;
+  const gestionades    = absenciesReals.filter(a => a.estat !== 'pendent').length;
 
   return (
     <>
@@ -250,28 +251,36 @@ export default function HistorialPage() {
         const dataFmt = dia !== 'sense-data'
           ? new Date(dia + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
           : 'Sense data';
-        const allOk = abs.every(a => a.estat !== 'pendent');
-        const isOpen = openDies.has(dia);
+        const absReals   = abs.filter(a => a.tipus !== 'sortida');
+        const sortides   = abs.filter(a => a.tipus === 'sortida');
+        const allOk      = abs.every(a => a.estat !== 'pendent');
+        const isOpen     = openDies.has(dia);
         return (
           <div key={dia} className="card" style={{ marginBottom: 10, overflow: 'hidden' }}>
             <div onClick={() => toggleDia(dia)}
               style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: isOpen ? '1px solid var(--border)' : 'none' }}>
               <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>{dataFmt}</div>
-              <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{abs.length} abs.</span>
+              {absReals.length > 0 && <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{absReals.length} abs.</span>}
+              {sortides.length > 0 && <span style={{ fontSize: 11, color: 'var(--blue)' }}>🚌 {sortides.length}</span>}
               <span className={`sp ${allOk ? 'sp-green' : 'sp-red'}`}>{allOk ? 'Cobert' : 'Pendent'}</span>
             </div>
             {isOpen && abs.map(a => {
               const dObj = a.data ? new Date(a.data + 'T12:00:00') : new Date();
               const myCobs = cobs.filter(c => c.absencia_id === a.id || c.docent_absent_nom === a.docent_nom);
+              const esSortida = a.tipus === 'sortida';
               return (
-                <div key={a.id} className={`avis-card${a.estat === 'pendent' ? ' pendent' : ''}`} style={{ margin: '8px 14px', boxShadow: 'none', borderColor: 'var(--border)' }}>
+                <div key={a.id} className={`avis-card${a.estat === 'pendent' ? ' pendent' : ''}`}
+                  style={{ margin: '8px 14px', boxShadow: 'none', borderColor: esSortida ? 'var(--blue-mid, #C0D0EE)' : 'var(--border)', background: esSortida ? 'var(--blue-bg)' : undefined }}>
                   <div className="ac-top" style={{ padding: 12 }}>
-                    <div className="date-badge" style={{ transform: 'scale(0.85)', marginLeft: -4 }}>
+                    <div className="date-badge" style={{ transform: 'scale(0.85)', marginLeft: -4, opacity: esSortida ? 0.7 : 1 }}>
                       <div className="db-day">{dObj.getDate()}</div>
                       <div className="db-month">{dObj.toLocaleDateString('ca-ES', { month: 'short' }).replace('.', '').toUpperCase()}</div>
                     </div>
                     <div className="ac-content">
-                      <div className="ac-name" style={{ fontSize: 14 }}>{a.docent_nom}</div>
+                      <div className="ac-name" style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {a.docent_nom}
+                        {esSortida && <span style={{ fontSize: 10, background: 'var(--blue-bg)', border: '1px solid var(--blue-mid, #C0D0EE)', borderRadius: 20, padding: '1px 7px', color: 'var(--blue)', fontWeight: 700 }}>🚌 Sortida</span>}
+                      </div>
                       <div className="ac-motiu">{a.motiu || 'Sense motiu'}</div>
                     </div>
                     <div className="ac-side">

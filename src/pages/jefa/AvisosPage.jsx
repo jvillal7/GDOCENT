@@ -222,6 +222,7 @@ export default function AvisosPage() {
           franges: JSON.stringify(av.franges),
           motiu: av.motiu || 'Activitat especial',
           estat: 'pendent',
+          tipus: 'sortida',
         });
       }
       setAvisosDescoberts([]);
