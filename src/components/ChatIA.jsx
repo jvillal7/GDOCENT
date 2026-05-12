@@ -157,8 +157,8 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
         }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>🤖 Assistent IA</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>Expert en cobertures del centre</div>
+            <div style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(to right, #7c3aed, #2563eb)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>💬 Horaria</div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>Assistent expert en cobertures</div>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ fontSize: 16, padding: '4px 10px' }}>✕</button>
         </div>

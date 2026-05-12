@@ -146,12 +146,12 @@ export async function proposarCoberturaViaChat(absent, frangesIds, docents, norm
   const raw = await xatIA(systemCtx, [{ role: 'user', content: userMsg }], 1500);
 
   const m = /<proposta>([\s\S]*?)<\/proposta>/i.exec(raw);
-  if (!m) throw new Error('La IA no ha retornat una proposta. Torna-ho a intentar o usa el chatbot 💬.');
+  if (!m) throw new Error('La IA no ha retornat una proposta. Torna-ho a intentar o usa Horaria 💬.');
   let proposta;
   try { proposta = JSON.parse(m[1].trim()); }
-  catch { throw new Error('Error llegint la proposta. Torna-ho a intentar o usa el chatbot 💬.'); }
+  catch { throw new Error('Error llegint la proposta. Torna-ho a intentar o usa Horaria 💬.'); }
   if (!Array.isArray(proposta) || proposta.length === 0)
-    throw new Error('La proposta és buida. Usa el chatbot 💬 per a casos especials.');
+    throw new Error('La proposta és buida. Usa Horaria 💬 per a casos especials.');
 
   const resum = raw.replace(/<proposta>[\s\S]*?<\/proposta>/gi, '').trim();
   return { proposta, resum };
