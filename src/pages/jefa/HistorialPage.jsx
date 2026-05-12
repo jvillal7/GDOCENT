@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { useApp } from '../../context/AppContext';
 import FrangesChips from '../../components/FrangesChips';
 import Spinner from '../../components/Spinner';
@@ -106,30 +107,76 @@ export default function HistorialPage() {
     });
   }
 
-  function exportCSV() {
-    const rows = [['Data', 'Dia de la setmana', 'Docent', 'Motiu', 'Estat', 'Cobert per']];
+  function exportExcel() {
+    const DIES_CAT = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'];
+
+    // Full 1: Absències
+    const absRows = [['Data', 'Dia', 'Docent', 'Tipus', 'Motiu', 'Franges', 'Estat', 'Cobert per', 'Núm. cobertures']];
     diesFiltrats.forEach(dia => {
       const { abs, cobs } = byDay[dia] || {};
       (abs || []).forEach(a => {
-        const cobsNoms = [...new Set(
-          (cobs || [])
-            .filter(c => c.absencia_id === a.id || c.docent_absent_nom === a.docent_nom)
-            .map(c => c.docent_cobrint_nom).filter(Boolean)
-        )].join('; ');
-        const dataFmt = dia !== 'sense-data'
-          ? new Date(dia + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-          : 'Sense data';
-        rows.push([dia, dataFmt, a.docent_nom, a.motiu || '', a.estat, cobsNoms]);
+        const myCobs = (cobs || []).filter(c => c.absencia_id === a.id || c.docent_absent_nom === a.docent_nom);
+        const cobsNoms = [...new Set(myCobs.map(c => c.docent_cobrint_nom).filter(Boolean))].join('; ');
+        const dataObj = dia !== 'sense-data' ? new Date(dia + 'T12:00:00') : null;
+        const diaNom = dataObj ? DIES_CAT[dataObj.getDay()] : '';
+        let frangesText = '';
+        try { frangesText = JSON.parse(a.franges || '[]').join(', '); } catch { frangesText = a.franges || ''; }
+        absRows.push([
+          dia !== 'sense-data' ? dia : 'Sense data',
+          diaNom,
+          a.docent_nom || '',
+          a.tipus === 'sortida' ? 'Sortida' : 'Absència',
+          a.motiu || '',
+          frangesText,
+          a.estat === 'pendent' ? 'Pendent' : a.estat === 'arxivat' ? 'Arxivat' : 'Resolt',
+          cobsNoms,
+          myCobs.length,
+        ]);
       });
     });
-    const csv = rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `historial_${mesFiltrat !== 'tots' ? mesFiltrat : new Date().toISOString().slice(0, 7)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    // Full 2: Cobertures
+    const cobRows = [['Data', 'Dia', 'Docent cobrint', 'Docent absent', 'Franja', 'Grup', 'TP afectat']];
+    diesFiltrats.forEach(dia => {
+      const { cobs } = byDay[dia] || {};
+      (cobs || []).forEach(c => {
+        const dataObj = dia !== 'sense-data' ? new Date(dia + 'T12:00:00') : null;
+        cobRows.push([
+          dia !== 'sense-data' ? dia : 'Sense data',
+          dataObj ? DIES_CAT[dataObj.getDay()] : '',
+          c.docent_cobrint_nom || '',
+          c.docent_absent_nom || '',
+          c.franja || '',
+          c.grup || '',
+          c.tp_afectat ? 'Sí' : 'No',
+        ]);
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    function addSheet(rows, name) {
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      // Amplades de columna automàtiques
+      const colWidths = rows[0].map((_, ci) => ({
+        wch: Math.min(40, Math.max(10, ...rows.map(r => String(r[ci] ?? '').length + 2)))
+      }));
+      ws['!cols'] = colWidths;
+      // Capçalera en negreta
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
+        if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'D9D9D9' } } };
+      }
+      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    }
+
+    addSheet(absRows, 'Absències');
+    addSheet(cobRows, 'Cobertures');
+
+    const nom = `historial_${mesFiltrat !== 'tots' ? mesFiltrat : new Date().toISOString().slice(0, 7)}.xlsx`;
+    XLSX.writeFile(wb, nom);
   }
 
   if (absencies == null) {
@@ -208,9 +255,9 @@ export default function HistorialPage() {
           </button>
         </div>
 
-        <button onClick={exportCSV}
+        <button onClick={exportExcel}
           style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--ink-3)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-          ⬇ CSV
+          ⬇ Excel
         </button>
 
         {diaFiltrat && (
