@@ -27,10 +27,19 @@
 | Agnès | secretaria | 1234 |
 | Administrador | dev | 1234 |
 
-## Grups
-`G1, G2, G3, G4, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, MxI`
+## Grups i cicles
 
-**MxI (Moure x Incloure):** Grup d'escolaritat compartida CEE+SIEI. Alumnes parcials. M.V (PAE) és la de referència. Cobertura prioritària.
+| Cicle | Grups |
+|-------|-------|
+| Infantil-Primària | G1, G2, G3, G4, G5, G6, MxI |
+| Secundària | G7, G8, G9, G10, G11, G12, G13, G14 |
+
+**MxI (Moure x Incloure):** Grup d'escolaritat compartida CEE+SIEI. Alumnes parcials que venen **només 2 dies/setmana**. Funcionen molt per referents humans.
+- Tutora: **C.F (MEE)**
+- PAE de referència: **M.V (PAE)**
+- **REGLA ABSOLUTA:** Si C.F o M.V és absent, les úniques persones que poden cobrir MxI són **L.M (MEE)** o **R.E (MALL)**. Cap altre docent.
+
+**G5 cotutoria:** Tutoritzat per **A.S (MEE)** i **R.V (MEE)** conjuntament. Cada una fa **1h de TP/setmana** (no les 2h estàndard, perquè comparteixen el grup). Si una és absent, la co-tutora és la primera opció per cobrir.
 
 ## Coordinadors de cicle
 | Inicials | Cicle | Camp BD |
@@ -94,16 +103,16 @@ Alguns professionals estan al CEEPSIR (assistència externa a altres escoles) de
 - Pati A (11:00–11:30): Infantil/Primària (grups G1–G7 aprox.)
 - Pati B (11:30–12:00): Secundària (grups G8–G14 aprox.)
 
-## Normes IA (normes_ia a Supabase — ara buit, pendent de definir)
+## Normes IA (normes_ia a Supabase — pendent d'omplir per la directora)
 
-**Les normes específiques s'han d'escriure a l'apartat "Normes IA" (rol dev) i es guarden a `escoles.normes_ia`.**
+**Les normes específiques s'escriuen a l'apartat "Normes IA" (rol dev) i es guarden a `escoles.normes_ia`.**
 
-Principis generals per al CEE (a incorporar a les normes_ia):
-- PAE sempre acompanyan MEE, mai cobertura independent
-- D.G (PAE) dimecres 11:00–12:00 → disponible flexible PERÒ sempre paired amb MEE
-- Piscina i CEEPSIR = fora del centre, no proposar
-- G5 té cotutoria A.S + R.V: ambdues han d'estar si és possible
-- Grup MxI és prioritari (alumnes d'escolaritat compartida)
+Principis generals ja integrats al codi (claude-oriol.js + claude-chat.js):
+- PAE sempre acompanya MEE, mai cobertura independent
+- D.G (PAE) dimecres opatiA/opatiB → disponible flexible PERÒ always paired amb MEE
+- Piscina i CEEPSIR a l'horari = fora del centre, no proposar
+- G5 cotutoria: A.S (MEE) + R.V (MEE), 1h TP cadascuna
+- MxI: regla absoluta — si C.F/M.V falta → només L.M (MEE) o R.E (MALL)
 - MEE pot cobrir MEE; PAE no pot substituir MEE sol
 
 ## Notes tècniques

@@ -108,6 +108,8 @@ export function makeApi(escolaId) {
     saveAbsencia: a => { cacheDel(`abs_${escolaId}`); return f('absencies', { method: 'POST', body: JSON.stringify(a) }); },
     patchAbsencia: (id, d) => { cacheDel(`abs_${escolaId}`); return f(`absencies?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(d) }); },
     saveCobertura: c => { cacheDel(`cob_${escolaId}`); return f('cobertures', { method: 'POST', body: JSON.stringify(c) }); },
+    deleteCobertures: absId => { cacheDel(`cob_${escolaId}`); return f(`cobertures?absencia_id=eq.${absId}`, { method: 'DELETE', prefer: 'return=minimal' }); },
+    deleteDeutesTPCobertura: (docentNom, data, absentNom) => f(`deutes_tp?docent_nom=eq.${encodeURIComponent(docentNom)}&data_deute=eq.${data}&retornat=eq.false&motiu=ilike.*${encodeURIComponent(absentNom)}*`, { method: 'DELETE', prefer: 'return=minimal' }),
     getCobertures:       ()    => f('cobertures?order=data.desc&limit=100'),
     getCoberturesByAbsencia: id => f(`cobertures?absencia_id=eq.${id}`),
     getCoberturasAvui:   ()    => f(`cobertures?data=eq.${avui()}`),
@@ -135,5 +137,7 @@ export function makeApi(escolaId) {
       const tom = new Date(); tom.setDate(tom.getDate() + 1);
       return f(`absencies?estat=eq.provisional&data=eq.${tom.toISOString().split('T')[0]}&order=creat_el.desc`);
     },
+    getIaDecisions:  ()  => f(`escoles?id=eq.${escolaId}&select=ia_decisions`, { bypassSchoolId: true }),
+    saveIaDecisions: d   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ ia_decisions: d }), bypassSchoolId: true }),
   };
 }

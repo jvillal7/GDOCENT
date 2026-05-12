@@ -5,41 +5,80 @@ import Spinner from './Spinner';
 function parsePropostaFromText(text) {
   const m = /<proposta>([\s\S]*?)<\/proposta>/i.exec(text);
   if (!m) return null;
-  try { return JSON.parse(m[1].trim()); } catch { return null; }
+  try {
+    const parsed = JSON.parse(m[1].trim());
+    if (Array.isArray(parsed)) return parsed; // pot ser [] (cap cobertura) o [{...}]
+    if (parsed && typeof parsed === 'object') return [parsed];
+    return null;
+  } catch { return null; }
 }
 
-function MessageBubble({ msg, onAplicar }) {
+function MessageBubble({ msg, onAplicar, messages }) {
   const isUser = msg.role === 'user';
   const proposta = !isUser ? parsePropostaFromText(msg.content) : null;
-  const displayText = msg.content
-    .replace(/<proposta>[\s\S]*?<\/proposta>/gi, proposta ? '\n📋 Proposta generada ↓' : '')
-    .trim();
+
+  // Separa el raonament del bloc final 📋 (pot estar a l'inici o precedit per \n)
+  const cleanContent = msg.content.replace(/<proposta>[\s\S]*?<\/proposta>/gi, '').trim();
+  const gridMatch = /(^|\n)(📋[\s\S]*)$/.exec(cleanContent);
+  const reasoning = gridMatch
+    ? (gridMatch.index > 0 ? cleanContent.slice(0, gridMatch.index).trim() : '')
+    : cleanContent;
+  const summary = gridMatch ? gridMatch[2].trim() : null;
+
+  const propostaEmpty = Array.isArray(proposta) && proposta.length === 0;
+  const NOCALHeader = `✅ NO CAL COBRIR — TOT CORRECTE\n══════════════════════════════`;
+  // Construïm el bloc verd: si proposta buida, sempre posem el títol "No cal cobrir" al davant
+  const summaryFinal = propostaEmpty
+    ? `${NOCALHeader}\n${summary || 'Totes les franges queden resoltes sense assignar cap docent.'}`
+    : summary
+      || (proposta
+          ? `📋 PROPOSTA IA\n══════════════════════════════\n${proposta.map(p =>
+              `${p.hores || p.franja || '?'}  │  ${p.docent}${p.tp_afectat ? '  ⚠TP' : '  ✓'}`
+            ).join('\n')}\n══════════════════════════════`
+          : null);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start', gap: 6 }}>
-      <div style={{
-        maxWidth: '85%', padding: '10px 14px',
-        borderRadius: isUser ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-        background: isUser ? 'var(--ink)' : 'var(--bg-2)',
-        color: isUser ? 'var(--surface)' : 'var(--ink)',
-        fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-      }}>
-        {displayText}
-      </div>
-      {proposta && (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start', gap: 8 }}>
+      {/* Raonament (si n'hi ha) */}
+      {reasoning && (
+        <div style={{
+          maxWidth: '90%', padding: '10px 14px',
+          borderRadius: isUser ? '14px 14px 4px 14px' : summaryFinal ? '14px 14px 0 4px' : '14px 14px 14px 4px',
+          background: isUser ? 'var(--ink)' : 'var(--bg-2)',
+          color: isUser ? 'var(--surface)' : 'var(--ink)',
+          fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        }}>
+          {reasoning}
+        </div>
+      )}
+      {/* Graella resum 📋 — monospace per alineació de columnes */}
+      {summaryFinal && (
+        <div style={{
+          maxWidth: '92%', padding: '12px 14px',
+          borderRadius: reasoning ? '0 0 14px 4px' : '14px 14px 14px 4px',
+          background: 'var(--green-bg)',
+          border: '1px solid var(--green-mid)',
+          color: 'var(--green)',
+          fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre', wordBreak: 'normal',
+          overflowX: 'auto', fontFamily: 'monospace',
+        }}>
+          {summaryFinal}
+        </div>
+      )}
+      {proposta !== null && (
         <button
           className="btn btn-green btn-sm"
-          style={{ fontSize: 12, alignSelf: 'flex-start' }}
-          onClick={() => onAplicar(proposta)}
+          style={{ fontSize: 12, alignSelf: 'flex-start', fontWeight: 600 }}
+          onClick={() => onAplicar(proposta, messages)}
         >
-          ✓ Aplicar proposta
+          {propostaEmpty ? '✓ Marcar com a resolt' : '✓ Aplicar proposta'}
         </button>
       )}
     </div>
   );
 }
 
-export default function ChatIA({ systemContext, greeting, onAplicarProposta, onClose }) {
+export default function ChatIA({ systemContext, greeting, onAplicarProposta, onClose, initialMessage }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: greeting, _local: true },
   ]);
@@ -47,13 +86,30 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
   const [loading, setLoading] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  const sentInitial = useRef(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  // Auto-enviar missatge inicial si n'hi ha
   useEffect(() => {
-    inputRef.current?.focus();
+    if (!initialMessage || sentInitial.current) return;
+    sentInitial.current = true;
+    const initMsgs = [
+      { role: 'assistant', content: greeting, _local: true },
+      { role: 'user', content: initialMessage },
+    ];
+    setMessages(initMsgs);
+    setLoading(true);
+    xatIA(systemContext, [{ role: 'user', content: initialMessage }])
+      .then(response => setMessages(prev => [...prev, { role: 'assistant', content: response }]))
+      .catch(e => setMessages(prev => [...prev, { role: 'assistant', content: `❌ Error: ${e.message}` }]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!initialMessage) inputRef.current?.focus();
   }, []);
 
   async function send() {
@@ -110,7 +166,7 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
         {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {messages.map((m, i) => (
-            <MessageBubble key={i} msg={m} onAplicar={onAplicarProposta} />
+            <MessageBubble key={i} msg={m} onAplicar={onAplicarProposta} messages={messages} />
           ))}
           {loading && (
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>

@@ -167,6 +167,9 @@ async function _proposarCoberturaRivo(absentNom, frangesIds, docents, normes, da
         const mgCicle = migGrupCicle(raw);
         if (mgCicle && absentCicle && mgCicle === absentCicle)
           return { estat: 'migGrup', text: `Mig grup (${raw}) — pot assumir grup complet` };
+        // "Suport X" amb grup específic diferent al de l'absent → compromès amb aquells alumnes, no disponible
+        if (/^suport\s+\S/i.test(raw.trim()))
+          return { estat: 'ocupat', text: `Suport fixat a altre grup: ${raw}` };
         return estatHorari(raw);
       };
 
@@ -389,6 +392,8 @@ Franges RESTANTS que has de cobrir tu: ${JSON.stringify(frangesRestants)}\n`
       }
       const e = estatHorari(raw);
       if (e.estat === 'fora') continue;
+      // "Suport X" amb grup específic diferent al de l'absent → no disponible
+      if (e.estat === 'suport' && /^suport\s+\S/i.test(raw.trim())) continue;
       if      (e.estat === 'lliure') gr.lliure.push(d.nom + star);
       else if (e.estat === 'suport') gr.suport.push(`${d.nom}${star} (${raw})`);
       else if (e.estat === 'tp')     gr.tp.push(d.nom + star);
@@ -446,7 +451,7 @@ ${contextResumFranja}
 2. FRANGES RESTANTS ${JSON.stringify(frangesRestants)}: Per cada franja, aplica la jerarquia (PATRÓ 5).
 3. VALIDACIÓ: cada franja de ${JSON.stringify(frangesRestants)} exactament una vegada.
 
-Escriu 2-3 línies de RAONAMENT i llavors el JSON:
+Respon ÚNICAMENT amb el JSON (sense text previ ni explicació):
 {"proposta":[{"docent":"Nom","franges_ids":["f1a"],"hores":"9:00–9:30","grup_origen":"GX","tp_afectat":false,"motiu":"raó concreta"},...],"resum":"frase curta"}`;
 
   logData.prompt_chars = prompt.length;
@@ -464,7 +469,7 @@ Escriu 2-3 línies de RAONAMENT i llavors el JSON:
     return { proposta: sorted, resum: sorted.map(e => `${e.docent}: ${e.hores}`).join(' | ') };
   }
 
-  const result  = await callClaude([{ role: 'user', content: prompt }], 1600);
+  const result  = await callClaude([{ role: 'user', content: prompt }], 2000);
   const filtered = (result.proposta || []).map(entry => {
     const fids = (entry.franges_ids || []).filter(fid => !assignedFids.has(fid));
     return fids.length ? { ...entry, franges_ids: fids } : null;

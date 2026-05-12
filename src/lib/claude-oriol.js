@@ -151,11 +151,19 @@ ${ctxExtra}${ctxBaixes}
 NORMES DEL CENTRE:
 ${regles}
 
+═══ CICLES DEL CENTRE ═══
+• Infantil-Primària: G1, G2, G3, G4, G5, G6, MxI
+• Secundària: G7, G8, G9, G10, G11, G12, G13, G14
+
 ═══ ROLS I REGLES CEE ═══
 • MEE [MEE]: professional principal d'aula → PRIMERA OPCIÓ per cobrir
 • PAE [PAE]: ⛔ MAI com a cobertura independent. El PAE acompanya el MEE, no substitueix. NO el proposis mai sol.
 • EVIP / MALL / ESTIM / MUS: especialistes → poden cobrir si estan lliures al centre
 • CEEPSIR / Piscina a l'horari → FORA DEL CENTRE, impossible cobrir
+
+═══ CASOS ESPECIALS ═══
+▸ G5 COTUTORIA: A.S (MEE) i R.V (MEE) comparteixen la tutoria de G5. Cada una fa 1h de TP/setmana (no les 2h estàndard perquè el grup és compartit). Si una de les dues és la docent absent i l'altra està disponible, la co-tutora és la primera opció per cobrir.
+▸ MxI (Moure x Incloure): grup d'escolaritat compartida que ve NOMÉS 2 dies/setmana. Funciona exclusivament per referents humans. REGLA ABSOLUTA: únicament C.F (MEE, tutora) i M.V (PAE) treballen habitualment amb aquest grup. Si C.F o M.V falta, les ÚNIQUES persones que poden cobrir MxI són L.M (MEE) o R.E (MALL). Cap altre docent pot entrar a MxI en cap circumstància.
 
 ═══ JERARQUIA DE PRIORITATS ═══
 1. ✅ MEE que ja és amb el grup (JA AMB GRUP)
@@ -175,7 +183,8 @@ ${resumPerFranja}
 1. Inclou les ASSIGNACIONS JA RESOLTES sense modificar.
 2. Per les franges restants, aplica la jerarquia. Tria MEE o especialista disponible.
 3. No proposis cap PAE com a cobertura independent en cap cas.
-4. Si el mateix docent cobreix franges consecutives → una sola entrada amb totes les franges_ids.
+4. Si el grup absent és MxI, aplica la REGLA ABSOLUTA: només L.M (MEE) o R.E (MALL).
+5. Si el mateix docent cobreix franges consecutives → una sola entrada amb totes les franges_ids.
 
 Escriu 2-3 línies de raonament i llavors el JSON:
 {"proposta":[{"docent":"Nom","franges_ids":["o1a","o1b"],"hores":"9:30–10:30","grup_origen":"${absentGrup}","tp_afectat":false,"motiu":"raó"},...],"resum":"frase curta"}`;

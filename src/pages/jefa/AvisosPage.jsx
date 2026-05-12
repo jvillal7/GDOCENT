@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL, MOTIUS_ABSENCIA } from '../../lib/constants';
 import { proposarCobertura, analitzarInfoExtra, construirContextXat } from '../../lib/claude';
 import { sendEmail } from '../../lib/api';
-import { parseFranges, escHtml, frangesHorari } from '../../lib/utils';
+import { parseFranges, escHtml, frangesHorari, normGrup } from '../../lib/utils';
 import FrangesChips from '../../components/FrangesChips';
 import Spinner from '../../components/Spinner';
 import ChatIA from '../../components/ChatIA';
@@ -45,9 +45,12 @@ export default function AvisosPage() {
   const [creantAvisos,     setCreantAvisos]     = useState(false);
   const [coberturesPerId,  setCoberturesPerId]  = useState({});
   const [tallersPending,   setTallersPending]   = useState(null); // { avis, totsIds, tallersIds }
-  const [showChat,         setShowChat]         = useState(false);
-  const [chatAvis,         setChatAvis]         = useState(null);
-  const [chatSystemCtx,    setChatSystemCtx]    = useState('');
+  const [showChat,            setShowChat]            = useState(false);
+  const [chatAvis,            setChatAvis]            = useState(null);
+  const [chatSystemCtx,       setChatSystemCtx]       = useState('');
+  const [chatInitialMessage,  setChatInitialMessage]  = useState('');
+  const [iaDecisions,         setIaDecisions]         = useState([]);
+  const chatAvisRef = useRef(null);
   const infoFileRef = useRef(null);
 
   useEffect(() => { if (api) load(); }, [api]);
@@ -55,11 +58,13 @@ export default function AvisosPage() {
   async function load() {
     try {
       const avui = new Date().toISOString().split('T')[0];
-      const [data, infoRes, diariRes] = await Promise.all([
+      const [data, infoRes, diariRes, decisionsRes] = await Promise.all([
         api.getAbsencies(),
         api.getInfoExtra().catch(() => null),
         api.getOriolDiari().catch(() => null),
+        api.getIaDecisions().catch(() => null),
       ]);
+      setIaDecisions(Array.isArray(decisionsRes?.[0]?.ia_decisions) ? decisionsRes[0].ia_decisions : []);
       setBaixes(diariRes?.[0]?.oriol_baixes || []);
       // Carregar i validar infoExtra persistent (suporta format antic objecte i nou array)
       const raw = infoRes?.[0]?.info_extra;
@@ -74,10 +79,17 @@ export default function AvisosPage() {
       const limitArxiu = new Date(); limitArxiu.setDate(limitArxiu.getDate() - 3);
       const limitArxiuISO = limitArxiu.toISOString().split('T')[0];
       const passades = actives.filter(a => a.estat === 'resolt' && a.data && a.data < limitArxiuISO);
-      if (passades.length > 0) {
-        await Promise.all(passades.map(a => api.patchAbsencia(a.id, { estat: 'arxivat' })));
+      // Auto-arxivar avisos pendents/provisionals de dies passats (ja no cal gestionar-los)
+      const passadesExpired = actives.filter(a =>
+        !passades.find(p => p.id === a.id) &&
+        ['pendent', 'provisional'].includes(a.estat) &&
+        a.data && a.data < avui
+      );
+      const totesAArxivar = [...passades, ...passadesExpired];
+      if (totesAArxivar.length > 0) {
+        await Promise.all(totesAArxivar.map(a => api.patchAbsencia(a.id, { estat: 'arxivat' })));
       }
-      const restants = actives.filter(a => !passades.find(p => p.id === a.id));
+      const restants = actives.filter(a => !totesAArxivar.find(p => p.id === a.id));
       restants.sort((a, b) => (a.data || '') < (b.data || '') ? -1 : (a.data || '') > (b.data || '') ? 1 : 0);
       setAbsencies(restants);
       // Carregar cobertures per a les absències no-pendents (per mostrar qui cobreix)
@@ -157,23 +169,42 @@ export default function AvisosPage() {
       }
       cur.setDate(cur.getDate() + 1);
     }
+    // Grups que van físicament fora del centre (normalitzats per comparació)
+    const grupsForaNorm = (entrada.grups_fora || []).map(g => normGrup(g));
+
     const results = [];
     for (const blocked of docentsBlocats) {
       const nom = blocked.nom || blocked;
       const docent = docents.find(d => nomsSimilars(d.nom, nom));
       if (!docent?.horari) continue;
-      // MESI/MEE: les seves activitats són sempre suport, no cal cobertura
       const gp = (docent.grup_principal || '').toUpperCase();
       if (gp.includes('MESI') || gp.includes('MEE')) continue;
       const esTutor = !!docent.grup_principal && !gp.includes('SIEI');
+
+      // Tutor amb ambGrup:true → el seu grup va amb ell, no cal cobrir res
+      if (blocked.ambGrup === true && esTutor) continue;
+
       const frangesBloquejades = horaAFranges(blocked.hores, schoolFranjesAct);
       for (const { iso, dia } of dates) {
         const horariDia = docent.horari[dia] || {};
-        // Tutor: el grup ha d'estar cobert tota la jornada — inclou TP, buit, Pati...
-        // Especialista: només les franges on fa classe (needsCoverage)
-        const afectades = esTutor
-          ? frangesBloquejades.filter(fid => (horariDia[fid] || '').toLowerCase() !== 'lliure')
-          : frangesBloquejades.filter(fid => needsCoverage(horariDia[fid]));
+        let afectades;
+        if (blocked.ambGrup === true && !esTutor) {
+          // Especialista acompanyant: ometre franges on fa classe amb un grup que va de sortida;
+          // generar alerta per franges amb altres grups que queden sense atenció
+          afectades = frangesBloquejades.filter(fid => {
+            const val = horariDia[fid] || '';
+            if (!needsCoverage(val)) return false;
+            if (grupsForaNorm.length > 0) {
+              const valNorm = normGrup(val);
+              if (grupsForaNorm.some(gf => valNorm.includes(gf))) return false;
+            }
+            return true;
+          });
+        } else if (esTutor) {
+          afectades = frangesBloquejades.filter(fid => (horariDia[fid] || '').toLowerCase() !== 'lliure');
+        } else {
+          afectades = frangesBloquejades.filter(fid => needsCoverage(horariDia[fid]));
+        }
         if (afectades.length > 0) results.push({ nom, data: iso, dia, franges: afectades, motiu: entrada.titol || entrada.resum?.split(' ').slice(0, 4).join(' ') || 'Activitat especial' });
       }
     }
@@ -297,7 +328,7 @@ export default function AvisosPage() {
           r.readAsDataURL(infoFitxer);
         });
       }
-      const result = await analitzarInfoExtra(infoNotes, base64);
+      const result = await analitzarInfoExtra(infoNotes, base64, docents.map(d => d.nom));
       const novaLlista = [...infoExtra, result];
       await api.saveInfoExtra(novaLlista);
       setInfoExtra(novaLlista);
@@ -369,18 +400,42 @@ export default function AvisosPage() {
   }
 
   function obrirChat(avis) {
-    const dia = avis.data
-      ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date(avis.data + 'T12:00:00').getDay()]
+    const dateObj = avis.data ? new Date(avis.data + 'T12:00:00') : null;
+    const dia = dateObj
+      ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][dateObj.getDay()]
       : null;
+    // Filtrar infoExtra per la data de l'absència (no aplicar sortides d'altres dies)
+    const absData = avis.data;
+    const infoExtraActiva = absData
+      ? infoExtra.filter(ie => (!ie.data_inici || ie.data_inici <= absData) && (!ie.data_fi || ie.data_fi >= absData))
+      : infoExtra;
+    const blocsDescChat = infoExtraActiva.flatMap(ie => ie.docentsBlocats || []);
+    // Últimes 5 decisions per al mateix absent (o les 3 més recents globals si no n'hi ha)
+    const decisionsRellevants = iaDecisions.filter(d => nomsSimilars(d.absent, avis.docent_nom)).slice(0, 5);
+    const decisionsInjectades = decisionsRellevants.length ? decisionsRellevants : iaDecisions.slice(0, 3);
     const ctx = construirContextXat(escola, docents, normes, isOriol, {
       nom: avis.docent_nom,
       data: avis.data,
       dia,
       frangesIds: parseFranges(avis.franges),
       motiu: avis.motiu,
-    });
+    }, blocsDescChat, baixes, decisionsInjectades);
+
+    // Missatge inicial auto-generat
+    const MESOS = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];
+    const dataStr = dateObj ? `${dateObj.getDate()} de ${MESOS[dateObj.getMonth()]}` : '';
+    const frangesIds = parseFranges(avis.franges);
+    const schoolF = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+    const esTotElDia = frangesIds.length >= schoolF.length;
+    const frangesStr = esTotElDia
+      ? 'tot el dia'
+      : frangesIds.map(fid => schoolF.find(f => f.id === fid)?.sub || fid).join(', ');
+    const initialMessage = `Proposa una cobertura per a ${avis.docent_nom}, ${frangesStr}${dia ? ` del ${dia}` : ''}${dataStr ? ` ${dataStr}` : ''}.`;
+
+    chatAvisRef.current = avis;
     setChatSystemCtx(ctx);
     setChatAvis(avis);
+    setChatInitialMessage(initialMessage);
     setShowChat(true);
   }
 
@@ -433,25 +488,28 @@ export default function AvisosPage() {
       const jaAssignats = new Set(
         cobsAvui.filter(c => frangesSet.has(c.franja)).map(c => c.docent_cobrint_nom).filter(Boolean)
       );
-      // Excloure mestres bloquejats per qualsevol activitat especial del dia
-      const blocatsExtra = new Set(
-        infoExtra.flatMap(ie => (ie.docentsBlocats || []).map(b => (b.nom || b).toLowerCase()))
+      // Excloure mestres bloquejats per activitats especials que coincideixen amb la data de l'absència
+      const absDataGen = avis.data || avui;
+      const infoExtraActivaGen = infoExtra.filter(ie =>
+        (!ie.data_inici || ie.data_inici <= absDataGen) && (!ie.data_fi || ie.data_fi >= absDataGen)
       );
+      const nomsBlocats = infoExtraActivaGen.flatMap(ie => (ie.docentsBlocats || []).map(b => b.nom || b));
       // 'directiu' i 'suport' NO exclosos: l'AI gestiona via normes qui pot cobrir realment
       const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei']);
       const docentsFiltrats = docents.filter(d =>
         d.nom === avis.docent_nom || // sempre incloure l'absent per poder llegir el seu grup/horari
         (
           !jaAssignats.has(d.nom) &&
-          !blocatsExtra.has(d.nom.toLowerCase()) &&
+          !nomsBlocats.some(nb => nomsSimilars(nb, d.nom)) &&
+          !baixes.some(b => nomsSimilars(b.absent, d.nom)) && // excloure docents de baixa (proposa el substitut si està a la llista)
           !ROLS_EXCLOSOS.has(d.rol) &&
           !['SIEI', 'SIEI+'].includes(d.grup_principal) &&
           d.horari
         )
       );
-      // Passar totes les entrades d'info extra a la IA (contexte combinat)
-      const infoExtraCombinada = infoExtra.length
-        ? { context: infoExtra.map(ie => ie.context).filter(Boolean).join(' | '), docentsBlocats: infoExtra.flatMap(ie => ie.docentsBlocats || []) }
+      // Passar a la IA només les entrades d'info extra actives per a la data de l'absència
+      const infoExtraCombinada = infoExtraActivaGen.length
+        ? { context: infoExtraActivaGen.map(ie => ie.context).filter(Boolean).join(' | '), docentsBlocats: infoExtraActivaGen.flatMap(ie => ie.docentsBlocats || []) }
         : null;
       const result = await proposarCobertura(avis.docent_nom, frangesIds, docentsFiltrats, normes, avis.data, isOriol, infoExtraCombinada, baixes.length ? baixes : null);
       setIaResult(result);
@@ -461,6 +519,88 @@ export default function AvisosPage() {
       setIaError(e.message || 'Error generant proposta.');
       setIaState('error');
     }
+  }
+
+  // Confirmació directa des del chatbot — sense panell intermedi
+  async function aplicarPropostaChat(avis, proposta, chatMsgs = []) {
+    const propostaArr = Array.isArray(proposta) ? proposta : (proposta ? [proposta] : []);
+    if (!avis) { showToast('⚠ Avís no trobat'); return; }
+    proposta = propostaArr;
+    const avui     = new Date().toISOString().split('T')[0];
+    const absData  = avis.data || avui;
+    const esFutura = absData > avui;
+    const nouEstat = esFutura ? 'provisional' : 'resolt';
+    try {
+      // Esborrar cobertures anteriors d'aquesta absència (i els deutes TP que van generar)
+      const cobsExistents = await api.getCoberturesByAbsencia(avis.id).catch(() => []);
+      if (cobsExistents?.length) {
+        const cobsAmbTP = cobsExistents.filter(c => c.tp_afectat);
+        await Promise.all(cobsAmbTP.map(c =>
+          api.deleteDeutesTPCobertura(c.docent_cobrint_nom, absData, avis.docent_nom).catch(() => {})
+        ));
+        await api.deleteCobertures(avis.id);
+      }
+
+      const absentDocent = docents.find(d => d.nom === avis.docent_nom);
+      const grupDestí = absentDocent?.grup_principal || '';
+      for (const p of proposta) {
+        const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
+        for (const fid of frangesACobrir) {
+          await api.saveCobertura({
+            escola_id:          escola.id,
+            absencia_id:        avis.id,
+            docent_cobrint_nom: p.docent,
+            franja:             fid,
+            docent_absent_nom:  avis.docent_nom,
+            grup:               grupDestí,
+            data:               absData,
+            tp_afectat:         p.tp_afectat || false,
+            motiu:              p.motiu || '',
+          });
+        }
+        if (p.tp_afectat && !esFutura) {
+          await api.saveDeuteTP({
+            escola_id:  escola.id,
+            docent_nom: p.docent,
+            data_deute: absData,
+            motiu:      `Cobertura ${p.hores || p.franja} (${avis.docent_nom})`,
+            retornat:   false,
+            minuts:     (p.franges_ids?.length || 1) * 30,
+          });
+        }
+      }
+      await api.patchAbsencia(avis.id, { estat: nouEstat });
+
+      // Guardar decisió aprovada per a aprenentatge futur (max 30 entrades, les més recents primer)
+      if (!esFutura) {
+        const dateObj = absData ? new Date(absData + 'T12:00:00') : null;
+        const diaDecisio = dateObj
+          ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][dateObj.getDay()]
+          : null;
+        // Guardar correccions: missatges de l'usuari posteriors al primer (el missatge inicial és automàtic)
+        const correccions = (chatMsgs || [])
+          .filter(m => m.role === 'user' && !m._local)
+          .slice(1) // el primer és el missatge auto-generat, els següents són correccions manuals
+          .map(m => m.content)
+          .join(' | ') || null;
+        const novaDecisio = { absent: avis.docent_nom, dia: diaDecisio, data: absData, proposta, correccions, creat_el: new Date().toISOString() };
+        const novaLlista = [novaDecisio, ...iaDecisions].slice(0, 30);
+        setIaDecisions(novaLlista);
+        api.saveIaDecisions(novaLlista).catch(() => {});
+      }
+
+      showToast(esFutura ? '📅 Cobertura provisional guardada' : '✓ Cobertura confirmada');
+      for (const p of proposta) {
+        const cobrintDocent = docents.find(d => d.nom === p.docent);
+        if (cobrintDocent?.email) {
+          const frangesIds = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
+          sendEmail(cobrintDocent.email, `📋 Cobertura assignada — ${absData}`,
+            emailCobertura({ cobrint: p.docent, absent: avis.docent_nom, data: absData, frangesIds, isOriol, grup: grupDestí, esFutura, notes: avis.notes })
+          );
+        }
+      }
+      load();
+    } catch (e) { console.error('[aplicarPropostaChat]', e); showToast('Error guardant la cobertura: ' + e.message); }
   }
 
   async function confirmarCobertura() {
@@ -898,6 +1038,11 @@ export default function AvisosPage() {
                         })}
                       </>
                     )}
+                  {!esPendent && coberturesPerId[a.id] !== undefined && cobsCard.length === 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '2px 8px', fontSize: 11.5, fontWeight: 600, color: 'var(--green)' }}>
+                      ✅ No cal cobrir
+                    </span>
+                  )}
                   </div>
                   <div className="ac-motiu">{a.motiu || 'Sense motiu'}</div>
                 </div>
@@ -920,26 +1065,27 @@ export default function AvisosPage() {
                 </div>
               )}
               {(esPendent || esProvisional) && (
-                <div style={{ padding: '0 16px 14px', display: 'flex', gap: 6 }}>
+                <div style={{ padding: '0 16px 14px', display: 'flex', gap: 8, alignItems: 'center' }}>
                   <button
-                    className="btn btn-ghost btn-sm btn-full"
-                    style={{ fontSize: 12 }}
-                    onClick={() => generarIA(a)}
-                  >
-                    {esProvisional ? '↺ Canviar proposta IA' : '🤖 Generar proposta IA'}
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: 13, flexShrink: 0, paddingInline: 10 }}
+                    style={{
+                      flex: 1, fontSize: 13, fontWeight: 700, padding: '9px 16px',
+                      background: 'linear-gradient(to right, #fff 0%, #7c3aed 40%, #2563eb 60%, #fff 100%)',
+                      color: '#fff', border: '1px solid #ddd6fe', borderRadius: 'var(--r-sm)',
+                      cursor: 'pointer', letterSpacing: '.02em',
+                      textShadow: '0 1px 3px rgba(0,0,0,.3)',
+                    }}
                     onClick={() => obrirChat(a)}
-                    title="Chatbot IA"
-                  >💬</button>
+                  >
+                    💬 Chatbot IA
+                  </button>
                   <button
                     className="btn btn-red-soft btn-sm"
                     style={{ fontSize: 13, flexShrink: 0, paddingInline: 10 }}
                     onClick={() => arxivar(a.id)}
-                    title="Eliminar avis"
-                  >🗑️</button>
+                    title="Eliminar avís"
+                  >
+                    🗑️
+                  </button>
                 </div>
               )}
               {!esPendent && !esProvisional && (
@@ -995,8 +1141,8 @@ export default function AvisosPage() {
                   )}
                   {iaState === 'done' && iaResult && !iaResult.noCalCobrir && (
                     <>
-                      <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--green)' }}>
-                        💡 {iaResult.resum}
+                      <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: 'var(--green)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                        {iaResult.resum}
                       </div>
                       <div className="card">
                         {(editedProposta || iaResult.proposta).map((p, i) => (
@@ -1049,18 +1195,18 @@ export default function AvisosPage() {
 
       {showChat && (
         <ChatIA
+          key={chatAvis?.id}
           systemContext={chatSystemCtx}
           greeting={isOriol ? 'Hola Mireia! Com et puc ajudar avui?' : 'Hola Veronica! Com et puc ajudar avui?'}
-          onAplicarProposta={proposta => {
-            if (chatAvis) {
-              setIaTarget(chatAvis);
-              setIaResult({ proposta, resum: 'Proposta del chatbot IA' });
-              setEditedProposta(proposta);
-              setIaState('done');
-            }
+          initialMessage={chatInitialMessage}
+          onAplicarProposta={(proposta, chatMsgs) => {
+            const avis = chatAvisRef.current;
             setShowChat(false);
+            setChatInitialMessage('');
+            if (avis) aplicarPropostaChat(avis, proposta, chatMsgs).catch(e => showToast('Error: ' + e.message));
+            else showToast('Error: no s\'ha trobat l\'avís associat');
           }}
-          onClose={() => setShowChat(false)}
+          onClose={() => { setShowChat(false); setChatInitialMessage(''); }}
         />
       )}
 
