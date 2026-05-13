@@ -66,7 +66,9 @@ Professionals principals d'aula. Poden cobrir altres MEE. Treballen en parella a
 - Primera opció per cobrir qualsevol absència de Secundària
 
 ### PAE (Professional d'Atenció Educativa)
-**REGLA CRÍTICA: Un PAE mai treballa sol.** Sempre ha d'estar acompanyat d'un MEE. No pot ser assignat com a cobertura independent d'un grup.
+**Regla general:** Un PAE treballa acompanyat d'un MEE sempre que sigui possible (nivells 1–5 de la jerarquia).
+**Excepció — nivell 6:** Un **PAE REFERENT** (que coneix el grup) pot quedar-se sol quan no hi ha cap MEE disponible. És preferible a un MEE extern que no coneix el grup (nivell 7).
+**Prohibit sempre:** PAE NO REFERENT sol — un PAE que no coneix el grup mai pot cobrir de forma independent.
 
 **D.G (PAE) — disponibilitat flexible dimecres:**
 - Dimecres `opatiA` (11:00–11:30) i `opatiB` (11:30–12:00): valor "Suport" = a disposició de la jefa
