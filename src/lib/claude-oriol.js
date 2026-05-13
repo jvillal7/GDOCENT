@@ -157,7 +157,7 @@ ${regles}
 
 ═══ CONCEPTES CLAU ═══
 • REFERENT d'un grup = docent que apareix a l'horari d'aquell grup (el coneix, hi entra habitualment)
-• PAE: MAI sol. Sempre acompanya un MEE. No pot substituir un MEE.
+• PAE REFERENT SOL: permès com a últim recurs (nivell 6), però mai com a primera opció.
 • CEEPSIR / Piscina a l'horari → FORA DEL CENTRE, no disponible.
 
 ═══ JERARQUIA DE COBERTURA DE GRUP (ordre estricte) ═══
@@ -169,9 +169,10 @@ Busca la millor combinació possible en aquest ordre:
 3. ✅ MEE REFERENT + PAE NO REFERENT (disponible)
 4. ✅ MEE NO REFERENT + PAE REFERENT
 5. ✅ MEE REFERENT SOL (si no hi ha PAE disponible)
-6. ✅ MEE NO REFERENT SOL
-⚠️ ÚLTIM RECURS (només al nivell 6, si no hi ha cap MEE): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL)
-❌ PAE SOL → PROHIBIT en tots els casos
+6. ✅ PAE REFERENT SOL (el PAE coneix el grup; millor que un MEE extern desconegut)
+7. ✅ MEE NO REFERENT SOL
+⚠️ ÚLTIM RECURS (nivell 8, si no hi ha cap MEE ni PAE referent): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL)
+❌ PAE NO REFERENT SOL → PROHIBIT sempre
 
 ═══ MESTRES DE SUPORT FLOTANTS (prioritzar sempre) ═══
 • L.M (MEE): horari sempre "Suport" → disponible per a Infantil-Primària (G1–G6). Compta com a REFERENT d'aquest cicle.

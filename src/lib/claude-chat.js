@@ -23,13 +23,13 @@ export function construirContextXat(escola, docents, normes, isOriol, absenciaCo
     ? `CEE Ca N'Oriol — Centre d'Educació Especial
 Cicle Infantil-Primària: G1, G2, G3, G4, G5, G6, MxI
 Cicle Secundària: G7, G8, G9, G10, G11, G12, G13, G14
-Rols: MEE (mestre educació especial), PAE (mai cobertura independent), EVIP, MALL, ESTIM, MUS
+Rols: MEE (mestre educació especial), PAE, EVIP, MALL, ESTIM, MUS
 CEEPSIR/Piscina a l'horari = fora del centre, no disponible
 JERARQUIA COBERTURA DE GRUP (quan falta qualsevol membre, el grup ha de quedar cobert):
   1. MEE TUTOR + PAE REFERENT | 2. MEE REFERENT + PAE REFERENT | 3. MEE REFERENT + PAE no referent
-  4. MEE no referent + PAE REFERENT | 5. MEE REFERENT SOL | 6. MEE NO REFERENT SOL
-  ÚLTIM RECURS (només si no hi ha cap MEE): A.G (MUS), N.C (EVIP), MALL que no entren al grup
-  PAE SOL → PROHIBIT sempre
+  4. MEE no referent + PAE REFERENT | 5. MEE REFERENT SOL | 6. PAE REFERENT SOL | 7. MEE NO REFERENT SOL
+  ÚLTIM RECURS (nivell 8, si no hi ha cap MEE ni PAE referent): A.G (MUS), N.C (EVIP), MALL que no entren al grup
+  PAE NO REFERENT SOL → PROHIBIT sempre
 L.M (MEE): suport flotant, REFERENT Infantil-Primària (G1–G6), sempre disponible, sense deute TP.
 R.S (MEE): suport flotant, REFERENT Secundària (G7–G14), sempre disponible, sense deute TP.
 MALL (A.G, R.E, C.P): si ja entren al grup → actuen com a referent (nivell 2/3). Si NO hi entren → últim recurs.
