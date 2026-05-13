@@ -93,8 +93,12 @@ export default function AvuiPage() {
               // Cobertura trobada → mostra qui cobreix (amber)
               newCells[key] = { estat: 'resolt', cobrint: cob.docent_cobrint_nom.split(' ')[0] };
             } else {
-              // Resolt sense cobertura → ja estava coberta (MALL, suport...) → ✓
-              newCells[key] = { estat: 'ok' };
+              // Resolt sense cobertura → ja estava coberta (MALL/suport ja hi eren)
+              // Extreu els noms de l'horari de la tutora absent per aquella franja
+              const absentDocent = docents.find(d => d.nom === a.docent_nom);
+              const horariVal = absentDocent?.horari?.[todayDia]?.[fid] || '';
+              const noms = extractNomsHorari(horariVal);
+              newCells[key] = { estat: 'ok', noms };
             }
           }
         });
@@ -207,6 +211,13 @@ export default function AvuiPage() {
   );
 }
 
+function extractNomsHorari(val) {
+  if (!val || typeof val !== 'string') return [];
+  // Extrau inicials tipus "L.M", "R.S", "M.VG", "A.G" etc. del valor de l'horari
+  const matches = val.match(/\b[A-ZÁÉÍÓÚ][a-záéíóú]?\.[A-ZÁÉÍÓÚVBCDFGHJKLMNPQRSTXYZ][A-Za-záéíóú]*/g) || [];
+  return [...new Set(matches)];
+}
+
 function findCobertura(cobertures, absenciaId, fid, franjesAct, docentAbsentNom) {
   const franjaLabel = franjesAct.find(f => f.id === fid)?.label || '';
   const franjaSub   = franjesAct.find(f => f.id === fid)?.sub   || '';
@@ -315,7 +326,11 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                         {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
                         {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                         {cell?.estat === 'normal'  && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                        {cell?.estat === 'ok'      && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
+                        {cell?.estat === 'ok' && (
+                          cell.noms?.length > 0
+                            ? cell.noms.map((n, i) => <span key={i} style={{ fontSize: 8, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{n}</span>)
+                            : <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>
+                        )}
                         {!cell && null}
                       </td>
                     );
