@@ -65,13 +65,33 @@ export default function AvuiPage() {
       // Pas 1: horari normal — tots els docents que entren a cada grup per franja
       GRUPS.forEach(grup => {
         SCHOOL_F.forEach(f => {
-          const presents = [];
+          const presents = new Set();
+          // Pass A: docents el valor d'horari dels quals referencia aquest grup
           docents.forEach(d => {
             const val = d.horari?.[todayDia]?.[f.id] || '';
-            if (matchesGrup(val, grup)) presents.push(d.nom.split(' ')[0]);
+            if (matchesGrup(val, grup)) presents.add(d.nom.split(' ')[0]);
           });
-          if (presents.length > 0) {
-            newCells[`${grup}__${f.id}`] = { estat: 'normal', noms: presents };
+          // Pass B: tutor/a del grup — el valor de l'horari llista qui hi és
+          // (cobreix cotutories com G5 on el valor és "A.S (MEE) R.V (MEE)")
+          const gDoc = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
+          if (gDoc?.horari?.[todayDia]) {
+            const val = gDoc.horari[todayDia][f.id] || '';
+            const vl  = val.toLowerCase().trim();
+            const trivial = !val || vl === 'lliure' || vl === 'libre' || vl === 'tp'
+              || vl.includes('piscina') || vl.includes('ceepsir');
+            if (!trivial) {
+              if (/^tp\b/i.test(vl)) {
+                // "TP X.Y" — X.Y fa TP, afegim els co-tutors restants
+                const onTP = extractNomsHorari(val);
+                parseDocNoms(gDoc.nom).filter(n => !onTP.includes(n)).forEach(n => presents.add(n));
+              } else {
+                parseDocNoms(gDoc.nom).forEach(n => presents.add(n));
+                extractNomsHorari(val).forEach(n => presents.add(n));
+              }
+            }
+          }
+          if (presents.size > 0) {
+            newCells[`${grup}__${f.id}`] = { estat: 'normal', noms: [...presents] };
           }
         });
       });
@@ -93,13 +113,31 @@ export default function AvuiPage() {
               newCells[key] = { estat: 'resolt', cobrint: cob.docent_cobrint_nom.split(' ')[0] };
             } else {
               // Resolt sense cobertura → mostrem els docents restants al grup
-              const presents = [];
+              const absentShort = parseDocNoms(a.docent_nom);
+              const presents = new Set();
               docents.forEach(d => {
                 if (d.nom === a.docent_nom) return;
                 const val = d.horari?.[todayDia]?.[fid] || '';
-                if (matchesGrup(val, colGrup)) presents.push(d.nom.split(' ')[0]);
+                if (matchesGrup(val, colGrup)) presents.add(d.nom.split(' ')[0]);
               });
-              newCells[key] = { estat: 'ok', noms: presents };
+              const gDoc = docents.find(d => normGrup(d.grup_principal || '') === normGrup(colGrup));
+              if (gDoc && gDoc.nom !== a.docent_nom && gDoc.horari?.[todayDia]) {
+                const val = gDoc.horari[todayDia][fid] || '';
+                const vl  = val.toLowerCase().trim();
+                const trivial = !val || vl === 'lliure' || vl === 'libre' || vl === 'tp'
+                  || vl.includes('piscina') || vl.includes('ceepsir');
+                if (!trivial) {
+                  const addIfNotAbsent = n => { if (!absentShort.includes(n)) presents.add(n); };
+                  if (/^tp\b/i.test(vl)) {
+                    const onTP = extractNomsHorari(val);
+                    parseDocNoms(gDoc.nom).filter(n => !onTP.includes(n)).forEach(addIfNotAbsent);
+                  } else {
+                    parseDocNoms(gDoc.nom).forEach(addIfNotAbsent);
+                    extractNomsHorari(val).forEach(addIfNotAbsent);
+                  }
+                }
+              }
+              newCells[key] = { estat: 'ok', noms: [...presents] };
             }
           }
         });
@@ -219,6 +257,18 @@ function matchesGrup(val, grup) {
   if (v.startsWith(g + ' ') || v.startsWith(g + '-') || v.startsWith(g + '/')) return true;
   const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('\\b' + escaped + '\\b').test(v);
+}
+
+// Extreu inicials de tipus "L.M", "R.V", "A.S", "LA.S", "M.VG" d'una cadena d'horari
+function extractNomsHorari(val) {
+  if (!val || typeof val !== 'string') return [];
+  const matches = val.match(/\b[A-ZÁÉÍÓÚÀÈÌÒÙÜ]{1,2}[a-záéíóúàèìòùüï]?\.[A-ZÁÉÍÓÚVBCDFGHJKLMNPQRSTXYZÀÈÌÒÙÜ][A-Za-záéíóúàèìòùüï]*/g) || [];
+  return [...new Set(matches)];
+}
+
+// Extreu inicials del nom d'un docent (gestiona cotutories "A.S (MEE) + R.V (MEE)")
+function parseDocNoms(nom) {
+  return (nom || '').split('+').map(p => p.trim().split(' ')[0]).filter(n => n.includes('.'));
 }
 
 function findCobertura(cobertures, absenciaId, fid, franjesAct, docentAbsentNom) {
