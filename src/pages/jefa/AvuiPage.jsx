@@ -39,6 +39,9 @@ export default function AvuiPage() {
 
   async function loadData() {
     try {
+      const todayDia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][today.getDay()];
+      const SCHOOL_F = FRANJES_ACT.filter(f => !f.lliure);
+
       const [deutes, absencies, cobertures, provsDeuma] = await Promise.all([
         api.getDeutesTP(),
         api.getAbsenciesAvui(),
@@ -58,23 +61,43 @@ export default function AvuiPage() {
       setKpiAbs({ pendents, resoltes });
 
       const newCells = {};
+
+      // Pas 1: horari normal — mostrar el nom del tutor per cada grup×franja
+      GRUPS.forEach(grup => {
+        const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
+        if (!tutor?.horari?.[todayDia]) return;
+        const shortName = tutor.nom.split(' ')[0];
+        SCHOOL_F.forEach(f => {
+          const val = (tutor.horari[todayDia]?.[f.id] || '').toLowerCase().trim();
+          const isAbsent = val === 'lliure' || val === 'libre' || val.includes('piscina') || val.includes('ceepsir');
+          const isTP = val === 'tp' || val === 't.p.' || val.startsWith('tp ');
+          if (!isAbsent && !isTP) {
+            newCells[`${grup}__${f.id}`] = { estat: 'normal', cobrint: shortName };
+          }
+        });
+      });
+
+      // Pas 2: superposar absències i cobertures del dia
       (absencies || []).forEach(a => {
         const docent = docents.find(d => d.nom === a.docent_nom);
         if (!docent?.grup_principal) return;
-        const grupNorm = normGrup(docent.grup_principal);
-        const colGrup  = GRUPS.find(g => normGrup(g) === grupNorm);
+        const colGrup = GRUPS.find(g => normGrup(g) === normGrup(docent.grup_principal));
         if (!colGrup) return;
-        const franges = parseFranges(a.franges);
-        franges.forEach(fid => {
+        parseFranges(a.franges).forEach(fid => {
           const key = `${colGrup}__${fid}`;
           if (a.estat === 'pendent') {
             newCells[key] = { estat: 'pendent', avisId: a.id, grup: colGrup, fid };
           } else if (a.estat === 'resolt' || a.estat === 'arxivat') {
             const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT, a.docent_nom);
-            newCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
+            if (cob?.docent_cobrint_nom) {
+              // Cobertura trobada → mostra qui cobreix (amber)
+              newCells[key] = { estat: 'resolt', cobrint: cob.docent_cobrint_nom.split(' ')[0] };
+            }
+            // Si no hi ha cobertura per aquesta franja → la cel·la normal de l'horari ja hi és
           }
         });
       });
+
       setCells(newCells);
 
       const sieiStudents = escola?.nom?.toLowerCase().includes('rivo') ? SIEI_ALUMNES.rivo : [];
@@ -213,11 +236,11 @@ function computeSpans(items, cellsMap, blocs) {
     while (i < allSlots.length) {
       const fid = allSlots[i];
       const cell = cellsMap[`${item}__${fid}`];
-      if (cell?.estat === 'resolt' && cell.cobrint) {
+      if ((cell?.estat === 'resolt' || cell?.estat === 'normal') && cell.cobrint) {
         let span = 1;
         while (i + span < allSlots.length) {
           const next = cellsMap[`${item}__${allSlots[i + span]}`];
-          if (next?.estat === 'resolt' && next.cobrint === cell.cobrint) span++;
+          if (next?.estat === cell.estat && next.cobrint === cell.cobrint) span++;
           else break;
         }
         spans[item][fid] = { rowSpan: span };
@@ -248,7 +271,7 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
       <div className="card-head" style={{ padding: '10px 14px' }}>
         <h3 style={{ fontSize: 13 }}>{title}</h3>
         <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--ink-3)' }}>
-          {[['var(--green-bg)','var(--green-mid)','OK'],['var(--amber-bg)','#F0D5A8','Cobert'],['var(--red-bg)','#F0C0B8', pendentLabel]].map(([bg,bc,lbl]) => (
+          {[['var(--green-bg)','var(--green-mid)','Normal'],['var(--amber-bg)','#F0D5A8','Cobert'],['var(--red-bg)','#F0C0B8', pendentLabel]].map(([bg,bc,lbl]) => (
             <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />
               {lbl}
@@ -289,6 +312,7 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                       >
                         {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
                         {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
+                        {cell?.estat === 'normal'  && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                         {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
                       </td>
                     );
