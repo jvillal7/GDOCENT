@@ -62,20 +62,37 @@ export default function AvuiPage() {
 
       const newCells = {};
 
-      // Pas 1: horari normal — mostrar el nom del tutor per cada grup×franja
-      GRUPS.forEach(grup => {
-        const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
-        if (!tutor?.horari?.[todayDia]) return;
-        const shortName = tutor.nom.split(' ')[0];
-        SCHOOL_F.forEach(f => {
-          const val = (tutor.horari[todayDia]?.[f.id] || '').toLowerCase().trim();
-          const isAbsent = val === 'lliure' || val === 'libre' || val.includes('piscina') || val.includes('ceepsir');
-          const isTP = val === 'tp' || val === 't.p.' || val.startsWith('tp ');
-          if (!isAbsent && !isTP) {
-            newCells[`${grup}__${f.id}`] = { estat: 'normal', cobrint: shortName };
-          }
+      // Pas 1: horari normal
+      if (isOriol) {
+        // Ca N'Oriol: tots els docents que entren a cada grup per franja
+        GRUPS.forEach(grup => {
+          SCHOOL_F.forEach(f => {
+            const presents = [];
+            docents.forEach(d => {
+              const val = d.horari?.[todayDia]?.[f.id] || '';
+              if (matchesGrup(val, grup)) presents.push(d.nom.split(' ')[0]);
+            });
+            if (presents.length > 0) {
+              newCells[`${grup}__${f.id}`] = { estat: 'normal', noms: presents };
+            }
+          });
         });
-      });
+      } else {
+        // Rivo Rubeo: nom del tutor principal
+        GRUPS.forEach(grup => {
+          const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
+          if (!tutor?.horari?.[todayDia]) return;
+          const shortName = tutor.nom.split(' ')[0];
+          SCHOOL_F.forEach(f => {
+            const val = (tutor.horari[todayDia]?.[f.id] || '').toLowerCase().trim();
+            const isAbsent = val === 'lliure' || val === 'libre' || val.includes('piscina') || val.includes('ceepsir');
+            const isTP = val === 'tp' || val === 't.p.' || val.startsWith('tp ');
+            if (!isAbsent && !isTP) {
+              newCells[`${grup}__${f.id}`] = { estat: 'normal', cobrint: shortName };
+            }
+          });
+        });
+      }
 
       // Pas 2: superposar absències i cobertures del dia
       (absencies || []).forEach(a => {
@@ -93,12 +110,16 @@ export default function AvuiPage() {
               // Cobertura trobada → mostra qui cobreix (amber)
               newCells[key] = { estat: 'resolt', cobrint: cob.docent_cobrint_nom.split(' ')[0] };
             } else {
-              // Resolt sense cobertura → ja estava coberta (MALL/suport ja hi eren)
-              // Extreu els noms de l'horari de la tutora absent per aquella franja
-              const absentDocent = docents.find(d => d.nom === a.docent_nom);
-              const horariVal = absentDocent?.horari?.[todayDia]?.[fid] || '';
-              const noms = extractNomsHorari(horariVal);
-              newCells[key] = { estat: 'ok', noms };
+              // Resolt sense cobertura → mostrem els docents restants al grup
+              const presents = [];
+              if (isOriol) {
+                docents.forEach(d => {
+                  if (d.nom === a.docent_nom) return;
+                  const val = d.horari?.[todayDia]?.[fid] || '';
+                  if (matchesGrup(val, colGrup)) presents.push(d.nom.split(' ')[0]);
+                });
+              }
+              newCells[key] = { estat: 'ok', noms: presents };
             }
           }
         });
@@ -211,11 +232,13 @@ export default function AvuiPage() {
   );
 }
 
-function extractNomsHorari(val) {
-  if (!val || typeof val !== 'string') return [];
-  // Extrau inicials tipus "L.M", "R.S", "M.VG", "A.G" etc. del valor de l'horari
-  const matches = val.match(/\b[A-ZÁÉÍÓÚ][a-záéíóú]?\.[A-ZÁÉÍÓÚVBCDFGHJKLMNPQRSTXYZ][A-Za-záéíóú]*/g) || [];
-  return [...new Set(matches)];
+function matchesGrup(val, grup) {
+  const v = (val || '').trim().toLowerCase();
+  const g = grup.toLowerCase();
+  if (v === g) return true;
+  if (v.startsWith(g + ' ') || v.startsWith(g + '-') || v.startsWith(g + '/')) return true;
+  const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('\\b' + escaped + '\\b').test(v);
 }
 
 function findCobertura(cobertures, absenciaId, fid, franjesAct, docentAbsentNom) {
@@ -324,12 +347,13 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                         onClick={() => cell?.estat === 'pendent' && onPendentClick?.()}
                       >
                         {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
-                        {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                        {cell?.estat === 'normal'  && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                        {cell?.estat === 'ok' && (
+                        {cell?.estat === 'resolt' && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
+                        {(cell?.estat === 'normal' || cell?.estat === 'ok') && (
                           cell.noms?.length > 0
                             ? cell.noms.map((n, i) => <span key={i} style={{ fontSize: 8, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{n}</span>)
-                            : <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>
+                            : cell.cobrint
+                              ? <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2 }}>{cell.cobrint}</span>
+                              : null
                         )}
                         {!cell && null}
                       </td>
