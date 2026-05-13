@@ -92,8 +92,10 @@ export default function AvuiPage() {
             if (cob?.docent_cobrint_nom) {
               // Cobertura trobada → mostra qui cobreix (amber)
               newCells[key] = { estat: 'resolt', cobrint: cob.docent_cobrint_nom.split(' ')[0] };
+            } else {
+              // Resolt sense cobertura → ja estava coberta (MALL, suport...) → ✓
+              newCells[key] = { estat: 'ok' };
             }
-            // Si no hi ha cobertura per aquesta franja → la cel·la normal de l'horari ja hi és
           }
         });
       });
@@ -313,6 +315,7 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                         {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
                         {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                         {cell?.estat === 'normal'  && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
+                        {cell?.estat === 'ok'      && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
                         {!cell && null}
                       </td>
                     );
