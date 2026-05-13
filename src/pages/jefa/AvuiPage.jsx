@@ -62,37 +62,19 @@ export default function AvuiPage() {
 
       const newCells = {};
 
-      // Pas 1: horari normal
-      if (isOriol) {
-        // Ca N'Oriol: tots els docents que entren a cada grup per franja
-        GRUPS.forEach(grup => {
-          SCHOOL_F.forEach(f => {
-            const presents = [];
-            docents.forEach(d => {
-              const val = d.horari?.[todayDia]?.[f.id] || '';
-              if (matchesGrup(val, grup)) presents.push(d.nom.split(' ')[0]);
-            });
-            if (presents.length > 0) {
-              newCells[`${grup}__${f.id}`] = { estat: 'normal', noms: presents };
-            }
+      // Pas 1: horari normal — tots els docents que entren a cada grup per franja
+      GRUPS.forEach(grup => {
+        SCHOOL_F.forEach(f => {
+          const presents = [];
+          docents.forEach(d => {
+            const val = d.horari?.[todayDia]?.[f.id] || '';
+            if (matchesGrup(val, grup)) presents.push(d.nom.split(' ')[0]);
           });
+          if (presents.length > 0) {
+            newCells[`${grup}__${f.id}`] = { estat: 'normal', noms: presents };
+          }
         });
-      } else {
-        // Rivo Rubeo: nom del tutor principal
-        GRUPS.forEach(grup => {
-          const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
-          if (!tutor?.horari?.[todayDia]) return;
-          const shortName = tutor.nom.split(' ')[0];
-          SCHOOL_F.forEach(f => {
-            const val = (tutor.horari[todayDia]?.[f.id] || '').toLowerCase().trim();
-            const isAbsent = val === 'lliure' || val === 'libre' || val.includes('piscina') || val.includes('ceepsir');
-            const isTP = val === 'tp' || val === 't.p.' || val.startsWith('tp ');
-            if (!isAbsent && !isTP) {
-              newCells[`${grup}__${f.id}`] = { estat: 'normal', cobrint: shortName };
-            }
-          });
-        });
-      }
+      });
 
       // Pas 2: superposar absències i cobertures del dia
       (absencies || []).forEach(a => {
@@ -112,13 +94,11 @@ export default function AvuiPage() {
             } else {
               // Resolt sense cobertura → mostrem els docents restants al grup
               const presents = [];
-              if (isOriol) {
-                docents.forEach(d => {
-                  if (d.nom === a.docent_nom) return;
-                  const val = d.horari?.[todayDia]?.[fid] || '';
-                  if (matchesGrup(val, colGrup)) presents.push(d.nom.split(' ')[0]);
-                });
-              }
+              docents.forEach(d => {
+                if (d.nom === a.docent_nom) return;
+                const val = d.horari?.[todayDia]?.[fid] || '';
+                if (matchesGrup(val, colGrup)) presents.push(d.nom.split(' ')[0]);
+              });
               newCells[key] = { estat: 'ok', noms: presents };
             }
           }
