@@ -271,7 +271,7 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
       <div className="card-head" style={{ padding: '10px 14px' }}>
         <h3 style={{ fontSize: 13 }}>{title}</h3>
         <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--ink-3)' }}>
-          {[['var(--green-bg)','var(--green-mid)','Normal'],['var(--amber-bg)','#F0D5A8','Cobert'],['var(--red-bg)','#F0C0B8', pendentLabel]].map(([bg,bc,lbl]) => (
+          {[['var(--green-bg)','var(--green-mid)','Horari habitual'],['var(--amber-bg)','#F0D5A8','Substitució activa'],['var(--red-bg)','#F0C0B8', pendentLabel]].map(([bg,bc,lbl]) => (
             <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />
               {lbl}
@@ -313,7 +313,7 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                         {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
                         {cell?.estat === 'resolt'  && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                         {cell?.estat === 'normal'  && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                        {!cell && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
+                        {!cell && null}
                       </td>
                     );
                   })}
