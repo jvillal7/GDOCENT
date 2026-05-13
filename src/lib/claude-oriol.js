@@ -155,30 +155,33 @@ ${regles}
 • Infantil-Primària: G1, G2, G3, G4, G5, G6, MxI
 • Secundària: G7, G8, G9, G10, G11, G12, G13, G14
 
-═══ ROLS I REGLES CEE ═══
-• MEE [MEE]: professional principal d'aula → PRIMERA OPCIÓ per cobrir
-• PAE [PAE]: ⛔ MAI com a cobertura independent. El PAE acompanya el MEE, no substitueix. NO el proposis mai sol.
-• EVIP / MALL / ESTIM / MUS: especialistes → poden cobrir si estan lliures al centre
-• CEEPSIR / Piscina a l'horari → FORA DEL CENTRE, impossible cobrir
+═══ CONCEPTES CLAU ═══
+• REFERENT d'un grup = docent que apareix a l'horari d'aquell grup (el coneix, hi entra habitualment)
+• PAE: MAI sol. Sempre acompanya un MEE. No pot substituir un MEE.
+• CEEPSIR / Piscina a l'horari → FORA DEL CENTRE, no disponible.
+
+═══ JERARQUIA DE COBERTURA DE GRUP (ordre estricte) ═══
+Quan falta qualsevol membre d'un grup (tutor, especialista, PAE...) el grup ha de quedar cobert.
+Busca la millor combinació possible en aquest ordre:
+
+1. ✅ MEE TUTOR del grup + PAE REFERENT del grup
+2. ✅ MEE REFERENT (no tutor, però entra al grup — ex: msuport, MALL) + PAE REFERENT
+3. ✅ MEE REFERENT + PAE NO REFERENT (disponible)
+4. ✅ MEE NO REFERENT + PAE REFERENT
+5. ✅ MEE REFERENT SOL (si no hi ha PAE disponible)
+6. ✅ MEE NO REFERENT SOL
+⚠️ ÚLTIM RECURS (només al nivell 6, si no hi ha cap MEE): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL)
+❌ PAE SOL → PROHIBIT en tots els casos
+
+═══ MESTRES DE SUPORT FLOTANTS (prioritzar sempre) ═══
+• L.M (MEE): horari sempre "Suport" → disponible per a Infantil-Primària (G1–G6). Compta com a REFERENT d'aquest cicle.
+• R.S (MEE): horari sempre "Suport" → disponible per a Secundària (G7–G14). Compta com a REFERENT d'aquest cicle.
 
 ═══ CASOS ESPECIALS ═══
-▸ L.M (MEE): mestra de suport sense horari fix. Horari sempre "Suport" → SEMPRE disponible. PRIORITZAR per cobrir Infantil-Primària (G1–G6). No genera deute TP.
-▸ R.S (MEE): mestra de suport sense horari fix. Horari sempre "Suport" → SEMPRE disponible. PRIORITZAR per cobrir Secundària (G7–G14). No genera deute TP.
-▸ G5 COTUTORIA: A.S (MEE) i R.V (MEE) comparteixen la tutoria de G5. Cada una fa 1h de TP/setmana (no les 2h estàndard perquè el grup és compartit). Si una de les dues és la docent absent i l'altra està disponible, la co-tutora és la primera opció per cobrir.
-▸ ESTIM (Estimulació): si E.R (ESTIM) és absent, les franges d'Estimulació NO es cobreixen. La tutora del grup es queda amb els seus alumnes. NO cal proposar cap cobertura per aquestes franges.
-▸ MALL (Mestres d'Atenció a la Llengua): A.G (MALL), R.E (MALL), C.P (MALL). REGLA: si una MALL ja entra habitualment al grup del docent absent (apareix al seu horari en aquella franja), POT assumir el grup complet durant l'absència. En canvi, si NO entra al grup, les MALL són ÚLTIM RECURS — no les proposis fins que no hi hagi cap MEE ni msuport disponible.
-▸ MxI (Moure x Incloure): grup d'escolaritat compartida que ve NOMÉS 2 dies/setmana. Funciona exclusivament per referents humans. REGLA ABSOLUTA: únicament C.F (MEE, tutora) i M.V (PAE) treballen habitualment amb aquest grup. Si C.F o M.V falta, les ÚNIQUES persones que poden cobrir MxI són L.M (MEE) o R.E (MALL). Cap altre docent pot entrar a MxI en cap circumstància.
-
-═══ JERARQUIA DE PRIORITATS ═══
-1. ✅ L.M (MEE) si el grup és Infantil-Primària (G1–G6) — sempre disponible, sense deute
-2. ✅ R.S (MEE) si el grup és Secundària (G7–G14) — sempre disponible, sense deute
-3. ✅ MEE que ja és amb el grup (JA AMB GRUP)
-4. ✅ MEE lliure al centre
-5. ✅ MALL que ja entra al grup absent → pot assumir el grup complet (veure regla MALL)
-6. ✅ ESTIM lliure al centre
-7. ⚠️ MEE o msuport amb TP → genera deute
-8. ⚠️ ÚLTIM RECURS (només si no hi ha ningú més): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL)
-9. ❌ PAE sol → PROHIBIT
+▸ G5 COTUTORIA: A.S (MEE) + R.V (MEE) comparteixen G5. Cada una fa 1h TP/setmana. Si una falta, l'altra és referent del grup → primera opció (nivell 1).
+▸ ESTIM absent: les franges d'Estimulació NO es cobreixen. La tutora es queda amb el grup. No cal proposar ningú.
+▸ MALL referent: si ja entra al grup absent → pot actuar com a MEE referent (nivell 2 o 3). Si NO hi entra → últim recurs (nivell 6).
+▸ MxI REGLA ABSOLUTA: si C.F (MEE) o M.V (PAE) falta → ÚNICS substituts: L.M (MEE) o R.E (MALL). Cap altre docent.
 ${ctxAssig}
 ═══ DISPONIBILITAT a ${diaLabel} ═══
 ${disponibilitatDocents}
@@ -187,11 +190,12 @@ DISPONIBILITAT PER FRANJA:
 ${resumPerFranja}
 
 ═══ PROCEDIMENT ═══
-1. Inclou les ASSIGNACIONS JA RESOLTES sense modificar.
-2. Per les franges restants, aplica la jerarquia. Tria MEE o especialista disponible.
-3. No proposis cap PAE com a cobertura independent en cap cas.
-4. Si el grup absent és MxI, aplica la REGLA ABSOLUTA: només L.M (MEE) o R.E (MALL).
-5. Si el mateix docent cobreix franges consecutives → una sola entrada amb totes les franges_ids.
+1. Identifica el grup afectat i comprova quins referents té disponibles.
+2. Aplica la jerarquia de cobertura de grup (nivells 1→6). Para en el primer nivell possible.
+3. Comprova sempre L.M (Infantil-Primària) o R.S (Secundària) abans de mirar altres MEE.
+4. No proposis cap PAE sol en cap cas.
+5. Si el grup és MxI, aplica la REGLA ABSOLUTA.
+6. Si el mateix docent cobreix franges consecutives → una sola entrada amb totes les franges_ids.
 
 Escriu 2-3 línies de raonament i llavors el JSON:
 {"proposta":[{"docent":"Nom","franges_ids":["o1a","o1b"],"hores":"9:30–10:30","grup_origen":"${absentGrup}","tp_afectat":false,"motiu":"raó"},...],"resum":"frase curta"}`;

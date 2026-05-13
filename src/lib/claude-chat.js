@@ -25,13 +25,17 @@ Cicle Infantil-Primària: G1, G2, G3, G4, G5, G6, MxI
 Cicle Secundària: G7, G8, G9, G10, G11, G12, G13, G14
 Rols: MEE (mestre educació especial), PAE (mai cobertura independent), EVIP, MALL, ESTIM, MUS
 CEEPSIR/Piscina a l'horari = fora del centre, no disponible
-L.M (MEE): mestra de suport sense horari fix — horari sempre "Suport" = SEMPRE disponible. Primera opció per cobrir Infantil-Primària (G1–G6). No genera deute TP.
-R.S (MEE): mestra de suport sense horari fix — horari sempre "Suport" = SEMPRE disponible. Primera opció per cobrir Secundària (G7–G14). No genera deute TP.
-ESTIM absent: les franges d'Estimulació NO es cobreixen — la tutora es queda amb el seu grup. No cal proposar ningú.
-MALL (A.G, R.E, C.P): si ja entren al grup absent → poden assumir el grup complet. Si NO hi entren → ÚLTIM RECURS, només si no hi ha cap MEE disponible.
-ÚLTIM RECURS (no proposar fins esgotar MEE i msuport): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL).
-G5 cotutoria: A.S (MEE) + R.V (MEE) — cada una fa 1h TP/setmana (no 2h, per cotutoria de grup compartit)
-MxI (Moure x Incloure): grup escolaritat compartida, ve només 2 dies/setmana. REGLA ESTRICTA: únicament C.F (MEE, tutora) i M.V (PAE) treballen habitualment amb MxI. Si una falla → ÚNICAMENT L.M (MEE) o R.E (MALL) poden cobrir. Cap altre docent.`
+JERARQUIA COBERTURA DE GRUP (quan falta qualsevol membre, el grup ha de quedar cobert):
+  1. MEE TUTOR + PAE REFERENT | 2. MEE REFERENT + PAE REFERENT | 3. MEE REFERENT + PAE no referent
+  4. MEE no referent + PAE REFERENT | 5. MEE REFERENT SOL | 6. MEE NO REFERENT SOL
+  ÚLTIM RECURS (només si no hi ha cap MEE): A.G (MUS), N.C (EVIP), MALL que no entren al grup
+  PAE SOL → PROHIBIT sempre
+L.M (MEE): suport flotant, REFERENT Infantil-Primària (G1–G6), sempre disponible, sense deute TP.
+R.S (MEE): suport flotant, REFERENT Secundària (G7–G14), sempre disponible, sense deute TP.
+MALL (A.G, R.E, C.P): si ja entren al grup → actuen com a referent (nivell 2/3). Si NO hi entren → últim recurs.
+ESTIM absent: les franges d'Estimulació NO es cobreixen. La tutora es queda amb el grup. No proposar ningú.
+G5 cotutoria: A.S (MEE) + R.V (MEE) — cada una 1h TP/setmana. Si una falta, l'altra és referent del grup.
+MxI: REGLA ABSOLUTA — si C.F (MEE) o M.V (PAE) falta → ÚNIC substitut: L.M (MEE) o R.E (MALL). Cap altre.`
     : `CEIP Rivo Rubeo — Centre d'Educació Infantil i Primària
 Grups: I3A, I3B, I4A, I4B, I5A, I5B, 1rA, 1rB, 2nA, 2nB, 3rA, 3rB, 4tA, 4tB, 5eA, 5eB, 6eA, 6eB
 Cicles: Petits (I3-I5) | Mitjans (1r-3r) | Grans (4t-6è)
