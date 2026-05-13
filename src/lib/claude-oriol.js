@@ -172,6 +172,7 @@ Busca la millor combinació possible en aquest ordre:
 6. ✅ PAE REFERENT SOL (el PAE coneix el grup; millor que un MEE extern desconegut)
 7. ✅ MEE NO REFERENT SOL
 ⚠️ ÚLTIM RECURS (nivell 8, si no hi ha cap MEE ni PAE referent): A.G (MUS), N.C (EVIP), A.G (MALL), R.E (MALL), C.P (MALL)
+   → Poden quedar-se SOLS amb el grup sense PAE. És l'excepció permesa quan no hi ha cap altra opció.
 ❌ PAE NO REFERENT SOL → PROHIBIT sempre
 
 ═══ MESTRES DE SUPORT FLOTANTS (prioritzar sempre) ═══

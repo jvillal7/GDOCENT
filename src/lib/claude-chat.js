@@ -29,6 +29,7 @@ JERARQUIA COBERTURA DE GRUP (quan falta qualsevol membre, el grup ha de quedar c
   1. MEE TUTOR + PAE REFERENT | 2. MEE REFERENT + PAE REFERENT | 3. MEE REFERENT + PAE no referent
   4. MEE no referent + PAE REFERENT | 5. MEE REFERENT SOL | 6. PAE REFERENT SOL | 7. MEE NO REFERENT SOL
   ÚLTIM RECURS (nivell 8, si no hi ha cap MEE ni PAE referent): A.G (MUS), N.C (EVIP), MALL que no entren al grup
+    → Poden quedar-se SOLS amb el grup sense PAE quan no hi ha cap altra opció.
   PAE NO REFERENT SOL → PROHIBIT sempre
 L.M (MEE): suport flotant, REFERENT Infantil-Primària (G1–G6), sempre disponible, sense deute TP.
 R.S (MEE): suport flotant, REFERENT Secundària (G7–G14), sempre disponible, sense deute TP.
