@@ -360,23 +360,7 @@ export default function HorarisPage() {
     catch (e) { showToast('Error eliminant: ' + e.message); reload(); }
   }
 
-  if (confirmData) return <ConfirmHorari data={confirmData} franjes={franjes} onSave={saveHorari} onCancel={() => { setConfirm(null); if (confirmResolveRef.current) { confirmResolveRef.current(); confirmResolveRef.current = null; } }} />;
-
-  // Group docents by nivell
-  const groups = {};
-  NIVELLS.forEach(n => { groups[n.key] = []; });
-  docents.forEach((d, i) => {
-    const assigned = NIVELLS.slice(0, -1).find(n => n.match(d.grup_principal, d));
-    groups[assigned ? assigned.key : 'ee'].push({ d, i });
-  });
-
-  const baixesMap = Object.fromEntries(
-    baixes.map(b => [b.absent.toLowerCase().trim(), b])
-  );
-  const substitutMap = Object.fromEntries(
-    baixes.map(b => [b.substitut.toLowerCase().trim(), b])
-  );
-
+  // Hooks han d'estar SEMPRE aquí (mai après d'un early return)
   const mesosAcademics = useMemo(() => {
     const now = new Date();
     const acadYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
@@ -399,6 +383,23 @@ export default function HorarisPage() {
       return true;
     });
   }, [baixes, baixaMes]);
+
+  if (confirmData) return <ConfirmHorari data={confirmData} franjes={franjes} onSave={saveHorari} onCancel={() => { setConfirm(null); if (confirmResolveRef.current) { confirmResolveRef.current(); confirmResolveRef.current = null; } }} />;
+
+  // Group docents by nivell
+  const groups = {};
+  NIVELLS.forEach(n => { groups[n.key] = []; });
+  docents.forEach((d, i) => {
+    const assigned = NIVELLS.slice(0, -1).find(n => n.match(d.grup_principal, d));
+    groups[assigned ? assigned.key : 'ee'].push({ d, i });
+  });
+
+  const baixesMap = Object.fromEntries(
+    baixes.map(b => [b.absent.toLowerCase().trim(), b])
+  );
+  const substitutMap = Object.fromEntries(
+    baixes.map(b => [b.substitut.toLowerCase().trim(), b])
+  );
 
   return (
     <>

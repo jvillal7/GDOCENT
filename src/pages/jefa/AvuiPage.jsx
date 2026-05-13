@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SIEI_ALUMNES, FRANJES_ORIOL, GRUPS_ORIOL, BLOCS_ORIOL } from '../../lib/constants';
 import { normGrup, parseFranges } from '../../lib/utils';
@@ -375,43 +375,46 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
             </tr>
           </thead>
           <tbody>
-            {blocs.map(bloc => bloc.slots.map((fid, si) => {
-              const franja = franjesAct.find(f => f.id === fid);
-              return (
-                <tr key={fid}>
-                  {si === 0 && (
-                    <Td rowSpan={bloc.slots.length} sticky left={0} minW={58} zIdx={1} style={{ fontWeight: 700, verticalAlign: 'middle' }}>
-                      {bloc.hora}
-                    </Td>
-                  )}
-                  <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{(franja?.sub || '').split(' · ')[0]}</Td>
-                  {items.map(item => {
-                    const sp = spans[item]?.[fid] || {};
-                    if (sp.skip) return null;
-                    const cell = cells[`${item}__${fid}`];
-                    const bg = cell?.estat === 'pendent' ? 'var(--red-bg)' : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
-                    const bc = cell?.estat === 'pendent' ? '#F0C0B8' : cell?.estat === 'resolt' ? '#F0D5A8' : 'var(--green-mid)';
-                    return (
-                      <td key={item} rowSpan={sp.rowSpan || 1}
-                        style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
-                        onClick={() => cell?.estat === 'pendent' && onPendentClick?.()}
-                      >
-                        {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
-                        {cell?.estat === 'resolt' && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                        {(cell?.estat === 'normal' || cell?.estat === 'ok') && (
-                          cell.noms?.length > 0
-                            ? cell.noms.map((n, i) => <span key={i} style={{ fontSize: 8, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{n}</span>)
-                            : cell.cobrint
-                              ? <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2 }}>{cell.cobrint}</span>
-                              : null
-                        )}
-                        {!cell && null}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            }))}
+            {blocs.map(bloc => (
+              <Fragment key={bloc.hora}>
+                {bloc.slots.map((fid, si) => {
+                  const franja = franjesAct.find(f => f.id === fid);
+                  return (
+                    <tr key={fid}>
+                      {si === 0 && (
+                        <Td rowSpan={bloc.slots.length} sticky left={0} minW={58} zIdx={1} style={{ fontWeight: 700, verticalAlign: 'middle' }}>
+                          {bloc.hora}
+                        </Td>
+                      )}
+                      <Td sticky left={58} minW={60} zIdx={1} style={{ fontSize: 9 }}>{(franja?.sub || '').split(' · ')[0]}</Td>
+                      {items.map(item => {
+                        const sp = spans[item]?.[fid] || {};
+                        if (sp.skip) return null;
+                        const cell = cells[`${item}__${fid}`];
+                        const bg = cell?.estat === 'pendent' ? 'var(--red-bg)' : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
+                        const bc = cell?.estat === 'pendent' ? '#F0C0B8' : cell?.estat === 'resolt' ? '#F0D5A8' : 'var(--green-mid)';
+                        return (
+                          <td key={item} rowSpan={sp.rowSpan || 1}
+                            style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
+                            onClick={() => cell?.estat === 'pendent' && onPendentClick?.()}
+                          >
+                            {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
+                            {cell?.estat === 'resolt' && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
+                            {(cell?.estat === 'normal' || cell?.estat === 'ok') && (
+                              cell.noms?.length > 0
+                                ? cell.noms.map((n, i) => <span key={i} style={{ fontSize: 8, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{n}</span>)
+                                : cell.cobrint
+                                  ? <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2 }}>{cell.cobrint}</span>
+                                  : null
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>
