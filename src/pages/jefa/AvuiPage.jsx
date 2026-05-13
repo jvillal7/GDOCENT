@@ -42,12 +42,17 @@ export default function AvuiPage() {
       const todayDia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][today.getDay()];
       const SCHOOL_F = FRANJES_ACT.filter(f => !f.lliure);
 
-      const [deutes, absencies, cobertures, provsDeuma] = await Promise.all([
+      const [deutes, absencies, cobertures, provsDeuma, baixesRaw] = await Promise.all([
         api.getDeutesTP(),
         api.getAbsenciesAvui(),
         api.getCoberturasAvui(),
         api.getAbsenciesProvisionals().catch(() => []),
+        api.getBaixes().catch(() => []),
       ]);
+      // Noms dels docents de baixa llarga — no els mostrem a la graella (surt el substitut)
+      const baixaAbsents = new Set(
+        (baixesRaw?.[0]?.oriol_baixes || []).map(b => b.absent).filter(Boolean)
+      );
       setProvisionals(provsDeuma || []);
 
       setKpiTP({
@@ -68,24 +73,31 @@ export default function AvuiPage() {
           const presents = new Set();
           // Pass A: docents el valor d'horari dels quals referencia aquest grup
           docents.forEach(d => {
+            if (baixaAbsents.has(d.nom)) return;
             const val = d.horari?.[todayDia]?.[f.id] || '';
             if (matchesGrup(val, grup)) presents.add(d.nom.split(' ')[0]);
           });
-          // Pass B: tutor/a del grup — el valor de l'horari llista qui hi és
-          // (cobreix cotutories com G5 on el valor és "A.S (MEE) R.V (MEE)")
-          const gDoc = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
+          // Pass B: tutor/a del grup — afegim el tutor i noms del seu horari
+          // (cobreix cotutories com G5 "A.S (MEE) R.V (MEE)", i tutors Rivo amb activitats)
+          const gDoc = docents.find(d =>
+            normGrup(d.grup_principal || '') === normGrup(grup) && !baixaAbsents.has(d.nom)
+          );
           if (gDoc?.horari?.[todayDia]) {
             const val = gDoc.horari[todayDia][f.id] || '';
             const vl  = val.toLowerCase().trim();
             const trivial = !val || vl === 'lliure' || vl === 'libre' || vl === 'tp'
               || vl.includes('piscina') || vl.includes('ceepsir');
             if (!trivial) {
+              // Noms del tutor: cotutoria "A.S + R.V" → parseDocNoms; nom simple → split
+              const tutorNoms = gDoc.nom.includes('+')
+                ? parseDocNoms(gDoc.nom)
+                : [gDoc.nom.split(' ')[0]];
               if (/^tp\b/i.test(vl)) {
                 // "TP X.Y" — X.Y fa TP, afegim els co-tutors restants
                 const onTP = extractNomsHorari(val);
-                parseDocNoms(gDoc.nom).filter(n => !onTP.includes(n)).forEach(n => presents.add(n));
+                tutorNoms.filter(n => !onTP.includes(n)).forEach(n => presents.add(n));
               } else {
-                parseDocNoms(gDoc.nom).forEach(n => presents.add(n));
+                tutorNoms.forEach(n => presents.add(n));
                 extractNomsHorari(val).forEach(n => presents.add(n));
               }
             }
@@ -113,26 +125,34 @@ export default function AvuiPage() {
               newCells[key] = { estat: 'resolt', cobrint: cob.docent_cobrint_nom.split(' ')[0] };
             } else {
               // Resolt sense cobertura → mostrem els docents restants al grup
-              const absentShort = parseDocNoms(a.docent_nom);
+              const absentShort = a.docent_nom.includes('+')
+                ? parseDocNoms(a.docent_nom)
+                : [a.docent_nom.split(' ')[0]];
               const presents = new Set();
               docents.forEach(d => {
-                if (d.nom === a.docent_nom) return;
+                if (d.nom === a.docent_nom || baixaAbsents.has(d.nom)) return;
                 const val = d.horari?.[todayDia]?.[fid] || '';
                 if (matchesGrup(val, colGrup)) presents.add(d.nom.split(' ')[0]);
               });
-              const gDoc = docents.find(d => normGrup(d.grup_principal || '') === normGrup(colGrup));
-              if (gDoc && gDoc.nom !== a.docent_nom && gDoc.horari?.[todayDia]) {
+              const gDoc = docents.find(d =>
+                normGrup(d.grup_principal || '') === normGrup(colGrup) &&
+                d.nom !== a.docent_nom && !baixaAbsents.has(d.nom)
+              );
+              if (gDoc?.horari?.[todayDia]) {
                 const val = gDoc.horari[todayDia][fid] || '';
                 const vl  = val.toLowerCase().trim();
                 const trivial = !val || vl === 'lliure' || vl === 'libre' || vl === 'tp'
                   || vl.includes('piscina') || vl.includes('ceepsir');
                 if (!trivial) {
+                  const tutorNoms = gDoc.nom.includes('+')
+                    ? parseDocNoms(gDoc.nom)
+                    : [gDoc.nom.split(' ')[0]];
                   const addIfNotAbsent = n => { if (!absentShort.includes(n)) presents.add(n); };
                   if (/^tp\b/i.test(vl)) {
                     const onTP = extractNomsHorari(val);
-                    parseDocNoms(gDoc.nom).filter(n => !onTP.includes(n)).forEach(addIfNotAbsent);
+                    tutorNoms.filter(n => !onTP.includes(n)).forEach(addIfNotAbsent);
                   } else {
-                    parseDocNoms(gDoc.nom).forEach(addIfNotAbsent);
+                    tutorNoms.forEach(addIfNotAbsent);
                     extractNomsHorari(val).forEach(addIfNotAbsent);
                   }
                 }
