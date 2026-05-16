@@ -56,14 +56,16 @@ Professionals principals d'aula. Poden cobrir altres MEE. Treballen en parella a
 
 **L.M (MEE) — Mestra de suport sense horari fix (Infantil-Primària):**
 - Tot el seu horari és `Suport` → no té grup assignat → **sempre disponible** per cobrir
-- Àmbit: Infantil-Primària (G1–G6 i MxI)
+- Àmbit: Infantil-Primària (G1, G3, G4, G5, G6) G2, i MxI no pot cobrir. 
 - Primera opció per cobrir qualsevol absència d'Infantil-Primària
 - Una de les dues persones autoritzades per entrar a MxI si C.F o M.V falta
+- L.M (MEE) només pot cocbrir els següents grups de secundaria: G10, G13.
 
 **R.S (MEE) — Mestra de suport sense horari fix (Secundària):**
 - Tot el seu horari és `Suport` → no té grup assignat → **sempre disponible** per cobrir
-- Àmbit: Secundària (G7–G14)
+- Àmbit: Secundària (G8, G9, G10, G12, G13, G14). G7 i G11 no els pot cobrir. 
 - Primera opció per cobrir qualsevol absència de Secundària
+- R.S (MEE) només pot cobrir els següents grups d'infantil-primaria: G3. 
 
 ### PAE (Professional d'Atenció Educativa)
 **Regla general:** Un PAE treballa acompanyat d'un MEE sempre que sigui possible (nivells 1–5 de la jerarquia).
