@@ -1,0 +1,46 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      VITE_SUPA_URL: ${{ secrets.VITE_SUPA_URL }}
+      VITE_SUPA_KEY: ${{ secrets.VITE_SUPA_KEY }}
+      VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
+      VITE_WORKER_AUTH_TOKEN: ${{ secrets.VITE_WORKER_AUTH_TOKEN }}
+      VITE_JEFA_EMAIL: ${{ secrets.VITE_JEFA_EMAIL }}
+      VITE_APP_URL: ${{ secrets.VITE_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Verificar secrets
+        run: |
+          if [ -z "$VITE_SUPA_URL" ]; then echo "ERROR: VITE_SUPA_URL no trobat"; exit 1; fi
+          echo "Secrets OK"
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - uses: actions/deploy-pages@v4
+        id: deployment
