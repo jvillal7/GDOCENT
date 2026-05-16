@@ -10,7 +10,7 @@ import ChatIA from '../../components/ChatIA';
 
 
 export default function AvisosPage() {
-  const { api, docents, normes, escola, showToast } = useApp();
+  const { api, docents, normes, contextIA, frangesIA, escola, showToast } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const [absencies, setAbsencies] = useState(null);
   const [baixes,    setBaixes]    = useState([]);
@@ -420,7 +420,7 @@ export default function AvisosPage() {
       dia,
       frangesIds: parseFranges(avis.franges),
       motiu: avis.motiu,
-    }, blocsDescChat, baixes, decisionsInjectades);
+    }, blocsDescChat, baixes, decisionsInjectades, contextIA, frangesIA);
 
     // Missatge inicial auto-generat
     const MESOS = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];
@@ -512,7 +512,7 @@ export default function AvisosPage() {
       const infoExtraCombinada = infoExtraActivaGen.length
         ? { context: infoExtraActivaGen.map(ie => ie.context).filter(Boolean).join(' | '), docentsBlocats: infoExtraActivaGen.flatMap(ie => ie.docentsBlocats || []) }
         : null;
-      const result = await proposarCobertura(avis.docent_nom, frangesIds, docentsFiltrats, normes, avis.data, isOriol, infoExtraCombinada, baixes.length ? baixes : null);
+      const result = await proposarCobertura(avis.docent_nom, frangesIds, docentsFiltrats, normes, avis.data, isOriol, infoExtraCombinada, baixes.length ? baixes : null, frangesIA);
       setIaResult(result);
       setIaState('done');
       setEditedProposta(result.proposta.map(p => ({ ...p })));

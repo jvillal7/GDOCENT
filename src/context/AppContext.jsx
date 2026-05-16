@@ -29,8 +29,10 @@ export function AppProvider({ children }) {
   const [escola, setEscola]   = useState(saved?.escola || null);
   const [role, setRole]       = useState(saved?.role   || null);
   const [page, setPage]       = useState(saved ? (_urlPage || DEFAULT_PAGE[saved.role] || 'ta') : null);
-  const [docents, setDocents] = useState([]);
-  const [normes,  setNormes]  = useState('');
+  const [docents,    setDocents]    = useState([]);
+  const [normes,     setNormes]     = useState('');
+  const [contextIA,  setContextIA]  = useState('');
+  const [frangesIA,  setFrangesIA]  = useState(null);
   const [toast, setToast]     = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('gd_dark') === 'true';
@@ -47,6 +49,8 @@ export function AppProvider({ children }) {
     const a = makeApi(escola.id);
     a.getDocents().then(data => { if (data) setDocents(data); });
     a.getNormesIA().then(data => { if (data?.[0]?.normes_ia) setNormes(data[0].normes_ia); });
+    a.getContextIA().then(data => { if (data?.[0]?.context_ia) setContextIA(data[0].context_ia); });
+    a.getFrangesIA().then(data => { if (data?.[0]?.franges_ia) setFrangesIA(data[0].franges_ia); });
   }, [escola?.id]);
 
   const login = useCallback((p, e, r) => {
@@ -81,9 +85,9 @@ export function AppProvider({ children }) {
   }, []);
 
   const value = useMemo(() => ({
-    perfil, escola, role, page, docents, normes, toast, api, darkMode,
-    setPage, setDocents, setNormes, login, logout, showToast, toggleDark,
-  }), [perfil, escola, role, page, docents, normes, toast, api, darkMode, login, logout, showToast, toggleDark]);
+    perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
+    setPage, setDocents, setNormes, setContextIA, login, logout, showToast, toggleDark,
+  }), [perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode, login, logout, showToast, toggleDark]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

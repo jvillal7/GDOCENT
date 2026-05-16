@@ -11,6 +11,7 @@ export default function AppShell() {
   const [desktop, setDesktop] = useState(isDesktop);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [oriolMenu, setOriolMenu] = useState(false);
+  const [configMenu, setConfigMenu] = useState(false);
   const [tapAnimId, setTapAnimId] = useState(null);
 
   useEffect(() => {
@@ -87,25 +88,61 @@ export default function AppShell() {
             <div className="dtb-right" style={role === 'jefa' ? { flexDirection: 'column', alignItems: 'flex-end', gap: 10 } : {}}>
               <span className={`role-chip ${chipCls}`}>{chipTxt}</span>
               {role === 'jefa' && (
-                <button
-                  onClick={() => setPage('dv')}
-                  style={{
-                    background: page === 'dv' ? 'var(--border)' : 'var(--bg-2)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 10,
-                    padding: '7px 14px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    color: 'var(--ink)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  🤖 Normes IA
-                </button>
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setConfigMenu(o => !o)}
+                    style={{
+                      background: (page === 'dv' || page === 'dv_context') ? 'var(--border)' : 'var(--bg-2)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 10,
+                      padding: '7px 14px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      color: 'var(--ink)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    🤖 Configuració IA
+                    <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>{configMenu ? '▲' : '▼'}</span>
+                  </button>
+                  {configMenu && (
+                    <>
+                      <div style={{ position: 'fixed', inset: 0, zIndex: 198 }} onClick={() => setConfigMenu(false)} />
+                      <div style={{
+                        position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                        background: 'var(--surface)', borderRadius: 12,
+                        boxShadow: '0 4px 24px rgba(0,0,0,.15)',
+                        border: '1px solid var(--border)',
+                        zIndex: 199, minWidth: 180, overflow: 'hidden',
+                      }}>
+                        {[
+                          { id: 'dv',         icon: '🤖', label: 'Normes IA' },
+                          { id: 'dv_context', icon: '🏫', label: 'Context IA' },
+                        ].map((it, i, arr) => (
+                          <div
+                            key={it.id}
+                            onClick={() => { setPage(it.id); setConfigMenu(false); }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '12px 16px',
+                              borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+                              cursor: 'pointer',
+                              background: page === it.id ? 'var(--bg-2)' : 'var(--surface)',
+                              fontSize: 13, fontWeight: page === it.id ? 600 : 400,
+                              color: 'var(--ink)',
+                            }}
+                          >
+                            <span>{it.icon}</span>{it.label}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </header>
@@ -125,22 +162,57 @@ export default function AppShell() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={`role-chip ${chipCls}`}>{chipTxt}</span>
           {role === 'jefa' && (
-            <button
-              onClick={() => setPage('dv')}
-              style={{
-                background: page === 'dv' ? 'var(--border)' : 'var(--bg-2)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: '5px 9px',
-                fontSize: 16,
-                lineHeight: 1,
-                cursor: 'pointer',
-                color: 'var(--ink)',
-              }}
-              title="Normes IA"
-            >
-              🤖
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setConfigMenu(o => !o)}
+                style={{
+                  background: (page === 'dv' || page === 'dv_context') ? 'var(--border)' : 'var(--bg-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: '5px 9px',
+                  fontSize: 16,
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  color: 'var(--ink)',
+                }}
+                title="Configuració IA"
+              >
+                🤖
+              </button>
+              {configMenu && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 198 }} onClick={() => setConfigMenu(false)} />
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                    background: 'var(--surface)', borderRadius: 12,
+                    boxShadow: '0 4px 24px rgba(0,0,0,.15)',
+                    border: '1px solid var(--border)',
+                    zIndex: 199, minWidth: 170, overflow: 'hidden',
+                  }}>
+                    {[
+                      { id: 'dv',         icon: '🤖', label: 'Normes IA' },
+                      { id: 'dv_context', icon: '🏫', label: 'Context IA' },
+                    ].map((it, i, arr) => (
+                      <div
+                        key={it.id}
+                        onClick={() => { setPage(it.id); setConfigMenu(false); setDrawerOpen(false); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '12px 16px',
+                          borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+                          cursor: 'pointer',
+                          background: page === it.id ? 'var(--bg-2)' : 'var(--surface)',
+                          fontSize: 14, fontWeight: page === it.id ? 600 : 400,
+                          color: 'var(--ink)',
+                        }}
+                      >
+                        <span>{it.icon}</span>{it.label}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
           <button className="ah-menu-btn" onClick={() => setDrawerOpen(true)}>☰</button>
         </div>

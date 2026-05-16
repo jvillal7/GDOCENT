@@ -1,8 +1,8 @@
 import { FRANJES, FRANJES_ORIOL } from './constants';
 import { callClaudeRaw } from './claude-api';
 
-export function construirContextXat(escola, docents, normes, isOriol, absenciaContext = null, docentsBlocats = [], baixes = [], decisionsPassades = []) {
-  const FRANJES_ACT = isOriol ? FRANJES_ORIOL : FRANJES;
+export function construirContextXat(escola, docents, normes, isOriol, absenciaContext = null, docentsBlocats = [], baixes = [], decisionsPassades = [], contextIA = '', frangesIA = null) {
+  const FRANJES_ACT = frangesIA || (isOriol ? FRANJES_ORIOL : FRANJES);
   const jefaNom     = isOriol ? 'Mireia' : 'Veronica';
   const dies        = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
   const diesShort   = { dilluns: 'dl', dimarts: 'dm', dimecres: 'dc', dijous: 'dj', divendres: 'dv' };
@@ -19,29 +19,10 @@ export function construirContextXat(escola, docents, normes, isOriol, absenciaCo
     return `${d.nom} (${d.grup_principal || 'Especialista'}, cob_mes=${d.cobertures_mes || 0}):\n${diesTxt}`;
   }).join('\n\n');
 
-  const estructura = isOriol
-    ? `CEE Ca N'Oriol — Centre d'Educació Especial
-Cicle Infantil-Primària: G1, G2, G3, G4, G5, G6, MxI
-Cicle Secundària: G7, G8, G9, G10, G11, G12, G13, G14
-Rols: MEE (mestre educació especial), PAE, EVIP, MALL, ESTIM, MUS
-CEEPSIR/Piscina a l'horari = fora del centre, no disponible
-JERARQUIA COBERTURA DE GRUP (quan falta qualsevol membre, el grup ha de quedar cobert):
-  1. MEE TUTOR + PAE REFERENT | 2. MEE REFERENT + PAE REFERENT | 3. MEE REFERENT + PAE no referent
-  4. MEE no referent + PAE REFERENT | 5. MEE REFERENT SOL | 6. PAE REFERENT SOL | 7. MEE NO REFERENT SOL
-  ÚLTIM RECURS (nivell 8, si no hi ha cap MEE ni PAE referent): A.G (MUS), N.C (EVIP), MALL que no entren al grup
-    → Poden quedar-se SOLS amb el grup sense PAE quan no hi ha cap altra opció.
-  PAE NO REFERENT SOL → PROHIBIT sempre
-L.M (MEE): suport flotant, REFERENT Infantil-Primària (G1–G6), sempre disponible, sense deute TP.
-R.S (MEE): suport flotant, REFERENT Secundària (G7–G14), sempre disponible, sense deute TP.
-MALL (A.G, R.E, C.P): si ja entren al grup → actuen com a referent (nivell 2/3). Si NO hi entren → últim recurs.
-ESTIM absent: les franges d'Estimulació NO es cobreixen. La tutora es queda amb el grup. No proposar ningú.
-G5 cotutoria: A.S (MEE) + R.V (MEE) — cada una 1h TP/setmana. Si una falta, l'altra és referent del grup.
-MxI: REGLA ABSOLUTA — si C.F (MEE) o M.V (PAE) falta → ÚNIC substitut: L.M (MEE) o R.E (MALL). Cap altre.`
-    : `CEIP Rivo Rubeo — Centre d'Educació Infantil i Primària
-Grups: I3A, I3B, I4A, I4B, I5A, I5B, 1rA, 1rB, 2nA, 2nB, 3rA, 3rB, 4tA, 4tB, 5eA, 5eB, 6eA, 6eB
-Cicles: Petits (I3-I5) | Mitjans (1r-3r) | Grans (4t-6è)
-Coordinadors: Lidia (Petits), Lorena (Mitjans), Chema (Grans)
-Alumnes SIEI (no cobribles): Theo, Sebas, Tyler, Pol, Aaron, Mohamed, Claudia, Maxim, Miranda, Adam`;
+  const _estructuraFallback = isOriol
+    ? `CEE Ca N'Oriol — Centre d'Educació Especial\nCicle Infantil-Primària: G1-G6, MxI | Cicle Secundària: G7-G14\nRols: MEE, PAE, MALL, EVIP, MUS, ESTIM`
+    : `CEIP Rivo Rubeo — Centre d'Educació Infantil i Primària\nGrups: I3-I5, 1r-6è | Cicles: Petits/Mitjans/Grans`;
+  const estructura = (contextIA || '').trim() || _estructuraFallback;
 
   const frangesDesc = franjesList.map(f => `${f.id}=${f.sub}`).join(' | ');
 
@@ -131,8 +112,8 @@ ${absDesc}${baixes?.length ? `\n--- BAIXES LLARGUES (tot el curs) ---\n${baixes.
 }
 
 // Versió ràpida del botó IA: mateixa lògica que el chatbot però sense UI
-export async function proposarCoberturaViaChat(absent, frangesIds, docents, normes, data, isOriol, infoExtraCombinada, baixes, escola) {
-  const FRANJES_ACT = isOriol ? FRANJES_ORIOL : FRANJES;
+export async function proposarCoberturaViaChat(absent, frangesIds, docents, normes, data, isOriol, infoExtraCombinada, baixes, escola, contextIA = '', frangesIA = null) {
+  const FRANJES_ACT = frangesIA || (isOriol ? FRANJES_ORIOL : FRANJES);
   const SCHOOL_F = FRANJES_ACT.filter(f => !f.lliure);
   const dateObj = data ? new Date(data + 'T12:00:00') : null;
   const dia = dateObj
@@ -149,7 +130,7 @@ export async function proposarCoberturaViaChat(absent, frangesIds, docents, norm
   const systemCtx = construirContextXat(
     escola, docents, normes, isOriol,
     { nom: absent, data, dia, frangesIds, motiu: '' },
-    docentsBlocats, baixes || []
+    docentsBlocats, baixes || [], [], contextIA, frangesIA
   );
   const userMsg = `Proposa una cobertura per a ${absent}, ${frangesStr}${dia ? ` del ${dia}` : ''}${dataStr ? ` ${dataStr}` : ''}.`;
 

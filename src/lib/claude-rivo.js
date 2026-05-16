@@ -6,8 +6,8 @@ import {
   estatHorari, normG, getCicle, migGrupCicle, matchesAbsentGroup,
 } from './claude-utils';
 
-export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null) {
-  if (isOriol) return proposarCoberturaOriol(absentNom, frangesIds, docents, normes, data, infoExtra, baixes);
+export async function proposarCobertura(absentNom, frangesIds, docents, normes, data, isOriol = false, infoExtra = null, baixes = null, frangesIA = null) {
+  if (isOriol) return proposarCoberturaOriol(absentNom, frangesIds, docents, normes, data, infoExtra, baixes, frangesIA);
 
   const t0 = Date.now();
   const frangesInput = [...frangesIds];
