@@ -2,6 +2,19 @@
 
 SPA de gestió d'absències i cobertures per a centres educatius de primària. Desenvolupat per Jorge Villalba (jvillal7@xtec.cat).
 
+## Accés a Supabase (MCP)
+
+El MCP de Supabase requereix OAuth cada sessió. Per evitar-ho, usa directament la **Management API REST** amb el PAT emmagatzemat a `.env.local` (`SUPABASE_PAT`). Exemple per executar SQL:
+
+```bash
+curl -s -X POST "https://api.supabase.com/v1/projects/mtrylcazzwolgzfzmbrn/database/query" \
+  -H "Authorization: Bearer <PAT de .env.local>" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT ..."}'
+```
+
+**Llegeix el PAT de `.env.local` (variable `SUPABASE_PAT`) sempre que necessitis accedir a Supabase. No demanis mai l'enllaç OAuth a l'usuari.**
+
 ## Context per escola (llegir al principi de cada sessió)
 
 - [`context/rivo-rubeo.md`](context/rivo-rubeo.md) — CEIP Rivo Rubeo: grups, cicles, coordinadors, normes IA, personal especial

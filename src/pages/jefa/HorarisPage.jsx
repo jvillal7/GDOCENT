@@ -73,7 +73,7 @@ function cellColor(val) {
 }
 
 export default function HorarisPage() {
-  const { api, escola, docents, setDocents, showToast } = useApp();
+  const { api, escola, setEscola, docents, setDocents, showToast } = useApp();
   const isOriol  = escola?.nom?.toLowerCase().includes('oriol');
   const franjes   = isOriol ? FRANJES_ORIOL : FRANJES;
   const [confirmData, setConfirm]   = useState(null);
@@ -338,6 +338,11 @@ export default function HorarisPage() {
       }
       if (data.rol === 'directiu' && data.pin) {
         api.syncDirectiuPin(nom, data.pin).catch(() => {});
+      }
+      if (data.grup_principal === "Cap d'Estudis") {
+        const emailJefa = data.email?.trim() || null;
+        api.saveEmailNotificacions(emailJefa).catch(() => {});
+        setEscola(e => ({ ...e, email_notificacions: emailJefa }));
       }
       showToast(`Horari de ${nom} ${existing ? 'actualitzat' : 'afegit'}`);
       setConfirm(null);

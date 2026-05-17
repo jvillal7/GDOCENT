@@ -2,7 +2,6 @@ export const SUPA_URL          = import.meta.env.VITE_SUPA_URL;
 export const SUPA_KEY          = import.meta.env.VITE_SUPA_KEY;
 export const WORKER_URL        = import.meta.env.VITE_WORKER_URL;
 export const WORKER_AUTH_TOKEN = import.meta.env.VITE_WORKER_AUTH_TOKEN;
-export const JEFA_EMAIL        = import.meta.env.VITE_JEFA_EMAIL;
 export const APP_URL           = import.meta.env.VITE_APP_URL;
 
 export const FRANJES = [

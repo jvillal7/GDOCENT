@@ -86,7 +86,7 @@ export function AppProvider({ children }) {
 
   const value = useMemo(() => ({
     perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
-    setPage, setDocents, setNormes, setContextIA, login, logout, showToast, toggleDark,
+    setPage, setDocents, setNormes, setContextIA, setEscola, login, logout, showToast, toggleDark,
   }), [perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode, login, logout, showToast, toggleDark]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, JEFA_EMAIL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
 import { todayISO, emailAbsencia } from '../../lib/utils';
 import { uploadFitxer, sendEmail } from '../../lib/api';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
@@ -111,7 +111,7 @@ export default function AvisarPage() {
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
       // Notificar la cap d'estudis per correu
       sendEmail(
-        JEFA_EMAIL,
+        escola.email_notificacions,
         `🔔 Nova absència — ${perfil.nom}`,
         emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola })
       );
@@ -139,7 +139,7 @@ export default function AvisarPage() {
       setSent(true);
       showToast('Avis enviat correctament');
       sendEmail(
-        JEFA_EMAIL,
+        escola.email_notificacions,
         `🔔 Nova absència — ${perfil.nom}`,
         emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola })
       );

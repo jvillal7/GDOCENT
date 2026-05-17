@@ -142,6 +142,7 @@ export function makeApi(escolaId) {
       return f(`absencies?estat=eq.provisional&data=eq.${tom.toISOString().split('T')[0]}&order=creat_el.desc`);
     },
     getIaDecisions:  ()  => f(`escoles?id=eq.${escolaId}&select=ia_decisions`, { bypassSchoolId: true }),
-    saveIaDecisions: d   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ ia_decisions: d }), bypassSchoolId: true }),
+    saveIaDecisions:        d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ ia_decisions: d }), bypassSchoolId: true }),
+    saveEmailNotificacions: email => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ email_notificacions: email }), bypassSchoolId: true }),
   };
 }
