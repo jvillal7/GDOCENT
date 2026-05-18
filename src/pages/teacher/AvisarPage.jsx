@@ -2,11 +2,19 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
 import { todayISO, emailAbsencia } from '../../lib/utils';
-import { uploadFitxer, sendEmail } from '../../lib/api';
+import { uploadFitxer, sendEmail, supaFetch } from '../../lib/api';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
 
 export default function AvisarPage() {
-  const { api, perfil, escola, showToast } = useApp();
+  const { api, perfil, escola, setEscola, showToast } = useApp();
+
+  useEffect(() => {
+    if (escola && escola.email_notificacions === undefined) {
+      supaFetch(`escoles?id=eq.${escola.id}&select=email_notificacions`, { bypassSchoolId: true })
+        .then(data => { if (data?.[0]) setEscola(e => ({ ...e, ...data[0] })); })
+        .catch(() => {});
+    }
+  }, [escola?.id]);
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const franjesActives    = isOriol ? FRANJES_ORIOL    : FRANJES;
   const schoolFranjesAct  = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
