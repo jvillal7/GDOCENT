@@ -60,10 +60,10 @@ export default function AppShell() {
     return (
       <div className="shell-desk">
         <aside className="sd">
-          <div className="sd-top" style={{ background: '#0a1a0f', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+          <div className="sd-top">
             <div className="sd-logo" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-              <img src="/logo.png" alt="HorariaPro" style={{ height: 32, width: 'auto', display: 'block' }} />
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)' }}>{escola?.nom}</div>
+              <img src="/logo.png" alt="HorariaPro" style={{ height: 32, width: 'auto', display: 'block', filter: darkMode ? 'none' : 'brightness(0)' }} />
+              <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{escola?.nom}</div>
             </div>
           </div>
           <nav className="sd-nav"><SidebarNav /></nav>

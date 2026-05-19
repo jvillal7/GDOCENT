@@ -269,7 +269,7 @@ export default function LoginFlow() {
         style={isOriol ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'center' } : {}}
       >
         <div className="hero-text">
-          <img src="/logo.png" alt="HorariaPro" style={{ height: 56, width: 'auto' }} />
+          <img src="/logo.png" alt="HorariaPro" style={{ height: 112, width: 'auto', filter: 'brightness(0)' }} />
           <p>{school ? school.nom : 'Selecciona la teva escola per accedir'}</p>
         </div>
         {isOriol && (
@@ -277,7 +277,7 @@ export default function LoginFlow() {
             {/* Separació fixa entre el títol i els botons */}
             <div style={{ height: 52 }} />
             <div style={{ position: 'relative', zIndex: 1 }}>
-              <p style={{ fontSize: 10, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>
+              <p style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>
                 Informació del dia
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -286,11 +286,11 @@ export default function LoginFlow() {
                     key={type}
                     onClick={() => openDiari(type)}
                     style={{
-                      background: 'rgba(255,255,255,.07)',
-                      border: '1px solid rgba(255,255,255,.13)',
+                      background: 'var(--bg-2)',
+                      border: '1px solid var(--border)',
                       borderRadius: 10,
                       padding: '12px 8px',
-                      color: 'rgba(255,255,255,.65)',
+                      color: 'var(--ink-2)',
                       fontSize: 11.5,
                       fontWeight: 500,
                       cursor: 'pointer',
@@ -301,8 +301,8 @@ export default function LoginFlow() {
                       gap: 5,
                       transition: 'background .15s, border-color .15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.13)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.25)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.07)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.13)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-3)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-2)'; }}
                   >
                     <span style={{ fontSize: 17 }}>{icon}</span>
                     {label}
