@@ -269,7 +269,7 @@ export default function LoginFlow() {
         style={isOriol ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'center' } : {}}
       >
         <div className="hero-text">
-          <h1>HORAR<em className="h-ia">IA</em></h1>
+          <img src="/logo.png" alt="HorariaPro" style={{ height: 44, width: 'auto' }} />
           <p>{school ? school.nom : 'Selecciona la teva escola per accedir'}</p>
         </div>
         {isOriol && (

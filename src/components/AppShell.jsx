@@ -61,11 +61,11 @@ export default function AppShell() {
       <div className="shell-desk">
         <aside className="sd">
           <div className="sd-top">
-            <div className="sd-logo">
-              <div className="sd-logo-text">
-                <p>{escola?.nom || 'HORARIA'}</p>
-                <span>HORAR<span className="h-ia">IA</span></span>
+            <div className="sd-logo" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+              <div style={{ background: '#0a0a0a', borderRadius: 8, padding: '6px 10px', display: 'inline-block' }}>
+                <img src="/logo.png" alt="HorariaPro" style={{ height: 28, width: 'auto', display: 'block' }} />
               </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{escola?.nom}</div>
             </div>
           </div>
           <nav className="sd-nav"><SidebarNav /></nav>
@@ -156,7 +156,9 @@ export default function AppShell() {
     <div id="app">
       <header className="app-header">
         <div className="ah-title">
-          <p>{escola?.nom || 'HORARIA'}</p>
+          <div style={{ background: '#0a0a0a', borderRadius: 6, padding: '4px 8px', display: 'inline-flex', alignItems: 'center' }}>
+            <img src="/logo.png" alt="HorariaPro" style={{ height: 20, width: 'auto', display: 'block' }} />
+          </div>
           <span>{title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
