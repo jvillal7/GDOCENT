@@ -110,7 +110,8 @@ export default function AvisarPage() {
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
       // Notificar la cap d'estudis per correu (email del seu perfil de docent)
-      const jefaEmails = docents.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
+      const totsDocents = docents.length ? docents : (await api.getDocents() || []);
+      const jefaEmails = totsDocents.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
       sendEmail(
         jefaEmails,
         `🔔 Nova absència — ${perfil.nom}`,
@@ -139,7 +140,8 @@ export default function AvisarPage() {
       });
       setSent(true);
       showToast('Avis enviat correctament');
-      const jefaEmails2 = docents.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
+      const totsDocents2 = docents.length ? docents : (await api.getDocents() || []);
+      const jefaEmails2 = totsDocents2.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
       sendEmail(
         jefaEmails2,
         `🔔 Nova absència — ${perfil.nom}`,
