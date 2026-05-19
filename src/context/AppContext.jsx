@@ -10,6 +10,18 @@ function readSession() {
   catch { return null; }
 }
 
+// Si ?escola= no coincideix amb la sessió guardada, esborra la sessió per forçar nou login.
+(() => {
+  try {
+    const escolaParam = new URLSearchParams(window.location.search).get('escola');
+    if (!escolaParam) return;
+    const saved = JSON.parse(localStorage.getItem('gd_session') || 'null');
+    if (saved?.escola && !saved.escola.nom.toLowerCase().includes(escolaParam.toLowerCase())) {
+      localStorage.removeItem('gd_session');
+    }
+  } catch {}
+})();
+
 // Llegeix ?page de la URL. Si hi ha ?escola, NO neteja la URL (LoginFlow la necessita).
 const _urlPage = (() => {
   try {
