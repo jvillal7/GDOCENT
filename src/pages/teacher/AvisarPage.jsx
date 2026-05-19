@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
 import { todayISO, emailAbsencia } from '../../lib/utils';
-import { uploadFitxer, sendEmail } from '../../lib/api';
+import { uploadFitxer, sendEmail, supaFetch } from '../../lib/api';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
 
 export default function AvisarPage() {
@@ -109,14 +109,12 @@ export default function AvisarPage() {
       }
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
-      // Notificar la cap d'estudis per correu (email del seu perfil de docent)
-      const totsDocents = docents.length ? docents : (await api.getDocents() || []);
-      const jefaEmails = totsDocents.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
-      sendEmail(
-        jefaEmails,
-        `🔔 Nova absència — ${perfil.nom}`,
-        emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola })
-      );
+      // Notificar la cap d'estudis per correu
+      supaFetch(`docents?escola_id=eq.${escola.id}&grup_principal=eq.Cap%20d%27Estudis&actiu=eq.true&select=email`, { bypassSchoolId: true })
+        .then(caps => {
+          const jefaEmails = (caps || []).map(d => d.email).filter(Boolean);
+          if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola }));
+        }).catch(() => {});
       loadMeusAvisos();
     } catch (e) {
       showToast('Error enviant avisos: ' + e.message);
@@ -140,13 +138,11 @@ export default function AvisarPage() {
       });
       setSent(true);
       showToast('Avis enviat correctament');
-      const totsDocents2 = docents.length ? docents : (await api.getDocents() || []);
-      const jefaEmails2 = totsDocents2.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
-      sendEmail(
-        jefaEmails2,
-        `🔔 Nova absència — ${perfil.nom}`,
-        emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola })
-      );
+      supaFetch(`docents?escola_id=eq.${escola.id}&grup_principal=eq.Cap%20d%27Estudis&actiu=eq.true&select=email`, { bypassSchoolId: true })
+        .then(caps => {
+          const jefaEmails = (caps || []).map(d => d.email).filter(Boolean);
+          if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola }));
+        }).catch(() => {});
     } catch (e) {
       showToast('Error: ' + e.message);
     } finally {
