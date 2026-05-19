@@ -85,11 +85,11 @@ export default function LoginFlow() {
     const pinParam    = params.get('p');
     if (!escolaParam) return;
 
-    const matched = schools.find(e => e.nom.toLowerCase().includes(escolaParam));
+    const matched = schools.find(e => e.nom.toLowerCase().includes(escolaParam.toLowerCase()));
     if (!matched) return;
 
     localStorage.setItem('gd_consent_accepted', '1');
-    localStorage.setItem('gd_last_escola_key', escolaParam);
+    localStorage.setItem('gd_last_escola_key', escolaParam.toLowerCase());
     window.history.replaceState({}, '', window.location.pathname);
     setEscolaFixa(true);
 
