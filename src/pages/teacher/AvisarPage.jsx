@@ -2,19 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
 import { todayISO, emailAbsencia } from '../../lib/utils';
-import { uploadFitxer, sendEmail, supaFetch } from '../../lib/api';
+import { uploadFitxer, sendEmail } from '../../lib/api';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
 
 export default function AvisarPage() {
-  const { api, perfil, escola, setEscola, showToast } = useApp();
-
-  useEffect(() => {
-    if (escola && escola.email_notificacions === undefined) {
-      supaFetch(`escoles?id=eq.${escola.id}&select=email_notificacions`, { bypassSchoolId: true })
-        .then(data => { if (data?.[0]) setEscola(e => ({ ...e, ...data[0] })); })
-        .catch(() => {});
-    }
-  }, [escola?.id]);
+  const { api, perfil, escola, docents, showToast } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const franjesActives    = isOriol ? FRANJES_ORIOL    : FRANJES;
   const schoolFranjesAct  = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
@@ -117,9 +109,10 @@ export default function AvisarPage() {
       }
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
-      // Notificar la cap d'estudis per correu
+      // Notificar la cap d'estudis per correu (email del seu perfil de docent)
+      const jefaEmails = docents.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
       sendEmail(
-        escola.email_notificacions,
+        jefaEmails,
         `🔔 Nova absència — ${perfil.nom}`,
         emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola })
       );
@@ -146,8 +139,9 @@ export default function AvisarPage() {
       });
       setSent(true);
       showToast('Avis enviat correctament');
+      const jefaEmails2 = docents.filter(d => d.grup_principal === "Cap d'Estudis" && d.email).map(d => d.email);
       sendEmail(
-        escola.email_notificacions,
+        jefaEmails2,
         `🔔 Nova absència — ${perfil.nom}`,
         emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola })
       );

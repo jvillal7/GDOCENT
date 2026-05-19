@@ -10,21 +10,29 @@ function cacheGet(key) {
 function cacheSet(key, data) { _cache.set(key, { data, ts: Date.now() }); }
 function cacheDel(...keys) { keys.forEach(k => _cache.delete(k)); }
 
+async function _sendOne(to, subject, html) {
+  const res = await fetch(`${SUPA_URL}/functions/v1/send-email`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPA_KEY,
+      'Authorization': `Bearer ${SUPA_KEY}`,
+    },
+    body: JSON.stringify({ to, subject, html }),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.status);
+    console.error('[sendEmail] Error de l\'Edge Function:', err);
+  }
+}
+
 export async function sendEmail(to, subject, html) {
   try {
-    const res = await fetch(`${SUPA_URL}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
-      },
-      body: JSON.stringify({ to, subject, html }),
-    });
-    if (!res.ok) {
-      const err = await res.text().catch(() => res.status);
-      console.error('[sendEmail] Error de l\'Edge Function:', err);
-    }
+    const recipients = Array.isArray(to)
+      ? to
+      : (typeof to === 'string' ? to.split(',').map(e => e.trim()).filter(Boolean) : []);
+    if (!recipients.length) return;
+    await Promise.all(recipients.map(addr => _sendOne(addr, subject, html)));
   } catch (e) {
     console.error('[sendEmail] Error de xarxa:', e?.message || e);
   }
@@ -144,5 +152,7 @@ export function makeApi(escolaId) {
     getIaDecisions:  ()  => f(`escoles?id=eq.${escolaId}&select=ia_decisions`, { bypassSchoolId: true }),
     saveIaDecisions:        d     => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ ia_decisions: d }), bypassSchoolId: true }),
     saveEmailNotificacions: email => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ email_notificacions: email }), bypassSchoolId: true }),
+    getEmailsNotificacions:  ()    => f(`escoles?id=eq.${escolaId}&select=emails_notificacions,email_notificacions`, { bypassSchoolId: true }),
+    saveEmailsNotificacions: arr   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ emails_notificacions: arr }), bypassSchoolId: true }),
   };
 }
