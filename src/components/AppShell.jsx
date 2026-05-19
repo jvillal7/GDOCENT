@@ -62,7 +62,7 @@ export default function AppShell() {
         <aside className="sd">
           <div className="sd-top">
             <div className="sd-logo" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-              <img src="/logo.png" alt="HorariaPro" style={{ height: 32, width: 'auto', display: 'block', filter: darkMode ? 'none' : 'brightness(0)' }} />
+              <img src="/logo.png" alt="HorariaPro" style={{ height: 44, width: 'auto', display: 'block', filter: darkMode ? 'none' : 'brightness(0)' }} />
               <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{escola?.nom}</div>
             </div>
           </div>
@@ -154,7 +154,7 @@ export default function AppShell() {
     <div id="app">
       <header className="app-header">
         <div className="ah-title">
-          <img src="/logo.png" alt="HorariaPro" style={{ height: 26, width: 'auto', display: 'block', filter: darkMode ? 'none' : 'brightness(0)' }} />
+          <img src="/logo.png" alt="HorariaPro" style={{ height: 34, width: 'auto', display: 'block', filter: darkMode ? 'none' : 'brightness(0)' }} />
           <span>{title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
