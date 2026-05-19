@@ -20,6 +20,7 @@ export default function AvisarPage() {
   const [imgSrc,      setImgSrc]      = useState(null);
   const [fitxers,     setFitxers]     = useState([]);
   const [meusAvisos,  setMeusAvisos]  = useState([]);
+  const [jefaEmails,  setJefaEmails]  = useState([]);
   const dateRef    = useRef(null);
   const fileRef    = useRef(null);
   const fitxerRef  = useRef(null);
@@ -31,6 +32,13 @@ export default function AvisarPage() {
   const firstName = perfil?.nom?.split(' ')[0] || 'Docent';
 
   useEffect(() => { if (api && perfil) loadMeusAvisos(); }, [api, perfil]);
+
+  useEffect(() => {
+    if (!escola?.id) return;
+    supaFetch(`docents?escola_id=eq.${escola.id}&grup_principal=eq.Cap%20d%27Estudis&actiu=eq.true&select=email`, { bypassSchoolId: true })
+      .then(caps => setJefaEmails((caps || []).map(d => d.email).filter(Boolean)))
+      .catch(() => {});
+  }, [escola?.id]);
 
   async function loadMeusAvisos() {
     try {
@@ -109,12 +117,7 @@ export default function AvisarPage() {
       }
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
-      // Notificar la cap d'estudis per correu
-      supaFetch(`docents?escola_id=eq.${escola.id}&grup_principal=eq.Cap%20d%27Estudis&actiu=eq.true&select=email`, { bypassSchoolId: true })
-        .then(caps => {
-          const jefaEmails = (caps || []).map(d => d.email).filter(Boolean);
-          if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola }));
-        }).catch(() => {});
+      if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola }));
       loadMeusAvisos();
     } catch (e) {
       showToast('Error enviant avisos: ' + e.message);
@@ -138,11 +141,7 @@ export default function AvisarPage() {
       });
       setSent(true);
       showToast('Avis enviat correctament');
-      supaFetch(`docents?escola_id=eq.${escola.id}&grup_principal=eq.Cap%20d%27Estudis&actiu=eq.true&select=email`, { bypassSchoolId: true })
-        .then(caps => {
-          const jefaEmails = (caps || []).map(d => d.email).filter(Boolean);
-          if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola }));
-        }).catch(() => {});
+      if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola }));
     } catch (e) {
       showToast('Error: ' + e.message);
     } finally {
