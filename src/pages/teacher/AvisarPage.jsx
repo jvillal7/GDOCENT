@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
 import { todayISO, emailAbsencia } from '../../lib/utils';
-import { uploadFitxer, sendEmail, supaFetch } from '../../lib/api';
+import { uploadFitxer } from '../../lib/api';
+import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
 
 export default function AvisarPage() {
@@ -20,7 +21,6 @@ export default function AvisarPage() {
   const [imgSrc,      setImgSrc]      = useState(null);
   const [fitxers,     setFitxers]     = useState([]);
   const [meusAvisos,  setMeusAvisos]  = useState([]);
-  const [jefaEmails,  setJefaEmails]  = useState([]);
   const dateRef    = useRef(null);
   const fileRef    = useRef(null);
   const fitxerRef  = useRef(null);
@@ -33,12 +33,13 @@ export default function AvisarPage() {
 
   useEffect(() => { if (api && perfil) loadMeusAvisos(); }, [api, perfil]);
 
-  useEffect(() => {
-    if (!escola?.id) return;
-    supaFetch(`docents?escola_id=eq.${escola.id}&grup_principal=eq.Cap%20d%27Estudis&actiu=eq.true&select=email`, { bypassSchoolId: true })
-      .then(caps => setJefaEmails((caps || []).map(d => d.email).filter(Boolean)))
-      .catch(() => {});
-  }, [escola?.id]);
+  function notifyAbsencia(dates, franges, motiu) {
+    fetch(`${SUPA_URL}/functions/v1/absence-notifier`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPA_KEY}` },
+      body: JSON.stringify({ escola_id: escola.id, docent_nom: perfil.nom, data: dates[0], franges: JSON.stringify(franges), motiu }),
+    }).catch(() => {});
+  }
 
   async function loadMeusAvisos() {
     try {
@@ -117,7 +118,7 @@ export default function AvisarPage() {
       }
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
-      if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: Array.from(selectedDates).sort(), franges: Array.from(selectedFranjes), motiu, isOriol, escola }));
+      notifyAbsencia(Array.from(selectedDates).sort(), Array.from(selectedFranjes), motiu);
       loadMeusAvisos();
     } catch (e) {
       showToast('Error enviant avisos: ' + e.message);
@@ -141,7 +142,7 @@ export default function AvisarPage() {
       });
       setSent(true);
       showToast('Avis enviat correctament');
-      if (jefaEmails.length) sendEmail(jefaEmails, `🔔 Nova absència — ${perfil.nom}`, emailAbsencia({ nom: perfil.nom, dates: [todayISO()], franges: schoolFranjesAct.map(f => f.id), motiu: 'Tot el dia', isOriol, escola }));
+      notifyAbsencia([todayISO()], schoolFranjesAct.map(f => f.id), 'Tot el dia');
     } catch (e) {
       showToast('Error: ' + e.message);
     } finally {
