@@ -47,6 +47,21 @@ function normGrup(s: string): string {
     .replace(/[̀-ͯ]/g, '').replace(/\s+/g, '').replace(/[ªº.]/g, '');
 }
 
+function normNom(s: string): string {
+  return (s || '').toLowerCase().normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function esDeBaixa(nom: string, baixes: any[]): boolean {
+  if (!baixes?.length) return false;
+  const n = normNom(nom);
+  return baixes.some(b => {
+    const bn = normNom(b.absent || b || '');
+    if (!bn) return false;
+    return n === bn || n.startsWith(bn) || bn.startsWith(n);
+  });
+}
+
 function extraerGrup(val: string): string | null {
   if (!val) return null;
   const mSuport = /^Suport\s+(.+)/i.exec(val);
@@ -116,7 +131,7 @@ function emailAfectat(opts: { tutor: string; absent: string; cobrint: string; da
 }
 
 function emailCoordinador(opts: { coord: string; cobrint: string; absent: string; data: string; esFutura: boolean; escolaKey: string }) {
-  const { coord, cobrint, absent, data, esFutura, escolaKey } = opts;
+  const { coord, cobrint, absent, data } = opts;
   const dataFmt = fmtData(data);
   const firstName = coord.split(' ')[0];
   return `
@@ -129,11 +144,7 @@ function emailCoordinador(opts: { coord: string; cobrint: string; absent: string
           <tr><td style="padding:8px 0;color:#666">Absent</td><td style="padding:8px 0;font-weight:600">${escHtml(absent)}</td></tr>
           <tr><td style="padding:8px 0;color:#666">Cobreix</td><td style="padding:8px 0;font-weight:600">${escHtml(cobrint)}</td></tr>
         </table>
-        <div style="margin-top:20px;text-align:center">
-          <a href="${APP_URL}?escola=${escolaKey}&page=javis" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            Veure a HORARIA →
-          </a>
-        </div>
+        <p style="margin-top:20px;color:#aaa;font-size:11px;text-align:center">Enviat per HORARIA · horariapro.com</p>
       </div>
     </div>`;
 }
@@ -152,11 +163,12 @@ Deno.serve(async (req) => {
 
     const [docentRes, escolaRes] = await Promise.all([
       supabase.from('docents').select('nom, email, grup_principal, horari, coordinador_cicle').eq('escola_id', escola_id).eq('actiu', true),
-      supabase.from('escoles').select('nom').eq('id', escola_id).single(),
+      supabase.from('escoles').select('nom, oriol_baixes').eq('id', escola_id).single(),
     ]);
 
     const docents: any[] = docentRes.data || [];
     const escolaKey = (escolaRes.data?.nom || '').toLowerCase().includes('oriol') ? 'oriol' : 'rivo';
+    const baixes: any[] = escolaRes.data?.oriol_baixes || [];
     const esFutura = !!is_futura;
     const dia = diaDeLaSetmana(data);
     const absentDocent = docents.find(d => d.nom === absent_nom);
@@ -200,7 +212,8 @@ Deno.serve(async (req) => {
             normGrup(d.grup_principal) === tutorNorm &&
             !(d.grup_principal || '').includes('SIEI') &&
             d.nom !== absent_nom &&
-            d.email
+            d.email &&
+            !esDeBaixa(d.nom, baixes)
           );
           if (tutor && !tutorsAvisats.has(tutor.nom)) {
             tutorsAvisats.add(tutor.nom);
@@ -230,7 +243,8 @@ Deno.serve(async (req) => {
             (d.coordinador_cicle || '').toLowerCase() === cicle &&
             d.nom !== cobr.nom &&
             d.nom !== absent_nom &&
-            d.email
+            d.email &&
+            !esDeBaixa(d.nom, baixes)
           );
           if (coord) {
             coordsAvisats.add(cicle);
@@ -252,7 +266,8 @@ Deno.serve(async (req) => {
         const coord = docents.find(d =>
           (d.coordinador_cicle || '').toLowerCase() === cicle &&
           d.nom !== absent_nom &&
-          d.email
+          d.email &&
+          !esDeBaixa(d.nom, baixes)
         );
         if (coord) {
           coordsAvisats.add(cicle);
