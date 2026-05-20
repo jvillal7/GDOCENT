@@ -17,23 +17,33 @@ const FRANJES_LABEL: Record<string, string> = {
   f5a: '15:00–15:30', f5b: '15:30–16:00', f5c: '16:00–16:30',
 };
 
-function buildHtml(nom: string, dates: string[], franges: string[], motiu: string, escolaNom: string): string {
+const APP_URL = 'https://app.horariapro.com';
+
+function buildHtml(nom: string, dates: string[], franges: string[], motiu: string, escolaNom: string, escolaKey: string): string {
   const dies = dates.map(d => {
     const dt = new Date(d + 'T12:00:00');
     return dt.toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   }).join(', ');
   const frangesText = franges.map(f => FRANJES_LABEL[f] || f).join(', ') || 'Totes les franges';
+  const appLink = `${APP_URL}?escola=${escolaKey}&page=javis`;
   return `
-    <div style="font-family:sans-serif;max-width:540px;margin:0 auto;padding:24px">
-      <h2 style="color:#1a1a1a">🔔 Nova absència notificada</h2>
-      <table style="width:100%;border-collapse:collapse;margin-top:16px">
-        <tr><td style="padding:8px 0;color:#555;width:120px">Docent</td><td style="padding:8px 0;font-weight:600">${nom}</td></tr>
-        <tr><td style="padding:8px 0;color:#555">Centre</td><td style="padding:8px 0">${escolaNom}</td></tr>
-        <tr><td style="padding:8px 0;color:#555">Dies</td><td style="padding:8px 0">${dies}</td></tr>
-        <tr><td style="padding:8px 0;color:#555">Franges</td><td style="padding:8px 0">${frangesText}</td></tr>
-        <tr><td style="padding:8px 0;color:#555">Motiu</td><td style="padding:8px 0">${motiu || 'No especificat'}</td></tr>
-      </table>
-      <p style="margin-top:24px;color:#888;font-size:12px">Enviat per HORARIA · horariapro.com</p>
+    <div style="font-family:sans-serif;max-width:540px;margin:0 auto;padding:24px;background:#f9f9f9;border-radius:12px">
+      <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+        <h2 style="color:#1a1a1a;margin:0 0 20px">🔔 Nova absència notificada</h2>
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="padding:8px 0;color:#555;width:120px">Docent</td><td style="padding:8px 0;font-weight:600">${nom}</td></tr>
+          <tr><td style="padding:8px 0;color:#555">Centre</td><td style="padding:8px 0">${escolaNom}</td></tr>
+          <tr><td style="padding:8px 0;color:#555">Dies</td><td style="padding:8px 0">${dies}</td></tr>
+          <tr><td style="padding:8px 0;color:#555">Franges</td><td style="padding:8px 0">${frangesText}</td></tr>
+          <tr><td style="padding:8px 0;color:#555">Motiu</td><td style="padding:8px 0">${motiu || 'No especificat'}</td></tr>
+        </table>
+        <div style="margin-top:24px;text-align:center">
+          <a href="${appLink}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:.01em">
+            Gestionar cobertura a HORARIA →
+          </a>
+        </div>
+        <p style="margin-top:20px;color:#aaa;font-size:11px;text-align:center">Enviat per HORARIA · horariapro.com</p>
+      </div>
     </div>`;
 }
 
@@ -58,6 +68,7 @@ Deno.serve(async (req) => {
     if (!emails.length) return new Response('no caps', { status: 200, headers: corsHeaders });
 
     const escolaNom = escolaRes.data?.nom || '';
+    const escolaKey = escolaNom.toLowerCase().includes('oriol') ? 'oriol' : 'rivo';
     const dates = [data].filter(Boolean);
     const franges: string[] = (() => { try { return JSON.parse(frangesRaw || '[]'); } catch { return []; } })();
 
@@ -65,7 +76,7 @@ Deno.serve(async (req) => {
       from: 'HORARIA <horaria@horariapro.com>',
       to: emails,
       subject: `🔔 Nova absència — ${docent_nom}`,
-      html: buildHtml(docent_nom, dates, franges, motiu || 'No especificat', escolaNom),
+      html: buildHtml(docent_nom, dates, franges, motiu || 'No especificat', escolaNom, escolaKey),
     });
 
     return new Response('sent', { status: 200, headers: corsHeaders });
