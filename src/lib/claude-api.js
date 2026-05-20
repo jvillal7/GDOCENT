@@ -11,7 +11,7 @@ function extractJSON(raw) {
   const clean = raw.replace(/```json\n?|```/g, '').trim();
 
   // Troba l'inici del JSON: prefereix l'objecte que comenci amb una clau coneguda
-  const jsonStart = /\{(?:\s*"(?:proposta|franja|nom|docent|titol|horari)"\s*:)/.exec(clean);
+  const jsonStart = /\{(?:\s*"(?:proposta|franja|nom|docent|titol|horari|canvis|resum)"\s*:)/.exec(clean);
   const start = jsonStart ? jsonStart.index : clean.indexOf('{');
   if (start === -1) throw new Error("No s'ha trobat JSON a la resposta IA");
 

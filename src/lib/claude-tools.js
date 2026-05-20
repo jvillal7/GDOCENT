@@ -3,49 +3,111 @@ import { callClaude } from './claude-api';
 import { REGLES_DEFAULT, estatHorari } from './claude-utils';
 
 export async function generarHorarisIntensius(docents, franjes, instruccions, normes) {
+  const DIES = ['dilluns','dimarts','dimecres','dijous','divendres'];
   const tardesIds = franjes.filter(f => f.hora === 'Tarda' && !f.lliure).map(f => f.id);
+  const matinsIds = franjes.filter(f => !f.lliure && f.hora !== 'Tarda' && f.hora !== 'Dinar').map(f => f.id);
 
-  // Resum compacte dels horaris actuals (només canvis respecte "buit")
-  const resumDocents = docents
-    .filter(d => d.horari && Object.keys(d.horari).length > 0)
-    .map(d => {
-      const dies = {};
-      Object.entries(d.horari).forEach(([dia, cells]) => {
-        const valors = {};
-        Object.entries(cells || {}).forEach(([fid, val]) => {
-          if (val && val !== '' && val !== 'Lliure') valors[fid] = val;
-        });
-        if (Object.keys(valors).length) dies[dia] = valors;
+  // PART 1 — Programàtica: buidar totes les tardes (no necessita IA)
+  const canvisMap = {};
+  for (const d of docents) {
+    if (!d.horari) continue;
+    for (const dia of DIES) {
+      for (const fid of tardesIds) {
+        const v = (d.horari[dia] || {})[fid];
+        if (v !== undefined && v !== '') {
+          if (!canvisMap[d.nom]) canvisMap[d.nom] = {};
+          if (!canvisMap[d.nom][dia]) canvisMap[d.nom][dia] = {};
+          canvisMap[d.nom][dia][fid] = '';
+        }
+      }
+    }
+  }
+
+  const toCanvis = () => Object.entries(canvisMap).map(([nom, dies]) => ({ nom, dies }));
+
+  const totalAmbHorari = docents.filter(d => d.horari).length;
+
+  // PART 2 — IA: només per als casos que necessiten redistribució intel·ligent
+  if (!instruccions?.trim()) {
+    const n = Object.keys(canvisMap).length;
+    const resum = n > 0
+      ? `S'han buidat les tardes de ${n} docents (${totalAmbHorari} docents processats).`
+      : `Les tardes ja estan buides. S'aplicarà l'horari intensiu als ${totalAmbHorari} docents.`;
+    return { canvis: toCanvis(), resum };
+  }
+
+  // Identifica casos amb contingut no trivial a la tarda (EF real, TP, suport, etc.)
+  // i les franges del matí on aquell docent té espai lliure
+  const redistLines = [];
+  for (const d of docents) {
+    if (!d.horari) continue;
+    const tardesRellevants = [];
+    const matinsBuits = {};
+
+    for (const dia of DIES) {
+      const cells = d.horari[dia] || {};
+      // Tardes no trivials (exclou: tallers, càrrec, equip directiu, SIEI interns)
+      for (const fid of tardesIds) {
+        const v = (cells[fid] || '').trim();
+        if (v && !/^(tallers|càrrec|coordinaci|equip direct|lliure)/i.test(v)) {
+          tardesRellevants.push(`${dia}/${fid}="${v}"`);
+        }
+      }
+      // Matins lliures o TP (candidats per compactar)
+      const buits = matinsIds.filter(fid => {
+        const v = (cells[fid] || '').trim();
+        return !v || /^tp$/i.test(v);
       });
-      return `${d.nom} (${d.grup_principal || d.rol}): ${JSON.stringify(dies)}`;
-    }).join('\n');
+      if (buits.length) matinsBuits[dia] = buits;
+    }
 
-  const tardesStr = tardesIds.join(', ');
-  const normesTxt = (normes || '').trim();
+    const tpTarda = (d.tp_franges || []).filter(f => tardesIds.some(t => f.endsWith(t)));
+    if (tardesRellevants.length === 0 && tpTarda.length === 0) continue;
 
-  const prompt = `Ets l'assistent d'una cap d'estudis d'escola de primària. Ha de generar l'horari de JORNADA INTENSIVA per a tot el claustre.
+    const freeNote = Object.keys(matinsBuits).length
+      ? ` | matins lliures/TP: ${Object.entries(matinsBuits).map(([dia, fs]) => `${dia}:${fs.join(',')}`).join(' ')}`
+      : ' | sense matins lliures';
+    if (tpTarda.length) redistLines.push(`${d.nom} (${d.grup_principal || d.rol}) — TP tarda a redistribuir: ${tpTarda.join(', ')}${freeNote}`);
+    if (tardesRellevants.length) redistLines.push(`${d.nom} (${d.grup_principal || d.rol}) — tarda: ${tardesRellevants.join(', ')}${freeNote}`);
+  }
 
-FRANGES DE TARDA (les que NO existeixen en jornada intensiva): ${tardesStr}
+  if (redistLines.length === 0) {
+    const n = Object.keys(canvisMap).length;
+    const resum = n > 0
+      ? `S'han buidat les tardes de ${n} docents (${totalAmbHorari} processats, sense casos de redistribució).`
+      : `Les tardes ja estan buides. S'aplicarà l'horari intensiu als ${totalAmbHorari} docents.`;
+    return { canvis: toCanvis(), resum };
+  }
 
-HORARIS ACTUALS:
-${resumDocents}
+  const prompt = `Jornada intensiva escolar. Les tardes (${tardesIds.join(',')}) ja queden buides per a tothom.
+Ara cal decidir si ALGUNES activitats es compacten al matí, seguint les instruccions de la cap d'estudis.
+
+CASOS QUE NECESSITEN VALORACIÓ (docent, contingut de tarda, matins disponibles):
+${redistLines.join('\n')}
 
 INSTRUCCIONS DE LA CAP D'ESTUDIS:
-${instruccions || 'Elimina totes les tardes. Redistribueix les activitats que calgui seguint les normes.'}
+${instruccions}
 
-NORMES DEL CENTRE:
-${normesTxt || 'Repartiment equitatiu. Prioritzar disponibles.'}
+Per a cada cas on calgui moure alguna cosa al matí: indica el docent, el dia, la franja de matí destí i el valor.
+Ignora els casos on no cal fer res (Tallers, etc. ja estan resolts).
+Retorna ÚNICAMENT els canvis ADDICIONALS al matí en JSON, sense cap text fora del JSON:
+{"canvis":[{"nom":"Nom","dies":{"dilluns":{"f3a":"valor mogut"}}}],"resum":"frase breu dels canvis de compactació"}`;
 
-TASCA: Genera els canvis necessaris a cada horari per a la jornada intensiva.
-- Les franges de tarda (${tardesStr}) han de quedar buides ("") per a tots els docents.
-- Si una activitat de tarda cal redistribuir-la al matí, indica on va.
-- Retorna ÚNICAMENT els docents amb canvis (no els que no canvien res).
-- Per a cada docent, retorna ÚNICAMENT les cel·les que canvien de valor.
-
-JSON (estrictament):
-{"canvis":[{"nom":"Nom del docent","dies":{"dilluns":{"f5a":"","f5b":"","f5c":""}}}],"resum":"Descripció breu dels canvis"}`;
-
-  return callClaude([{ role: 'user', content: prompt }], 4000);
+  try {
+    const aiResult = await callClaude([{ role: 'user', content: prompt }], 2000);
+    for (const c of (aiResult.canvis || [])) {
+      if (!canvisMap[c.nom]) canvisMap[c.nom] = {};
+      for (const [dia, cells] of Object.entries(c.dies || {})) {
+        if (!canvisMap[c.nom][dia]) canvisMap[c.nom][dia] = {};
+        Object.assign(canvisMap[c.nom][dia], cells);
+      }
+    }
+    return { canvis: toCanvis(), resum: aiResult.resum || 'Tardes buidades i compactació aplicada.' };
+  } catch {
+    // Si la IA falla, retorna igualment els canvis programàtics
+    const n = Object.keys(canvisMap).length;
+    return { canvis: toCanvis(), resum: `S'han buidat les tardes de ${n} docents. (Compactació no aplicada per error de IA.)` };
+  }
 }
 
 export async function proposarCoberturaCella(grup, hora, fid, temps, docents, normes) {

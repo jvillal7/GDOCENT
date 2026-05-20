@@ -812,25 +812,26 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   }
 
   async function confirmarIGuardar() {
-    if (!previewCanvis?.canvis?.length) return;
     setSaving(true);
     try {
       const canvisPerNom = {};
-      previewCanvis.canvis.forEach(c => { canvisPerNom[c.nom] = c.dies; });
+      (previewCanvis?.canvis || []).forEach(c => { canvisPerNom[c.nom] = c.dies; });
 
-      await Promise.all(docents.map(d => {
+      // Save horari_intensiu for ALL docents with a horari, applying canvis where present
+      const docentAmbHorari = docents.filter(d => d.horari);
+      await Promise.all(docentAmbHorari.map(d => {
+        const base = JSON.parse(JSON.stringify(d.horari));
         const canvisDocent = canvisPerNom[d.nom];
-        if (!canvisDocent) return Promise.resolve();
-        // Partint de l'horari normal, aplica els canvis
-        const base = JSON.parse(JSON.stringify(d.horari || {}));
-        Object.entries(canvisDocent).forEach(([dia, cells]) => {
-          if (!base[dia]) base[dia] = {};
-          Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
-        });
+        if (canvisDocent) {
+          Object.entries(canvisDocent).forEach(([dia, cells]) => {
+            if (!base[dia]) base[dia] = {};
+            Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
+          });
+        }
         return api.saveHorariIntensiu(d.id, base);
       }));
 
-      showToast(`✓ Horaris intensius guardats (${previewCanvis.canvis.length} docents modificats)`);
+      showToast(`✓ Horaris intensius guardats (${docentAmbHorari.length} docents)`);
       setPreviewCanvis(null);
       onHorarisSaved();
     } catch (e) { showToast('Error guardant: ' + e.message); }
@@ -926,7 +927,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
                 onClick={confirmarIGuardar}
                 disabled={saving}
               >
-                {saving ? 'Guardant...' : `💾 Confirmar i guardar (${previewCanvis.canvis?.length || 0} docents)`}
+                {saving ? 'Guardant...' : `💾 Confirmar i guardar (${docents.filter(d => d.horari).length} docents)`}
               </button>
             </div>
           </div>
@@ -937,7 +938,9 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
               </div>
             )}
             {(!previewCanvis.canvis || previewCanvis.canvis.length === 0) ? (
-              <div style={{ fontSize: 13, color: 'var(--ink-3)', padding: '8px 0' }}>Cap canvi detectat per la IA.</div>
+              <div style={{ fontSize: 13, color: 'var(--green)', padding: '8px 0' }}>
+                ✓ Les tardes ja estan buides a tots els horaris. Es guardarà una còpia idèntica com a horari intensiu per a tots els docents.
+              </div>
             ) : previewCanvis.canvis.map((c, i) => (
               <div key={i} style={{ marginBottom: 8, padding: '8px 12px', background: 'var(--bg-2)', borderRadius: 6 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>{c.nom}</div>

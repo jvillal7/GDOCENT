@@ -320,7 +320,7 @@ export default function AvisosPage() {
       notifyCobertura({
         escola_id: escola.id,
         absent_nom: cmAbsent,
-        cobridors: [{ nom: cmCobrint, franges_ids: frangesArr, grup: cmGrup }],
+        cobridors: [{ nom: cmCobrint, email: cobrintDocent?.email || null, franges_ids: frangesArr, grup: cmGrup }],
         data: cmData,
         is_futura: esFutura,
       });
@@ -617,6 +617,7 @@ export default function AvisosPage() {
         absent_notes: avis.notes,
         cobridors: proposta.map(p => ({
           nom: p.docent,
+          email: docents.find(d => d.nom === p.docent)?.email || null,
           franges_ids: p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean),
           grup: grupDestí,
         })),
@@ -674,6 +675,7 @@ export default function AvisosPage() {
         absent_notes: iaTarget.notes,
         cobridors: proposta.map(p => ({
           nom: p.docent,
+          email: docents.find(d => d.nom === p.docent)?.email || null,
           franges_ids: p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean),
           grup: grupDestí,
         })),
@@ -707,7 +709,7 @@ export default function AvisosPage() {
         escola_id: escola.id,
         absent_nom: avis?.docent_nom || '',
         absent_notes: avis?.notes,
-        cobridors: Object.entries(perDocent).map(([nom, { frangesIds, grup }]) => ({ nom, franges_ids: frangesIds, grup })),
+        cobridors: Object.entries(perDocent).map(([nom, { frangesIds, grup }]) => ({ nom, email: docents.find(d => d.nom === nom)?.email || null, franges_ids: frangesIds, grup })),
         data: avui,
         is_futura: false,
       });
