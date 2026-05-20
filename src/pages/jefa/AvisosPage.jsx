@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL, MOTIUS_ABSENCIA } from '../../lib/constants';
+import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL, MOTIUS_ABSENCIA, SUPA_URL, SUPA_KEY } from '../../lib/constants';
 import { proposarCobertura, analitzarInfoExtra, construirContextXat } from '../../lib/claude';
-import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
 import { parseFranges, escHtml, frangesHorari, normGrup } from '../../lib/utils';
 
 async function notifyCobertura({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }) {
   if (!escola_id || !cobridors?.length) return;
   try {
-    await fetch(`${SUPA_URL}/functions/v1/coverage-notifier`, {
+    const res = await fetch(`${SUPA_URL}/functions/v1/coverage-notifier`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -17,6 +16,10 @@ async function notifyCobertura({ escola_id, absent_nom, absent_notes, cobridors,
       },
       body: JSON.stringify({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }),
     });
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.status);
+      console.error('[notifyCobertura] Error del servidor:', err);
+    }
   } catch (e) {
     console.error('[notifyCobertura]', e?.message || e);
   }

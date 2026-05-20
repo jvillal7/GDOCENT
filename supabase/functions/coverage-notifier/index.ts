@@ -171,14 +171,14 @@ Deno.serve(async (req) => {
     const baixes: any[] = escolaRes.data?.oriol_baixes || [];
     const esFutura = !!is_futura;
     const dia = diaDeLaSetmana(data);
-    const absentDocent = docents.find(d => d.nom === absent_nom);
+    const absentDocent = docents.find(d => normNom(d.nom) === normNom(absent_nom));
 
     const tutorsAvisats = new Set<string>();
     const coordsAvisats = new Set<string>();
     const sends: Promise<any>[] = [];
 
     for (const cobr of cobridors) {
-      const cobrintDocent = docents.find(d => d.nom === cobr.nom);
+      const cobrintDocent = docents.find(d => normNom(d.nom) === normNom(cobr.nom));
 
       // Email al docent cobrint
       if (cobrintDocent?.email) {
@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
             d.grup_principal &&
             normGrup(d.grup_principal) === tutorNorm &&
             !(d.grup_principal || '').includes('SIEI') &&
-            d.nom !== absent_nom &&
+            normNom(d.nom) !== normNom(absent_nom) &&
             d.email &&
             !esDeBaixa(d.nom, baixes)
           );
@@ -241,8 +241,8 @@ Deno.serve(async (req) => {
         if (cicle && !coordsAvisats.has(cicle)) {
           const coord = docents.find(d =>
             (d.coordinador_cicle || '').toLowerCase() === cicle &&
-            d.nom !== cobr.nom &&
-            d.nom !== absent_nom &&
+            normNom(d.nom) !== normNom(cobr.nom) &&
+            normNom(d.nom) !== normNom(absent_nom) &&
             d.email &&
             !esDeBaixa(d.nom, baixes)
           );
@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
       if (cicle && !coordsAvisats.has(cicle)) {
         const coord = docents.find(d =>
           (d.coordinador_cicle || '').toLowerCase() === cicle &&
-          d.nom !== absent_nom &&
+          normNom(d.nom) !== normNom(absent_nom) &&
           d.email &&
           !esDeBaixa(d.nom, baixes)
         );
