@@ -3,7 +3,7 @@ import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, FRANJES_ORIOL, DIES, GRUPS_ORIOL, COORDINADORS_CICLE } from '../../lib/constants';
 import { initials, oriolInitials, avatarColor, rolLabel } from '../../lib/utils';
-import { extractHorariFromPDF } from '../../lib/claude';
+import { extractHorariFromPDF, generarHorarisIntensius } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
 
 const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
@@ -73,7 +73,7 @@ function cellColor(val) {
 }
 
 export default function HorarisPage() {
-  const { api, escola, setEscola, docents, setDocents, showToast } = useApp();
+  const { api, escola, setEscola, docents, setDocents, showToast, normes } = useApp();
   const isOriol  = escola?.nom?.toLowerCase().includes('oriol');
   const franjes   = isOriol ? FRANJES_ORIOL : FRANJES;
   const [confirmData, setConfirm]   = useState(null);
@@ -83,6 +83,10 @@ export default function HorarisPage() {
   const confirmResolveRef = useRef(null);
   const [viewMode, setViewMode] = useState('personal');
   const [selectedGrup, setSelectedGrup] = useState('G1');
+  const [selectedRivoGrup, setSelectedRivoGrup] = useState('');
+  const [configIntensiva, setConfigIntensiva] = useState(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [intensiuMode, setIntensiuMode] = useState(new Set());
   const [showBaixes,  setShowBaixes]  = useState(false);
   const [baixes,      setBaixes]      = useState([]);
   const [baixesLoaded, setBaixesLoaded] = useState(false);
@@ -96,6 +100,10 @@ export default function HorarisPage() {
   useEffect(() => {
     if (!api) return;
     reload();
+    api.getConfigIntensiva().then(res => {
+      setConfigIntensiva(res?.[0]?.config_intensiva || null);
+      setConfigLoaded(true);
+    }).catch(() => setConfigLoaded(true));
     api.getBaixes().then(res => {
       const list = res?.[0]?.oriol_baixes || [];
       setBaixes(list);
@@ -428,18 +436,23 @@ export default function HorarisPage() {
           <p>Gestiona el personal: horaris, correus i accés</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {isOriol && (
-            <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 4 }}>
-              <button
-                style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'personal' ? 'var(--surface)' : 'transparent', color: viewMode === 'personal' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'personal' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
-                onClick={() => setViewMode('personal')}
-              >👥 Personal</button>
-              <button
-                style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'grups' ? 'var(--surface)' : 'transparent', color: viewMode === 'grups' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'grups' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
-                onClick={() => setViewMode('grups')}
-              >📚 Grups</button>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 4 }}>
+            <button
+              style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'personal' ? 'var(--surface)' : 'transparent', color: viewMode === 'personal' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'personal' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
+              onClick={() => setViewMode('personal')}
+            >👥 Personal</button>
+            <button
+              style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'grups' ? 'var(--surface)' : 'transparent', color: viewMode === 'grups' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'grups' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
+              onClick={() => setViewMode('grups')}
+            >📚 Grups</button>
+            <button
+              style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'intensiva' ? 'var(--surface)' : 'transparent', color: viewMode === 'intensiva' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'intensiva' ? '0 1px 4px rgba(0,0,0,.12)' : 'none', position: 'relative' }}
+              onClick={() => setViewMode('intensiva')}
+            >
+              🌅 Intensiva
+              {configIntensiva?.actiu && <span style={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', background: 'var(--green)', display: 'block' }} />}
+            </button>
+          </div>
           <button
             className="btn btn-sm"
             style={{ background: showBaixes ? 'var(--amber)' : 'var(--amber-bg)', color: showBaixes ? '#fff' : 'var(--amber)', borderColor: 'var(--amber)', fontSize: 13, fontWeight: 600, padding: '7px 14px', flexShrink: 0 }}
@@ -453,7 +466,22 @@ export default function HorarisPage() {
       {viewMode === 'grups' && isOriol && (
         <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} onCellSave={handleCellSave} />
       )}
-      {(viewMode !== 'grups' || !isOriol) && (<>
+      {viewMode === 'grups' && !isOriol && (
+        <RivoGrupsView docents={docents} franjes={franjes} selectedGrup={selectedRivoGrup} onSelectGrup={setSelectedRivoGrup} onCellSave={handleCellSave} />
+      )}
+      {viewMode === 'intensiva' && (
+        <IntensivaView
+          docents={docents}
+          franjes={franjes}
+          normes={normes}
+          api={api}
+          configIntensiva={configIntensiva}
+          onConfigChange={cfg => setConfigIntensiva(cfg)}
+          onHorarisSaved={reload}
+          showToast={showToast}
+        />
+      )}
+      {viewMode !== 'grups' && viewMode !== 'intensiva' && (<>
 
       {showBaixes && (
         <div className="card" style={{ marginBottom: 14 }}>
@@ -668,17 +696,33 @@ export default function HorarisPage() {
                           </div>
                           {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {teHorari && (
                             <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setExpanded(isOpen ? null : (d.id || d.nom))}>
                               {isOpen ? '▴ Tancar' : '▾ Horari'}
                             </button>
                           )}
+                          {teHorari && d.horari_intensiu && (
+                            <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+                              <button
+                                style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: !intensiuMode.has(d.id || d.nom) ? 'var(--ink)' : 'transparent', color: !intensiuMode.has(d.id || d.nom) ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+                                onClick={() => setIntensiuMode(s => { const n = new Set(s); n.delete(d.id || d.nom); return n; })}
+                              >Normal</button>
+                              <button
+                                style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: intensiuMode.has(d.id || d.nom) ? 'var(--amber)' : 'transparent', color: intensiuMode.has(d.id || d.nom) ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+                                onClick={() => { setIntensiuMode(s => { const n = new Set(s); n.add(d.id || d.nom); return n; }); setExpanded(d.id || d.nom); }}
+                              >🌅 Intensiu</button>
+                            </div>
+                          )}
                           <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12 }} onClick={() => setConfirm(d)}>✏️ Editar</button>
                           <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => confirmarEliminar(d.id, d.nom)}>✕</button>
                         </div>
                       </div>
-                      {isOpen && teHorari && <HorariInline horari={d.horari} tpFranges={d.tp_franges} franjes={franjes} onCellSave={(dia, fid, val) => handleCellSave(d, dia, fid, val)} />}
+                      {isOpen && teHorari && (() => {
+                        const mostrarIntensiu = intensiuMode.has(d.id || d.nom) && d.horari_intensiu;
+                        const horariShow = mostrarIntensiu ? d.horari_intensiu : d.horari;
+                        return <HorariInline horari={horariShow} tpFranges={d.tp_franges} franjes={franjes} onCellSave={mostrarIntensiu ? null : (dia, fid, val) => handleCellSave(d, dia, fid, val)} />;
+                      })()}
                     </div>
                   );
                 })}
@@ -721,6 +765,222 @@ export default function HorarisPage() {
         </div>
       )}
     </>)}
+    </>
+  );
+}
+
+function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfigChange, onHorarisSaved, showToast }) {
+  const cfg = configIntensiva || {};
+  const [dataInici, setDataInici]   = useState(cfg.data_inici || '');
+  const [dataFi, setDataFi]         = useState(cfg.data_fi || '');
+  const [actiu, setActiu]           = useState(cfg.actiu || false);
+  const [instruccions, setInstruccions] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [previewCanvis, setPreviewCanvis] = useState(null); // { canvis: [...], resum: '' }
+  const [saving, setSaving]         = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+
+  // Sync local state quan canvia la config externa
+  useEffect(() => {
+    if (configIntensiva) {
+      setDataInici(configIntensiva.data_inici || '');
+      setDataFi(configIntensiva.data_fi || '');
+      setActiu(configIntensiva.actiu || false);
+    }
+  }, [configIntensiva]);
+
+  async function saveConfig(patch) {
+    setConfigSaving(true);
+    try {
+      const nova = { ...cfg, ...patch };
+      await api.saveConfigIntensiva(nova);
+      onConfigChange(nova);
+      showToast('✓ Configuració guardada');
+    } catch (e) { showToast('Error: ' + e.message); }
+    finally { setConfigSaving(false); }
+  }
+
+  async function generar() {
+    if (!instruccions.trim() && !confirm('No has escrit cap instrucció. Es generarà buidant les tardes. Continuar?')) return;
+    setGenerating(true);
+    setPreviewCanvis(null);
+    try {
+      const result = await generarHorarisIntensius(docents, franjes, instruccions, normes);
+      setPreviewCanvis(result);
+    } catch (e) { showToast('Error IA: ' + e.message); }
+    finally { setGenerating(false); }
+  }
+
+  async function confirmarIGuardar() {
+    if (!previewCanvis?.canvis?.length) return;
+    setSaving(true);
+    try {
+      const canvisPerNom = {};
+      previewCanvis.canvis.forEach(c => { canvisPerNom[c.nom] = c.dies; });
+
+      await Promise.all(docents.map(d => {
+        const canvisDocent = canvisPerNom[d.nom];
+        if (!canvisDocent) return Promise.resolve();
+        // Partint de l'horari normal, aplica els canvis
+        const base = JSON.parse(JSON.stringify(d.horari || {}));
+        Object.entries(canvisDocent).forEach(([dia, cells]) => {
+          if (!base[dia]) base[dia] = {};
+          Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
+        });
+        return api.saveHorariIntensiu(d.id, base);
+      }));
+
+      showToast(`✓ Horaris intensius guardats (${previewCanvis.canvis.length} docents modificats)`);
+      setPreviewCanvis(null);
+      onHorarisSaved();
+    } catch (e) { showToast('Error guardant: ' + e.message); }
+    finally { setSaving(false); }
+  }
+
+  const docentAmbIntensiu = docents.filter(d => d.horari_intensiu).length;
+
+  return (
+    <>
+      {/* Config dates */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head">
+          <h3>🌅 Configuració jornada intensiva</h3>
+          {docentAmbIntensiu > 0 && (
+            <span className="sp sp-green">{docentAmbIntensiu} docents amb horari intensiu</span>
+          )}
+        </div>
+        <div style={{ padding: '14px 16px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', display: 'block', marginBottom: 4 }}>Del</label>
+            <input type="date" className="f-ctrl" value={dataInici} onChange={e => setDataInici(e.target.value)} style={{ width: 148 }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', display: 'block', marginBottom: 4 }}>Al</label>
+            <input type="date" className="f-ctrl" value={dataFi} onChange={e => setDataFi(e.target.value)} style={{ width: 148 }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="btn btn-sm"
+              style={{ background: actiu ? 'var(--green)' : 'var(--bg-3)', color: actiu ? '#fff' : 'var(--ink-3)', borderColor: actiu ? 'var(--green)' : 'var(--border)', fontWeight: 600 }}
+              onClick={() => { const nou = !actiu; setActiu(nou); saveConfig({ actiu: nou, data_inici: dataInici, data_fi: dataFi }); }}
+            >
+              {actiu ? '● Activa' : '○ Inactiva'}
+            </button>
+            <button
+              className="btn btn-sm"
+              style={{ fontSize: 12 }}
+              disabled={configSaving}
+              onClick={() => saveConfig({ actiu, data_inici: dataInici, data_fi: dataFi })}
+            >
+              {configSaving ? 'Guardant...' : '💾 Guardar dates'}
+            </button>
+          </div>
+        </div>
+        {actiu && dataInici && dataFi && (
+          <div style={{ padding: '0 16px 12px', fontSize: 12.5, color: 'var(--green)' }}>
+            ✓ Jornada intensiva activa del {new Date(dataInici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })} al {new Date(dataFi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })}
+          </div>
+        )}
+      </div>
+
+      {/* Generació amb IA */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head">
+          <h3>🤖 Generar horaris intensius amb IA</h3>
+        </div>
+        <div style={{ padding: '14px 16px' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 10 }}>
+            Explica a la IA com vols adaptar els horaris per a la jornada intensiva. La IA llegirà tots els horaris actuals i aplicarà els teus canvis. Les tardes quedaran buides per defecte.
+          </div>
+          <textarea
+            className="f-ctrl"
+            rows={4}
+            placeholder={'Exemple: "Els docents que tenien TP a la tarda, que passi al pati del dijous. L\'EF de divendres tarda la suprimim. Les tutories de tarda es fan el dimecres a la 3a hora."'}
+            value={instruccions}
+            onChange={e => setInstruccions(e.target.value)}
+            style={{ width: '100%', resize: 'vertical', marginBottom: 10 }}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={generar}
+            disabled={generating || docents.filter(d => d.horari).length === 0}
+          >
+            {generating ? '⏳ Generant...' : '✨ Generar horaris intensius'}
+          </button>
+          {docents.filter(d => d.horari).length === 0 && (
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 6 }}>Primer puja els horaris normals des de la vista Personal.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Preview canvis */}
+      {previewCanvis && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head">
+            <h3>👁 Previsualització dels canvis</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-sm btn-ghost" onClick={() => setPreviewCanvis(null)}>✕ Descartar</button>
+              <button
+                className="btn btn-sm"
+                style={{ background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600 }}
+                onClick={confirmarIGuardar}
+                disabled={saving}
+              >
+                {saving ? 'Guardant...' : `💾 Confirmar i guardar (${previewCanvis.canvis?.length || 0} docents)`}
+              </button>
+            </div>
+          </div>
+          <div style={{ padding: '10px 16px' }}>
+            {previewCanvis.resum && (
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 12, padding: '8px 12px', background: 'var(--blue-bg)', borderRadius: 6 }}>
+                💬 {previewCanvis.resum}
+              </div>
+            )}
+            {(!previewCanvis.canvis || previewCanvis.canvis.length === 0) ? (
+              <div style={{ fontSize: 13, color: 'var(--ink-3)', padding: '8px 0' }}>Cap canvi detectat per la IA.</div>
+            ) : previewCanvis.canvis.map((c, i) => (
+              <div key={i} style={{ marginBottom: 8, padding: '8px 12px', background: 'var(--bg-2)', borderRadius: 6 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>{c.nom}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+                  {Object.entries(c.dies || {}).map(([dia, cells]) =>
+                    Object.entries(cells || {}).map(([fid, val]) => (
+                      <span key={`${dia}-${fid}`} style={{ display: 'inline-block', marginRight: 8, marginBottom: 2, background: val ? 'var(--blue-bg)' : 'var(--bg-3)', color: val ? 'var(--blue)' : 'var(--ink-3)', borderRadius: 4, padding: '1px 6px' }}>
+                        {DIE_ABBR[dia]} {fid}: {val || '(buit)'}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Llista docents amb/sense intensiu */}
+      {docentAmbIntensiu > 0 && (
+        <div className="card">
+          <div className="card-head"><h3>📋 Docents amb horari intensiu</h3></div>
+          <div style={{ padding: '8px 16px' }}>
+            {docents.filter(d => d.horari_intensiu).map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                  {initials(d.nom)}
+                </div>
+                <span style={{ flex: 1, fontSize: 13 }}>{d.nom}</span>
+                <span className="sp sp-green" style={{ fontSize: 10 }}>✓ Intensiu</span>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ fontSize: 11, color: 'var(--red)' }}
+                  onClick={async () => {
+                    try { await api.saveHorariIntensiu(d.id, null); onHorarisSaved(); showToast(`✓ Horari intensiu eliminat per ${d.nom}`); }
+                    catch (e) { showToast('Error: ' + e.message); }
+                  }}
+                >✕ Eliminar intensiu</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1151,10 +1411,46 @@ function badgeStyle(badge) {
   if (b === 'PAE')  return { bg: 'var(--purple-bg)', color: 'var(--purple)' };
   if (b === 'MALL') return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
   if (b === 'MUS')   return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
+  if (b === 'MÚS')   return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
   if (b === 'ESTIM') return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
   if (b === 'EVIP')  return { bg: 'var(--red-bg)',    color: 'var(--red)'    };
   if (b === 'SUP')   return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  if (b === 'EF')    return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
+  if (b === 'ANG')   return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
+  if (b === 'EIS')   return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  if (b === 'SIEI')  return { bg: 'var(--red-bg)',    color: 'var(--red)'    };
+  if (b === 'TUT')   return { bg: 'var(--bg-3)',      color: 'var(--ink-3)'  };
   return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
+}
+
+function sortRivoGrupKey(g) {
+  const v = (g || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/^i3/.test(v)) return '01' + v;
+  if (/^i4/.test(v)) return '02' + v;
+  if (/^i5/.test(v)) return '03' + v;
+  if (/^1/.test(v))  return '04' + v;
+  if (/^2/.test(v))  return '05' + v;
+  if (/^3/.test(v))  return '06' + v;
+  if (/^4/.test(v))  return '07' + v;
+  if (/^5/.test(v))  return '08' + v;
+  if (/^6/.test(v))  return '09' + v;
+  return '99' + v;
+}
+
+function rolBadgeRivo(e, activeGrup) {
+  if (e.rol === 'tutor' && e.grup_principal?.trim() === activeGrup) return null;
+  const extracted = extractBadge(e.nom);
+  if (extracted) return extracted;
+  if (e.rol === 'ee') return 'SIEI';
+  if (e.rol === 'msuport') return 'SUP';
+  if (['educador', 'vetllador', 'tei', 'suport'].includes(e.rol)) return 'PAE';
+  const gp = (e.grup_principal || '').trim();
+  if (gp === 'EF') return 'EF';
+  if (gp === 'Anglès') return 'ANG';
+  if (/^música$/i.test(gp)) return 'MÚS';
+  if (gp === 'EI suport') return 'EIS';
+  if (e.rol === 'tutor') return 'TUT';
+  return null;
 }
 
 function matchesGrup(val, grup) {
@@ -1165,6 +1461,261 @@ function matchesGrup(val, grup) {
   // Detecta també "Suport. G9", "G9. Suport", etc.
   const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('\\b' + escaped + '\\b').test(v);
+}
+
+function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave }) {
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editing, setEditing] = useState(null); // { nom, dia, fid, currentVal }
+  const [editVal, setEditVal] = useState('');
+  const [addingEntry, setAddingEntry] = useState(null); // { dia, fid }
+  const [addVal, setAddVal] = useState('');
+
+  const grups = useMemo(() => {
+    const tutorGroups = docents
+      .filter(d => d.rol === 'tutor' && d.grup_principal?.trim())
+      .map(d => d.grup_principal.trim());
+    return [...new Set(tutorGroups)].sort((a, b) =>
+      sortRivoGrupKey(a).localeCompare(sortRivoGrupKey(b))
+    );
+  }, [docents]);
+
+  const activeGrup = grups.includes(selectedGrup) ? selectedGrup : (grups[0] || '');
+
+  useEffect(() => {
+    if (grups.length && !grups.includes(selectedGrup)) onSelectGrup(grups[0]);
+  }, [grups]);
+
+  function startGroupEdit(nom, dia, fid, currentVal) {
+    setAddingEntry(null);
+    setEditing({ nom, dia, fid, currentVal });
+    setEditVal(currentVal);
+  }
+  function commitGroupEdit() {
+    if (!editing || !onCellSave) { setEditing(null); return; }
+    const docent = docents.find(d => d.nom === editing.nom);
+    if (docent && editVal !== editing.currentVal) onCellSave(docent, editing.dia, editing.fid, editVal);
+    setEditing(null);
+  }
+  function startAddEntry(dia, fid) {
+    setEditing(null);
+    setAddingEntry({ dia, fid });
+    setAddVal('');
+  }
+  function commitAddEntry() {
+    if (!addingEntry || !onCellSave || !addVal.trim()) { setAddingEntry(null); setAddVal(''); return; }
+    const v = addVal.trim().toLowerCase();
+    const target = docents.find(d =>
+      d.nom.toLowerCase() === v ||
+      initials(d.nom).toLowerCase() === v ||
+      d.nom.toLowerCase().split(' ')[0] === v
+    );
+    if (target) onCellSave(target, addingEntry.dia, addingEntry.fid, activeGrup);
+    setAddingEntry(null);
+    setAddVal('');
+  }
+
+  const grupHorari = useMemo(() => {
+    if (!activeGrup) return {};
+    const result = {};
+    DIES.forEach(dia => {
+      result[dia] = {};
+      franjes.forEach(f => {
+        result[dia][f.id] = [];
+        docents.forEach(d => {
+          const val = d.horari?.[dia]?.[f.id] || '';
+          if (matchesGrup(val, activeGrup)) {
+            result[dia][f.id].push({ nom: d.nom, val, rol: d.rol, grup_principal: d.grup_principal });
+          }
+        });
+      });
+    });
+    return result;
+  }, [docents, franjes, activeGrup]);
+
+  const tutor = useMemo(() =>
+    docents.find(d => d.rol === 'tutor' && d.grup_principal?.trim() === activeGrup),
+    [docents, activeGrup]
+  );
+
+  const visibleFranjes = franjes.filter(f => !f.lliure);
+  const horaGroups = {};
+  visibleFranjes.forEach(f => {
+    if (!horaGroups[f.hora]) horaGroups[f.hora] = [];
+    horaGroups[f.hora].push(f);
+  });
+
+  const thS = { padding: '6px 8px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 600, color: 'var(--ink-3)', textAlign: 'center', whiteSpace: 'nowrap' };
+  const tdS = { padding: '4px 6px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, color: 'var(--ink-3)', whiteSpace: 'nowrap' };
+
+  const renderEntry = (e, dia, fid) => {
+    const badge = rolBadgeRivo(e, activeGrup);
+    const isEditing = isEditMode && editing?.nom === e.nom && editing?.dia === dia && editing?.fid === fid;
+    if (isEditing) {
+      return (
+        <input
+          key={e.nom}
+          autoFocus
+          value={editVal}
+          onChange={ev => setEditVal(ev.target.value)}
+          onBlur={commitGroupEdit}
+          onKeyDown={ev => { if (ev.key === 'Enter') commitGroupEdit(); if (ev.key === 'Escape') setEditing(null); }}
+          style={{ width: 72, border: 'none', outline: '2px solid var(--blue)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
+        />
+      );
+    }
+    if (badge) {
+      const { bg, color } = badgeStyle(badge);
+      return (
+        <div key={e.nom} title={e.nom}
+          onClick={() => isEditMode && startGroupEdit(e.nom, dia, fid, e.val)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, lineHeight: 1.3, whiteSpace: 'nowrap', cursor: isEditMode ? 'text' : 'default' }}>
+          <span style={{ fontSize: 9, color: 'var(--ink-2)', fontWeight: 600 }}>{initials(e.nom)}</span>
+          <span style={{ fontSize: 7.5, background: bg, color, borderRadius: 3, padding: '0 2px', fontWeight: 700, flexShrink: 0 }}>{badge}</span>
+        </div>
+      );
+    }
+    return (
+      <div key={e.nom} title={e.nom}
+        onClick={() => isEditMode && startGroupEdit(e.nom, dia, fid, e.val)}
+        style={{ fontSize: 9.5, color: 'var(--ink-2)', fontWeight: 700, lineHeight: 1.3, whiteSpace: 'nowrap', cursor: isEditMode ? 'text' : 'default' }}>
+        {e.nom.split(' ')[0]}
+      </div>
+    );
+  };
+
+  if (!activeGrup && docents.length === 0) {
+    return (
+      <div className="card" style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+        No hi ha docents carregats. Primer puja els horaris des de la vista Personal.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head"><h3>Selecciona el grup</h3></div>
+        <div style={{ padding: '12px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {grups.length === 0 ? (
+            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>Sense grups. Comprova que els tutors tenen un grup assignat a la vista Personal.</span>
+          ) : grups.map(g => (
+            <button
+              key={g}
+              className="btn btn-sm"
+              style={activeGrup === g
+                ? { background: 'var(--ink)', color: '#fff', border: 'none', fontWeight: 700, minWidth: 44 }
+                : { background: 'var(--bg-2)', borderColor: 'var(--border)', minWidth: 44 }
+              }
+              onClick={() => onSelectGrup(g)}
+            >{g}</button>
+          ))}
+        </div>
+      </div>
+
+      {activeGrup && (
+        <div className="card">
+          <div className="card-head">
+            <h3>Horari del {activeGrup}</h3>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {tutor && <span className="sp sp-green">Tutor/a: {tutor.nom.split(' ')[0]}</span>}
+              {onCellSave && (
+                <button
+                  className="btn btn-sm"
+                  style={isEditMode
+                    ? { background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 12, fontWeight: 600 }
+                    : { background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12, fontWeight: 600 }
+                  }
+                  onClick={() => { setIsEditMode(o => !o); setEditing(null); setAddingEntry(null); }}
+                >{isEditMode ? '✓ Fet' : '✏️ Editar'}</button>
+              )}
+              <span className="sp sp-blue">Professionals al grup per franja</span>
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: 10 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 440 }}>
+              <thead>
+                <tr>
+                  <th colSpan={2} style={{ ...thS, textAlign: 'left' }}>Franja</th>
+                  {DIES.map(d => <th key={d} style={thS}>{DIE_ABBR[d]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleFranjes.map(f => {
+                  const grp = horaGroups[f.hora] || [];
+                  const isFirst = grp[0]?.id === f.id;
+                  return (
+                    <tr key={f.id}>
+                      {isFirst && (
+                        <td rowSpan={grp.length} style={{ ...tdS, fontWeight: 700, verticalAlign: 'middle', color: 'var(--ink-2)', width: 56 }}>{f.label}</td>
+                      )}
+                      <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
+                      {DIES.map(dia => {
+                        const entries = grupHorari[dia]?.[f.id] || [];
+                        const tutorRawVal = tutor?.horari?.[dia]?.[f.id] || '';
+                        const tutorValL = tutorRawVal.toLowerCase();
+                        const isTutorTP = /^tp\b/i.test(tutorValL);
+                        const isTutorCoord = isCoord(tutorValL);
+                        const primaris = entries.filter(e => !rolBadgeRivo(e, activeGrup));
+                        const suports  = entries.filter(e =>  rolBadgeRivo(e, activeGrup));
+                        const hasCoverage = entries.length > 0;
+                        return (
+                          <td key={dia} style={{
+                            padding: '3px 4px', border: '1px solid var(--border)',
+                            background: hasCoverage ? 'var(--blue-bg)' : isTutorTP ? 'var(--amber-bg)' : isTutorCoord ? 'var(--purple-bg)' : isEditMode ? 'var(--bg-2)' : 'var(--bg)',
+                            textAlign: 'center', minWidth: 80, overflow: 'visible',
+                          }}>
+                            {hasCoverage && (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                {primaris.map(e => renderEntry(e, dia, f.id))}
+                                {suports.map(e => renderEntry(e, dia, f.id))}
+                              </div>
+                            )}
+                            {!hasCoverage && !isEditMode && (
+                              isTutorTP ? (
+                                <span style={{ fontSize: 8.5, color: 'var(--amber)', fontWeight: 700 }}>TP</span>
+                              ) : isTutorCoord ? (
+                                <span style={{ fontSize: 8.5, color: 'var(--purple)', fontWeight: 700 }}>Coord.</span>
+                              ) : (
+                                <span style={{ fontSize: 9, color: 'var(--ink-4)' }}>—</span>
+                              )
+                            )}
+                            {isEditMode && (
+                              addingEntry?.dia === dia && addingEntry?.fid === f.id ? (
+                                <>
+                                  <input
+                                    autoFocus
+                                    list="rivo-grups-docents-list"
+                                    value={addVal}
+                                    onChange={ev => setAddVal(ev.target.value)}
+                                    onBlur={commitAddEntry}
+                                    onKeyDown={ev => { if (ev.key === 'Enter') commitAddEntry(); if (ev.key === 'Escape') { setAddingEntry(null); setAddVal(''); } }}
+                                    placeholder="Nom..."
+                                    style={{ width: 72, border: 'none', outline: '2px solid var(--green)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
+                                  />
+                                  <datalist id="rivo-grups-docents-list">
+                                    {docents.map(d => <option key={d.id} value={d.nom} />)}
+                                  </datalist>
+                                </>
+                              ) : (
+                                <span
+                                  onClick={() => startAddEntry(dia, f.id)}
+                                  style={{ fontSize: 11, color: 'var(--green)', cursor: 'pointer', display: 'block', padding: '1px 0', lineHeight: 1 }}
+                                >+</span>
+                              )
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave }) {

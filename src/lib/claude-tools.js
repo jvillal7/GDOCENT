@@ -2,6 +2,52 @@ import { FRANJES } from './constants';
 import { callClaude } from './claude-api';
 import { REGLES_DEFAULT, estatHorari } from './claude-utils';
 
+export async function generarHorarisIntensius(docents, franjes, instruccions, normes) {
+  const tardesIds = franjes.filter(f => f.hora === 'Tarda' && !f.lliure).map(f => f.id);
+
+  // Resum compacte dels horaris actuals (només canvis respecte "buit")
+  const resumDocents = docents
+    .filter(d => d.horari && Object.keys(d.horari).length > 0)
+    .map(d => {
+      const dies = {};
+      Object.entries(d.horari).forEach(([dia, cells]) => {
+        const valors = {};
+        Object.entries(cells || {}).forEach(([fid, val]) => {
+          if (val && val !== '' && val !== 'Lliure') valors[fid] = val;
+        });
+        if (Object.keys(valors).length) dies[dia] = valors;
+      });
+      return `${d.nom} (${d.grup_principal || d.rol}): ${JSON.stringify(dies)}`;
+    }).join('\n');
+
+  const tardesStr = tardesIds.join(', ');
+  const normesTxt = (normes || '').trim();
+
+  const prompt = `Ets l'assistent d'una cap d'estudis d'escola de primària. Ha de generar l'horari de JORNADA INTENSIVA per a tot el claustre.
+
+FRANGES DE TARDA (les que NO existeixen en jornada intensiva): ${tardesStr}
+
+HORARIS ACTUALS:
+${resumDocents}
+
+INSTRUCCIONS DE LA CAP D'ESTUDIS:
+${instruccions || 'Elimina totes les tardes. Redistribueix les activitats que calgui seguint les normes.'}
+
+NORMES DEL CENTRE:
+${normesTxt || 'Repartiment equitatiu. Prioritzar disponibles.'}
+
+TASCA: Genera els canvis necessaris a cada horari per a la jornada intensiva.
+- Les franges de tarda (${tardesStr}) han de quedar buides ("") per a tots els docents.
+- Si una activitat de tarda cal redistribuir-la al matí, indica on va.
+- Retorna ÚNICAMENT els docents amb canvis (no els que no canvien res).
+- Per a cada docent, retorna ÚNICAMENT les cel·les que canvien de valor.
+
+JSON (estrictament):
+{"canvis":[{"nom":"Nom del docent","dies":{"dilluns":{"f5a":"","f5b":"","f5c":""}}}],"resum":"Descripció breu dels canvis"}`;
+
+  return callClaude([{ role: 'user', content: prompt }], 4000);
+}
+
 export async function proposarCoberturaCella(grup, hora, fid, temps, docents, normes) {
   const regles  = (normes || '').trim() || REGLES_DEFAULT;
   const dia     = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][new Date().getDay()];

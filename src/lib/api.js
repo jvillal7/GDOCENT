@@ -60,7 +60,11 @@ export async function supaFetch(path, opts = {}, escolaId = null) {
     clearTimeout(tid);
     if (!res.ok) throw new Error(`Supabase Error (${res.status}): ${await res.text()}`);
     const t = await res.text();
-    return t ? JSON.parse(t) : null;
+    const parsed = t ? JSON.parse(t) : null;
+    if (opts.method === 'PATCH' && Array.isArray(parsed) && parsed.length === 0) {
+      throw new Error('No s\'ha actualitzat cap registre. Comprova els permisos de la base de dades.');
+    }
+    return parsed;
   } catch (err) {
     clearTimeout(tid);
     if (err.name === 'AbortError') throw new Error("Temps d'espera esgotat.");
@@ -154,5 +158,8 @@ export function makeApi(escolaId) {
     saveEmailNotificacions: email => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ email_notificacions: email }), bypassSchoolId: true }),
     getEmailsNotificacions:  ()    => f(`escoles?id=eq.${escolaId}&select=emails_notificacions,email_notificacions`, { bypassSchoolId: true }),
     saveEmailsNotificacions: arr   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ emails_notificacions: arr }), bypassSchoolId: true }),
+    getConfigIntensiva:      ()    => f(`escoles?id=eq.${escolaId}&select=config_intensiva`, { bypassSchoolId: true }),
+    saveConfigIntensiva:     cfg   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ config_intensiva: cfg }), bypassSchoolId: true }),
+    saveHorariIntensiu: (id, h) => { cacheDel(`doc_${escolaId}`); return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ horari_intensiu: h }) }); },
   };
 }

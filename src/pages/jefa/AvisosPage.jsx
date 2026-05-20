@@ -2,8 +2,25 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL, MOTIUS_ABSENCIA } from '../../lib/constants';
 import { proposarCobertura, analitzarInfoExtra, construirContextXat } from '../../lib/claude';
-import { sendEmail } from '../../lib/api';
+import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
 import { parseFranges, escHtml, frangesHorari, normGrup } from '../../lib/utils';
+
+async function notifyCobertura({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }) {
+  if (!escola_id || !cobridors?.length) return;
+  try {
+    await fetch(`${SUPA_URL}/functions/v1/coverage-notifier`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+      },
+      body: JSON.stringify({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }),
+    });
+  } catch (e) {
+    console.error('[notifyCobertura]', e?.message || e);
+  }
+}
 import FrangesChips from '../../components/FrangesChips';
 import Spinner from '../../components/Spinner';
 import ChatIA from '../../components/ChatIA';
@@ -297,13 +314,13 @@ export default function AvisosPage() {
       setInfoExtra(novaLlista);
 
       // 4. Correu al mestre cobrint
-      if (cobrintDocent?.email) {
-        sendEmail(
-          cobrintDocent.email,
-          `📋 Cobertura assignada — ${cmData}`,
-          emailCobertura({ cobrint: cmCobrint, absent: cmAbsent, data: cmData, frangesIds: frangesArr, isOriol, grup: cmGrup, esFutura, notes: null })
-        );
-      }
+      notifyCobertura({
+        escola_id: escola.id,
+        absent_nom: cmAbsent,
+        cobridors: [{ nom: cmCobrint, franges_ids: frangesArr, grup: cmGrup }],
+        data: cmData,
+        is_futura: esFutura,
+      });
 
       showToast('✓ Cobertura manual registrada');
       setShowCoberturaManual(false);
@@ -591,16 +608,18 @@ export default function AvisosPage() {
       }
 
       showToast(esFutura ? '📅 Cobertura provisional guardada' : '✓ Cobertura confirmada');
-      for (const p of proposta) {
-        const cobrintDocent = docents.find(d => d.nom === p.docent);
-        if (cobrintDocent?.email) {
-          const frangesIds = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
-          sendEmail(cobrintDocent.email, `📋 Cobertura assignada — ${absData}`,
-            emailCobertura({ cobrint: p.docent, absent: avis.docent_nom, data: absData, frangesIds, isOriol, grup: grupDestí, esFutura, notes: avis.notes })
-          );
-        }
-      }
-      enviarCorreusExtra({ proposta, absent: avis.docent_nom, absData, docents, isOriol, esFutura });
+      notifyCobertura({
+        escola_id: escola.id,
+        absent_nom: avis.docent_nom,
+        absent_notes: avis.notes,
+        cobridors: proposta.map(p => ({
+          nom: p.docent,
+          franges_ids: p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean),
+          grup: grupDestí,
+        })),
+        data: absData,
+        is_futura: esFutura,
+      });
       load();
     } catch (e) { console.error('[aplicarPropostaChat]', e); showToast('Error guardant la cobertura: ' + e.message); }
   }
@@ -646,19 +665,18 @@ export default function AvisosPage() {
       }
       await api.patchAbsencia(iaTarget.id, { estat: nouEstat });
       showToast(esFutura ? '📅 Cobertura provisional guardada' : '✓ Cobertures confirmades');
-      // Enviar correu a cada docent cobrint que tingui email
-      for (const p of proposta) {
-        const cobrintDocent = docents.find(d => d.nom === p.docent);
-        if (cobrintDocent?.email) {
-          const frangesIds = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
-          sendEmail(
-            cobrintDocent.email,
-            `📋 Cobertura assignada — ${absData}`,
-            emailCobertura({ cobrint: p.docent, absent: iaTarget.docent_nom, data: absData, frangesIds, isOriol, grup: grupDestí, esFutura, notes: iaTarget.notes })
-          );
-        }
-      }
-      enviarCorreusExtra({ proposta, absent: iaTarget.docent_nom, absData, docents, isOriol, esFutura });
+      notifyCobertura({
+        escola_id: escola.id,
+        absent_nom: iaTarget.docent_nom,
+        absent_notes: iaTarget.notes,
+        cobridors: proposta.map(p => ({
+          nom: p.docent,
+          franges_ids: p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean),
+          grup: grupDestí,
+        })),
+        data: absData,
+        is_futura: esFutura,
+      });
       setIaState('idle');
       setIaTarget(null);
       setEditedProposta(null);
@@ -674,7 +692,7 @@ export default function AvisosPage() {
       ]);
       showToast('✓ Cobertura confirmada per avui');
 
-      // Enviar correu a cada docent cobrint (agrupem franges per docent)
+      // Enviar correus a cobridors i afectats
       const avis = absencies?.find(a => a.id === id);
       const avui = new Date().toISOString().split('T')[0];
       const perDocent = {};
@@ -682,16 +700,14 @@ export default function AvisosPage() {
         if (!perDocent[cob.docent_cobrint_nom]) perDocent[cob.docent_cobrint_nom] = { frangesIds: [], grup: cob.grup };
         perDocent[cob.docent_cobrint_nom].frangesIds.push(cob.franja);
       }
-      for (const [nom, { frangesIds, grup }] of Object.entries(perDocent)) {
-        const cobrintDocent = docents.find(d => d.nom === nom);
-        if (cobrintDocent?.email) {
-          sendEmail(
-            cobrintDocent.email,
-            `📋 Cobertura assignada — ${avui}`,
-            emailCobertura({ cobrint: nom, absent: avis?.docent_nom || '', data: avui, frangesIds, isOriol, grup, esFutura: false, notes: avis?.notes })
-          );
-        }
-      }
+      notifyCobertura({
+        escola_id: escola.id,
+        absent_nom: avis?.docent_nom || '',
+        absent_notes: avis?.notes,
+        cobridors: Object.entries(perDocent).map(([nom, { frangesIds, grup }]) => ({ nom, franges_ids: frangesIds, grup })),
+        data: avui,
+        is_futura: false,
+      });
       load();
     } catch (e) { showToast('Error: ' + e.message); }
   }
@@ -1218,176 +1234,3 @@ export default function AvisosPage() {
 }
 
 
-function cicleDeGrup(grupPrincipal) {
-  const g = (grupPrincipal || '').toUpperCase();
-  if (/^I[3-5]/.test(g)) return 'petits';
-  if (/^[12]R|^3R/.test(g.replace('N', 'R').replace('ER', 'R'))) return 'mitjans';
-  if (/^[456]T|^[456]E/.test(g)) return 'grans';
-  if (/^1R|^2N|^3R/.test(g)) return 'mitjans';
-  return null;
-}
-
-function coordinadorDeCicle(cicle, docents) {
-  return docents.find(d => (d.coordinador_cicle || '').toLowerCase() === cicle);
-}
-
-function tutorDeGrup(grupVal, docents) {
-  const normGrupLocal = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '').replace(/[ªº.]/g, '');
-  const target = normGrupLocal(grupVal);
-  return docents.find(d => d.grup_principal && normGrupLocal(d.grup_principal) === target && !d.grup_principal.includes('SIEI'));
-}
-
-function extraerGrupDeValorHorari(val) {
-  if (!val) return null;
-  // "Suport 1rA" → "1rA", "3rA · Anglès" → "3rA", "5eB" → "5eB"
-  const mSuport = /^Suport\s+(.+)/i.exec(val);
-  if (mSuport) return mSuport[1].trim();
-  const mGrup = /^([I][3-5][AB]|[1-6][rntè][AB]|[1-6]r[AB]|[1-6]è[AB])/i.exec(val);
-  if (mGrup) return mGrup[1];
-  return null;
-}
-
-function enviarCorreusExtra({ proposta, absent, absData, avisDocent, docents, isOriol, esFutura }) {
-  if (!proposta?.length || !docents?.length) return;
-  const absentDocent = docents.find(d => d.nom === absent);
-  const dateObj = absData ? new Date(absData + 'T12:00:00') : null;
-  const dia = dateObj
-    ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][dateObj.getDay()]
-    : null;
-
-  const tutorsAvisats = new Set();
-  const coordsAvisats = new Set();
-
-  for (const p of proposta) {
-    const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
-
-    // Avisar tutors afectats: busquem al horari de l'absent quin grup tenia a cada franja
-    if (absentDocent?.horari && dia) {
-      for (const fid of frangesACobrir) {
-        const val = absentDocent.horari[dia]?.[fid] || '';
-        const grup = extraerGrupDeValorHorari(val);
-        if (!grup) continue;
-        const tutor = tutorDeGrup(grup, docents);
-        if (!tutor || tutor.nom === absent || tutorsAvisats.has(tutor.nom)) continue;
-        if (!tutor.email) continue;
-        tutorsAvisats.add(tutor.nom);
-        sendEmail(
-          tutor.email,
-          `ℹ️ Canvi d'organització — ${absData}`,
-          emailAfectat({ tutor: tutor.nom, absent, cobrint: p.docent, data: absData, isOriol, grup, esFutura })
-        );
-      }
-    }
-
-    // Avisar coordinador del docent cobrint
-    const cobrintDocent = docents.find(d => d.nom === p.docent);
-    if (cobrintDocent?.grup_principal) {
-      const cicle = cicleDeGrup(cobrintDocent.grup_principal);
-      if (cicle && !coordsAvisats.has(cicle)) {
-        const coord = coordinadorDeCicle(cicle, docents);
-        if (coord && coord.email && coord.nom !== p.docent && coord.nom !== absent) {
-          coordsAvisats.add(cicle);
-          sendEmail(
-            coord.email,
-            `📋 Cobertura al teu cicle — ${absData}`,
-            emailCoordinador({ coord: coord.nom, cobrint: p.docent, absent, data: absData, isOriol, esFutura })
-          );
-        }
-      }
-    }
-  }
-
-  // Avisar coordinador de l'absent (si no s'ha avisat ja)
-  if (absentDocent?.grup_principal) {
-    const cicle = cicleDeGrup(absentDocent.grup_principal);
-    if (cicle && !coordsAvisats.has(cicle)) {
-      const coord = coordinadorDeCicle(cicle, docents);
-      if (coord && coord.email && coord.nom !== absent) {
-        coordsAvisats.add(cicle);
-        sendEmail(
-          coord.email,
-          `📋 Cobertura al teu cicle — ${absData}`,
-          emailCoordinador({ coord: coord.nom, cobrint: proposta[0]?.docent || '—', absent, data: absData, isOriol, esFutura })
-        );
-      }
-    }
-  }
-}
-
-function emailAfectat({ tutor, absent, cobrint, data, isOriol, grup, esFutura }) {
-  const escolaKey = isOriol ? 'oriol' : 'rivo';
-  const dataFmt = new Date(data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  const firstName = tutor?.split(' ')[0] || tutor;
-  return `
-    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
-      <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
-        <p style="margin:0 0 16px;font-size:15px;color:#1a1a1a">Hola, <strong>${escHtml(firstName)}</strong></p>
-        <h2 style="margin:0 0 16px;color:#1a1a1a;font-size:18px">ℹ️ Canvi d'organització al teu grup</h2>
-        <p style="margin:0 0 16px;font-size:14px;color:#444;line-height:1.6">
-          <strong>${escHtml(absent)}</strong> ${esFutura ? 'no podrà venir' : 'no vindrà'} a fer suport a <strong>${escHtml(grup)}</strong> el <strong>${dataFmt}</strong>.
-          ${cobrint && cobrint !== absent ? `La cobertura queda assignada a <strong>${escHtml(cobrint)}</strong>.` : 'La franja quedarà gestionada per la cap d\'estudis.'}
-        </p>
-        <div style="margin-top:20px;text-align:center">
-          <a href="${APP_URL}?escola=${escolaKey}&page=tc" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            Veure detalls a HORARIA →
-          </a>
-        </div>
-      </div>
-    </div>`;
-}
-
-function emailCoordinador({ coord, cobrint, absent, data, isOriol, esFutura }) {
-  const escolaKey = isOriol ? 'oriol' : 'rivo';
-  const dataFmt = new Date(data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  const firstName = coord?.split(' ')[0] || coord;
-  return `
-    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
-      <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
-        <p style="margin:0 0 16px;font-size:15px;color:#1a1a1a">Hola, <strong>${escHtml(firstName)}</strong></p>
-        <h2 style="margin:0 0 16px;color:#1a1a1a;font-size:18px">📋 Cobertura al teu cicle</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:14px">
-          <tr><td style="padding:8px 0;color:#666;width:110px">Data</td><td style="padding:8px 0">${dataFmt}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Absent</td><td style="padding:8px 0;font-weight:600">${escHtml(absent)}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Cobreix</td><td style="padding:8px 0;font-weight:600">${escHtml(cobrint)}</td></tr>
-        </table>
-        <div style="margin-top:20px;text-align:center">
-          <a href="${APP_URL}?escola=${escolaKey}&page=javis" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            Veure a HORARIA →
-          </a>
-        </div>
-      </div>
-    </div>`;
-}
-
-function emailCobertura({ cobrint, absent, data, frangesIds, isOriol, grup, esFutura, notes }) {
-  const escolaKey = isOriol ? 'oriol' : 'rivo';
-  const dataFmt = new Date(data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  const horariText = frangesIds?.length ? frangesHorari(frangesIds, isOriol) : '';
-  const firstName = cobrint?.split(' ')[0] || cobrint;
-  const notesHtml = notes?.trim()
-    ? `<div style="margin-top:20px;background:#f0f7ff;border-left:4px solid #4285F4;border-radius:6px;padding:14px 16px">
-        <div style="font-size:11px;font-weight:700;color:#4285F4;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Missatge de ${escHtml(absent)}</div>
-        <p style="margin:0;font-size:14px;color:#1a1a1a;line-height:1.6">${escHtml(notes.trim()).replace(/\n/g, '<br>')}</p>
-      </div>`
-    : '';
-  return `
-    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:20px;background:#f9f9f9;border-radius:12px">
-      <div style="background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
-        <p style="margin:0 0 16px;font-size:15px;color:#1a1a1a">Hola, <strong>${escHtml(firstName)}</strong></p>
-        <h2 style="margin:0 0 16px;color:#1a1a1a;font-size:18px">📋 ${esFutura ? 'Cobertura provisional assignada' : 'Cobertura assignada per avui'}</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:14px">
-          <tr><td style="padding:8px 0;color:#666;width:110px">Nom</td><td style="padding:8px 0;font-weight:600">${escHtml(cobrint)}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Data</td><td style="padding:8px 0">${dataFmt}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Horari</td><td style="padding:8px 0;font-weight:600">${horariText || '—'}</td></tr>
-          ${grup ? `<tr><td style="padding:8px 0;color:#666">Grup</td><td style="padding:8px 0">${escHtml(grup)}</td></tr>` : ''}
-          <tr><td style="padding:8px 0;color:#666">Substitueix</td><td style="padding:8px 0">${escHtml(absent)}</td></tr>
-        </table>
-        ${notesHtml}
-        <div style="margin-top:24px;text-align:center">
-          <a href="${APP_URL}?escola=${escolaKey}&page=tc" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            Veure la meva cobertura a HORARIA →
-          </a>
-        </div>
-      </div>
-    </div>`;
-}

@@ -1,6 +1,11 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { Resend } from 'npm:resend';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 const SUPA_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -33,6 +38,7 @@ function buildHtml(nom: string, dates: string[], franges: string[], motiu: strin
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
     const payload = await req.json();
     const abs = payload.record ?? payload;
@@ -49,7 +55,7 @@ Deno.serve(async (req) => {
     ]);
 
     const emails = (capsRes.data || []).map((d: any) => d.email).filter(Boolean);
-    if (!emails.length) return new Response('no caps', { status: 200 });
+    if (!emails.length) return new Response('no caps', { status: 200, headers: corsHeaders });
 
     const escolaNom = escolaRes.data?.nom || '';
     const dates = [data].filter(Boolean);
@@ -62,9 +68,9 @@ Deno.serve(async (req) => {
       html: buildHtml(docent_nom, dates, franges, motiu || 'No especificat', escolaNom),
     });
 
-    return new Response('sent', { status: 200 });
+    return new Response('sent', { status: 200, headers: corsHeaders });
   } catch (e: any) {
     console.error('absence-notifier error:', e.message);
-    return new Response(e.message, { status: 500 });
+    return new Response(e.message, { status: 500, headers: corsHeaders });
   }
 });
