@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
-import { todayISO, emailAbsencia } from '../../lib/utils';
+import { todayISO } from '../../lib/utils';
 import { uploadFitxer } from '../../lib/api';
-import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
 
 export default function AvisarPage() {
-  const { api, perfil, escola, docents, showToast } = useApp();
+  const { api, perfil, escola, showToast } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const franjesActives    = isOriol ? FRANJES_ORIOL    : FRANJES;
   const schoolFranjesAct  = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
@@ -33,15 +32,7 @@ export default function AvisarPage() {
 
   useEffect(() => { if (api && perfil) loadMeusAvisos(); }, [api, perfil]);
 
-  function notifyAbsencia(dates, franges, motiu) {
-    fetch(`${SUPA_URL}/functions/v1/absence-notifier`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPA_KEY}` },
-      body: JSON.stringify({ escola_id: escola.id, docent_nom: perfil.nom, data: dates[0], franges: JSON.stringify(franges), motiu }),
-    }).catch(() => {});
-  }
-
-  async function loadMeusAvisos() {
+async function loadMeusAvisos() {
     try {
       const [meves, cobs] = await Promise.all([
         api.getAbsenciesByDocent(perfil.nom),
@@ -118,7 +109,6 @@ export default function AvisarPage() {
       }
       setSent(true);
       showToast(`Enviats ${selectedDates.size} avisos correctament`);
-      notifyAbsencia(Array.from(selectedDates).sort(), Array.from(selectedFranjes), motiu);
       loadMeusAvisos();
     } catch (e) {
       showToast('Error enviant avisos: ' + e.message);
@@ -142,7 +132,6 @@ export default function AvisarPage() {
       });
       setSent(true);
       showToast('Avis enviat correctament');
-      notifyAbsencia([todayISO()], schoolFranjesAct.map(f => f.id), 'Tot el dia');
     } catch (e) {
       showToast('Error: ' + e.message);
     } finally {
