@@ -430,37 +430,38 @@ export default function HorarisPage() {
           </div>
         </div>
       )}
-      <div className="page-hdr">
-        <div>
-          <h1>Personal del centre</h1>
-          <p>Gestiona el personal: horaris, correus i accés</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 16 }}>
+        {[
+          { key: 'personal',  icon: '👥', title: 'Personal del centre', desc: 'Horaris, correus i accés' },
+          { key: 'grups',     icon: '📚', title: 'Grups',               desc: 'Horaris per grup i aula' },
+          { key: 'intensiva', icon: '🌅', title: 'Intensiva',           desc: 'Jornada intensiva',        dot: configIntensiva?.actiu },
+          { key: 'baixes',    icon: '🩹', title: 'Baixes',              desc: baixes.filter(b => b.estat !== 'tancada').length ? `${baixes.filter(b => b.estat !== 'tancada').length} actives` : 'Cap baixa activa' },
+        ].map(c => {
+          const isActive = c.key === 'baixes' ? showBaixes : viewMode === c.key;
+          const isAmber  = c.key === 'baixes';
+          return (
             <button
-              style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'personal' ? 'var(--surface)' : 'transparent', color: viewMode === 'personal' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'personal' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
-              onClick={() => setViewMode('personal')}
-            >👥 Personal</button>
-            <button
-              style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'grups' ? 'var(--surface)' : 'transparent', color: viewMode === 'grups' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'grups' ? '0 1px 4px rgba(0,0,0,.12)' : 'none' }}
-              onClick={() => setViewMode('grups')}
-            >📚 Grups</button>
-            <button
-              style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all .15s', background: viewMode === 'intensiva' ? 'var(--surface)' : 'transparent', color: viewMode === 'intensiva' ? 'var(--ink)' : 'var(--ink-3)', boxShadow: viewMode === 'intensiva' ? '0 1px 4px rgba(0,0,0,.12)' : 'none', position: 'relative' }}
-              onClick={() => setViewMode('intensiva')}
+              key={c.key}
+              onClick={() => {
+                if (c.key === 'baixes') { setShowBaixes(o => !o); if (!baixesLoaded) loadBaixes(); }
+                else { setViewMode(c.key); }
+              }}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                padding: '12px 14px', border: '1.5px solid', borderRadius: 10,
+                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', position: 'relative',
+                background: isActive ? (isAmber ? 'var(--amber-bg)' : 'var(--blue-bg)') : 'var(--surface)',
+                borderColor: isActive ? (isAmber ? 'var(--amber)' : 'var(--blue)') : 'var(--border)',
+                transition: 'all .15s',
+              }}
             >
-              🌅 Intensiva
-              {configIntensiva?.actiu && <span style={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', background: 'var(--green)', display: 'block' }} />}
+              <span style={{ fontSize: 22, marginBottom: 6, lineHeight: 1 }}>{c.icon}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: isActive ? (isAmber ? 'var(--amber)' : 'var(--blue)') : 'var(--ink)', lineHeight: 1.3 }}>{c.title}</span>
+              <span style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 3, lineHeight: 1.3 }}>{c.desc}</span>
+              {c.dot && <span style={{ position: 'absolute', top: 8, right: 8, width: 7, height: 7, borderRadius: '50%', background: 'var(--green)' }} />}
             </button>
-          </div>
-          <button
-            className="btn btn-sm"
-            style={{ background: showBaixes ? 'var(--amber)' : 'var(--amber-bg)', color: showBaixes ? '#fff' : 'var(--amber)', borderColor: 'var(--amber)', fontSize: 13, fontWeight: 600, padding: '7px 14px', flexShrink: 0 }}
-            onClick={() => { setShowBaixes(o => !o); if (!baixesLoaded) loadBaixes(); }}
-          >
-            🩹 Baixes{baixes.length > 0 ? ` (${baixes.length})` : ''}
-          </button>
-        </div>
+          );
+        })}
       </div>
 
       {viewMode === 'grups' && isOriol && (
@@ -776,9 +777,11 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   const [actiu, setActiu]           = useState(cfg.actiu || false);
   const [instruccions, setInstruccions] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [previewCanvis, setPreviewCanvis] = useState(null); // { canvis: [...], resum: '' }
-  const [saving, setSaving]         = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
+  const [editingMap, setEditingMap]         = useState(null); // { docentId: horariModificat }
+  const [tpPendents, setTpPendents]         = useState([]);   // [{ nom, grup, slots: [{dia,fid}] }]
+  const [resumGeneracio, setResumGeneracio] = useState('');
+  const [saving, setSaving]                 = useState(false);
+  const [configSaving, setConfigSaving]     = useState(false);
 
   // Sync local state quan canvia la config externa
   useEffect(() => {
@@ -801,12 +804,40 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   }
 
   async function generar() {
-    if (!instruccions.trim() && !confirm('No has escrit cap instrucció. Es generarà buidant les tardes. Continuar?')) return;
     setGenerating(true);
-    setPreviewCanvis(null);
     try {
       const result = await generarHorarisIntensius(docents, franjes, instruccions, normes);
-      setPreviewCanvis(result);
+      const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+      const tardesIds = franjes.filter(f => f.hora === 'Tarda' && !f.lliure).map(f => f.id);
+      const canvisPerNom = {};
+      result.canvis.forEach(c => { canvisPerNom[c.nom] = c.dies; });
+      const map = {};
+      const pendents = [];
+      for (const d of docents) {
+        if (!d.horari) continue;
+        const base = JSON.parse(JSON.stringify(d.horari));
+        const canvis = canvisPerNom[d.nom];
+        if (canvis) {
+          Object.entries(canvis).forEach(([dia, cells]) => {
+            if (!base[dia]) base[dia] = {};
+            Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
+          });
+        }
+        map[d.id] = base;
+        const tpSlots = [];
+        for (const dia of DIES_ALL) {
+          for (const fid of tardesIds) {
+            const v = ((d.horari[dia] || {})[fid] || '').trim();
+            if (/^tp$/i.test(v) || (d.tp_franges || []).includes(`${dia}-${fid}`)) {
+              tpSlots.push({ dia, fid });
+            }
+          }
+        }
+        if (tpSlots.length) pendents.push({ nom: d.nom, grup: d.grup_principal, slots: tpSlots });
+      }
+      setEditingMap(map);
+      setTpPendents(pendents);
+      setResumGeneracio(result.resum || '');
     } catch (e) { showToast('Error IA: ' + e.message); }
     finally { setGenerating(false); }
   }
@@ -814,31 +845,39 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   async function confirmarIGuardar() {
     setSaving(true);
     try {
-      const canvisPerNom = {};
-      (previewCanvis?.canvis || []).forEach(c => { canvisPerNom[c.nom] = c.dies; });
-
-      // Save horari_intensiu for ALL docents with a horari, applying canvis where present
-      const docentAmbHorari = docents.filter(d => d.horari);
-      await Promise.all(docentAmbHorari.map(d => {
-        const base = JSON.parse(JSON.stringify(d.horari));
-        const canvisDocent = canvisPerNom[d.nom];
-        if (canvisDocent) {
-          Object.entries(canvisDocent).forEach(([dia, cells]) => {
-            if (!base[dia]) base[dia] = {};
-            Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
-          });
-        }
-        return api.saveHorariIntensiu(d.id, base);
-      }));
-
-      showToast(`✓ Horaris intensius guardats (${docentAmbHorari.length} docents)`);
-      setPreviewCanvis(null);
+      await Promise.all(
+        Object.entries(editingMap).map(([id, horari]) => api.saveHorariIntensiu(id, horari))
+      );
+      const n = Object.keys(editingMap).length;
+      showToast(`✓ Horaris intensius guardats (${n} docents)`);
+      setEditingMap(null);
+      setTpPendents([]);
+      setResumGeneracio('');
       onHorarisSaved();
     } catch (e) { showToast('Error guardant: ' + e.message); }
     finally { setSaving(false); }
   }
 
   const docentAmbIntensiu = docents.filter(d => d.horari_intensiu).length;
+
+  if (editingMap) {
+    return (
+      <EditingIntensivaView
+        docents={docents.filter(d => editingMap[d.id] !== undefined)}
+        editingMap={editingMap}
+        tpPendents={tpPendents}
+        resumGeneracio={resumGeneracio}
+        franjes={franjes}
+        onCellEdit={(id, dia, fid, val) => setEditingMap(prev => ({
+          ...prev,
+          [id]: { ...prev[id], [dia]: { ...(prev[id][dia] || {}), [fid]: val } },
+        }))}
+        onConfirm={confirmarIGuardar}
+        onDiscard={() => { setEditingMap(null); setTpPendents([]); setResumGeneracio(''); }}
+        saving={saving}
+      />
+    );
+  }
 
   return (
     <>
@@ -914,51 +953,6 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
         </div>
       </div>
 
-      {/* Preview canvis */}
-      {previewCanvis && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-head">
-            <h3>👁 Previsualització dels canvis</h3>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-sm btn-ghost" onClick={() => setPreviewCanvis(null)}>✕ Descartar</button>
-              <button
-                className="btn btn-sm"
-                style={{ background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600 }}
-                onClick={confirmarIGuardar}
-                disabled={saving}
-              >
-                {saving ? 'Guardant...' : `💾 Confirmar i guardar (${docents.filter(d => d.horari).length} docents)`}
-              </button>
-            </div>
-          </div>
-          <div style={{ padding: '10px 16px' }}>
-            {previewCanvis.resum && (
-              <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 12, padding: '8px 12px', background: 'var(--blue-bg)', borderRadius: 6 }}>
-                💬 {previewCanvis.resum}
-              </div>
-            )}
-            {(!previewCanvis.canvis || previewCanvis.canvis.length === 0) ? (
-              <div style={{ fontSize: 13, color: 'var(--green)', padding: '8px 0' }}>
-                ✓ Les tardes ja estan buides a tots els horaris. Es guardarà una còpia idèntica com a horari intensiu per a tots els docents.
-              </div>
-            ) : previewCanvis.canvis.map((c, i) => (
-              <div key={i} style={{ marginBottom: 8, padding: '8px 12px', background: 'var(--bg-2)', borderRadius: 6 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>{c.nom}</div>
-                <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-                  {Object.entries(c.dies || {}).map(([dia, cells]) =>
-                    Object.entries(cells || {}).map(([fid, val]) => (
-                      <span key={`${dia}-${fid}`} style={{ display: 'inline-block', marginRight: 8, marginBottom: 2, background: val ? 'var(--blue-bg)' : 'var(--bg-3)', color: val ? 'var(--blue)' : 'var(--ink-3)', borderRadius: 4, padding: '1px 6px' }}>
-                        {DIE_ABBR[dia]} {fid}: {val || '(buit)'}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Llista docents amb/sense intensiu */}
       {docentAmbIntensiu > 0 && (
         <div className="card">
@@ -984,6 +978,88 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+function EditingIntensivaView({ docents, editingMap, tpPendents, resumGeneracio, franjes, onCellEdit, onConfirm, onDiscard, saving }) {
+  const DIE_LBL = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
+  const tpNoms = new Set(tpPendents.map(t => t.nom));
+
+  return (
+    <>
+      {/* Capçalera enganxosa */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>🌅 Horaris d'intensiva</div>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>{docents.length} docents · Edita les cel·les i confirma quan estigui llest</div>
+        </div>
+        <button className="btn btn-sm btn-ghost" onClick={onDiscard}>✕ Descartar</button>
+        <button
+          className="btn btn-sm"
+          style={{ background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600 }}
+          onClick={onConfirm}
+          disabled={saving}
+        >
+          {saving ? 'Guardant...' : `💾 Guardar tots (${docents.length})`}
+        </button>
+      </div>
+
+      {resumGeneracio && (
+        <div style={{ padding: '8px 12px', background: 'var(--blue-bg)', border: '1px solid var(--blue)', borderRadius: 8, marginBottom: 10, fontSize: 12.5, color: 'var(--blue)' }}>
+          💬 {resumGeneracio}
+        </div>
+      )}
+
+      {tpPendents.length > 0 && (
+        <div style={{ padding: '10px 14px', background: 'var(--amber-bg)', border: '1px solid var(--amber)', borderRadius: 8, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', marginBottom: 6 }}>
+            ⚠️ TP de tarda a reubicar manualment ({tpPendents.length} docents)
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {tpPendents.map(t => (
+              <span key={t.nom} style={{ fontSize: 11.5, background: 'var(--amber)', color: '#fff', borderRadius: 5, padding: '2px 9px', fontWeight: 600 }}>
+                {t.nom} · {t.slots.map(s => `${DIE_LBL[s.dia]} ${s.fid}`).join(', ')}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {docents.map(d => (
+        <div key={d.id} className="card" style={{ marginBottom: 10, border: tpNoms.has(d.nom) ? '1.5px solid var(--amber)' : undefined }}>
+          <div className="card-head">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                {initials(d.nom)}
+              </div>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{d.nom}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}</div>
+              </div>
+            </div>
+            {tpNoms.has(d.nom) && <span className="sp sp-amber" style={{ fontSize: 10 }}>⚠️ TP a reubicar</span>}
+          </div>
+          <HorariInline
+            horari={editingMap[d.id]}
+            tpFranges={d.tp_franges}
+            franjes={franjes}
+            onCellSave={(dia, fid, val) => onCellEdit(d.id, dia, fid, val)}
+          />
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '8px 0 24px' }}>
+        <button className="btn btn-ghost" onClick={onDiscard}>✕ Descartar canvis</button>
+        <button
+          className="btn"
+          style={{ background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600 }}
+          onClick={onConfirm}
+          disabled={saving}
+        >
+          {saving ? 'Guardant...' : '💾 Confirmar i guardar tots els horaris intensius'}
+        </button>
+      </div>
     </>
   );
 }

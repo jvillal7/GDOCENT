@@ -29,7 +29,7 @@ export const NAV_CFG = {
     ]},
     { sec: 'Gestió', items: [
       { id: 'jtp',      icon: '🕐', label: 'Treball Personal', anim: 'clock' },
-      { id: 'jhoraris', icon: '👥', label: 'Personal',         anim: 'walk' },
+      { id: 'jhoraris', icon: '👥', label: 'Gestions',         anim: 'walk' },
       { id: 'jh',       icon: '📋', label: 'Historial',        anim: 'flip' },
     ]},
     { sec: "Diari Ca N'Oriol", oriolOnly: true, items: [
@@ -64,7 +64,7 @@ export const NAV_CFG = {
 };
 
 export const BNAV = {
-  jefa:      [{ id: 'jd', icon: '📊', label: 'Avui', anim: 'bars' }, { id: 'javis', icon: '🔔', label: 'Avisos', anim: 'bell' }, { id: 'jtp', icon: '🕐', label: 'TP', anim: 'clock' }, { id: 'jhoraris', icon: '👥', label: 'Personal', anim: 'walk' }, { id: 'jh', icon: '📋', label: 'Historial', anim: 'flip' }],
+  jefa:      [{ id: 'jd', icon: '📊', label: 'Avui', anim: 'bars' }, { id: 'javis', icon: '🔔', label: 'Avisos', anim: 'bell' }, { id: 'jtp', icon: '🕐', label: 'TP', anim: 'clock' }, { id: 'jhoraris', icon: '👥', label: 'Gestions', anim: 'walk' }, { id: 'jh', icon: '📋', label: 'Historial', anim: 'flip' }],
   teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar', anim: 'pulse' }, { id: 'tc', icon: '🔄', label: 'Cobertures', anim: 'spin' }, { id: 'tt', icon: '🕐', label: 'TP', anim: 'clock' }],
   educador:  [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   vetllador: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
@@ -77,7 +77,7 @@ export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', educador: 'ta', vetllad
 
 export const PAGE_TITLES = {
   jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal',
-  jh: 'Historial', jhoraris: 'Personal del centre',
+  jh: 'Historial', jhoraris: 'Gestions del centre',
   ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP',
   di: 'Historial', df: 'Informes', dv: 'Normes IA', dv_context: 'Context IA',
   oj_abs: "Persones que s'absenten", oj_reu: 'Reunions i organització',
