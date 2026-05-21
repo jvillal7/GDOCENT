@@ -5,18 +5,43 @@ export const WORKER_AUTH_TOKEN = import.meta.env.VITE_WORKER_AUTH_TOKEN;
 export const APP_URL           = import.meta.env.VITE_APP_URL;
 
 export const FRANJES = [
-  { id: 'f1a',   label: '1a hora', sub: '9:00–9:30',   hora: '1a hora' },
-  { id: 'f1b',   label: '1a hora', sub: '9:30–10:00',  hora: '1a hora' },
-  { id: 'f2a',   label: '2a hora', sub: '10:00–10:30', hora: '2a hora' },
-  { id: 'patiA', label: 'Pati A',  sub: '10:30–11:00', hora: 'Pati A',  patio: true },
-  { id: 'patiB', label: 'Pati B',  sub: '11:00–11:30', hora: 'Pati B',  patio: true },
-  { id: 'f3a',   label: '3a hora', sub: '11:30–12:00', hora: '3a hora' },
-  { id: 'f3b',   label: '3a hora', sub: '12:00–12:30', hora: '3a hora' },
-  { id: 'f4',    label: 'Dinar',   sub: '12:30–15:00', hora: 'Dinar',   lliure: true },
-  { id: 'f5a',   label: 'Tarda', sub: '15:00–15:30', hora: 'Tarda' },
-  { id: 'f5b',   label: 'Tarda', sub: '15:30–16:00', hora: 'Tarda' },
-  { id: 'f5c',   label: 'Tarda', sub: '16:00–16:30', hora: 'Tarda' },
+  { id: 'f1a',   label: '1a hora', sub: '9:00–9:30',   hora: '1a hora', min: 30 },
+  { id: 'f1b',   label: '1a hora', sub: '9:30–10:00',  hora: '1a hora', min: 30 },
+  { id: 'f2a',   label: '2a hora', sub: '10:00–10:30', hora: '2a hora', min: 30 },
+  { id: 'patiA', label: 'Pati A',  sub: '10:30–11:00', hora: 'Pati A',  min: 30, patio: true },
+  { id: 'patiB', label: 'Pati B',  sub: '11:00–11:30', hora: 'Pati B',  min: 30, patio: true },
+  { id: 'f3a',   label: '3a hora', sub: '11:30–12:00', hora: '3a hora', min: 30 },
+  { id: 'f3b',   label: '3a hora', sub: '12:00–12:30', hora: '3a hora', min: 30 },
+  { id: 'f4',    label: 'Dinar',   sub: '12:30–15:00', hora: 'Dinar',   min: 150, lliure: true },
+  { id: 'f5a',   label: 'Tarda',   sub: '15:00–15:30', hora: 'Tarda',   min: 30 },
+  { id: 'f5b',   label: 'Tarda',   sub: '15:30–16:00', hora: 'Tarda',   min: 30 },
+  { id: 'f5c',   label: 'Tarda',   sub: '16:00–16:30', hora: 'Tarda',   min: 30 },
 ];
+
+export const FRANJES_INTENSIVA = [
+  { id: 'i1a', label: '1a hora', sub: '9:00–9:15',   hora: '1a hora', min: 15 },
+  { id: 'i1b', label: '1a hora', sub: '9:15–9:30',   hora: '1a hora', min: 15 },
+  { id: 'i1c', label: '1a hora', sub: '9:30–9:45',   hora: '1a hora', min: 15 },
+  { id: 'i1d', label: '1a hora', sub: '9:45–10:00',  hora: '1a hora', min: 15 },
+  { id: 'i2a', label: '2a hora', sub: '10:00–10:15', hora: '2a hora', min: 15 },
+  { id: 'i2b', label: '2a hora', sub: '10:15–10:30', hora: '2a hora', min: 15 },
+  { id: 'iPA', label: 'Pati',    sub: '10:30–11:30', hora: 'Pati',    min: 60, patio: true },
+  { id: 'i3a', label: '3a hora', sub: '11:30–11:45', hora: '3a hora', min: 15 },
+  { id: 'i3b', label: '3a hora', sub: '11:45–12:00', hora: '3a hora', min: 15 },
+  { id: 'i3c', label: '3a hora', sub: '12:00–12:15', hora: '3a hora', min: 15 },
+  { id: 'i3d', label: '3a hora', sub: '12:15–12:30', hora: '3a hora', min: 15 },
+  { id: 'i4a', label: '4a hora', sub: '12:30–12:45', hora: '4a hora', min: 15 },
+  { id: 'i4b', label: '4a hora', sub: '12:45–13:00', hora: '4a hora', min: 15 },
+];
+
+// Mapa de conversió: slot normal (30 min) → slots intensiva (15 min)
+export const MAP_NORMAL_TO_INTENSIVA = {
+  f1a: ['i1a', 'i1b'], f1b: ['i1c', 'i1d'],
+  f2a: ['i2a', 'i2b'],
+  f3a: ['i3a', 'i3b'], f3b: ['i3c', 'i3d'],
+  // patiA+patiB → iPA gestionat per separat
+  // f4/f5a/f5b/f5c → no inclosos a l'horari intensiu
+};
 
 // Franges que poden tenir absències (sense Dinar)
 export const SCHOOL_FRANJES = FRANJES.filter(f => !f.lliure);

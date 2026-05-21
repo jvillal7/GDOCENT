@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, FRANJES_ORIOL, DIES, GRUPS_ORIOL, COORDINADORS_CICLE } from '../../lib/constants';
+import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, DIES, GRUPS_ORIOL, COORDINADORS_CICLE } from '../../lib/constants';
 import { initials, oriolInitials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF, generarHorarisIntensius } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
@@ -72,6 +72,22 @@ function cellColor(val) {
   return 'var(--ink-2)';
 }
 
+function convertTo15Min(horari30) {
+  const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+  const result = {};
+  for (const dia of DIES_ALL) {
+    result[dia] = {};
+    const src = horari30[dia] || {};
+    FRANJES_INTENSIVA.forEach(f => { result[dia][f.id] = ''; });
+    for (const [f30, f15s] of Object.entries(MAP_NORMAL_TO_INTENSIVA)) {
+      const val = src[f30] || '';
+      for (const f15 of f15s) result[dia][f15] = val;
+    }
+    result[dia]['iPA'] = src['patiA'] || src['patiB'] || '';
+  }
+  return result;
+}
+
 export default function HorarisPage() {
   const { api, escola, setEscola, docents, setDocents, showToast, normes } = useApp();
   const isOriol  = escola?.nom?.toLowerCase().includes('oriol');
@@ -95,6 +111,7 @@ export default function HorarisPage() {
   const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', tipus: 'malaltia', estat: 'activa' });
   const [baixaMes,    setBaixaMes]    = useState('actives');
   const [baixaCobStats, setBaixaCobStats] = useState({});
+  const [searchDocent, setSearchDocent] = useState('');
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -435,6 +452,7 @@ export default function HorarisPage() {
           { key: 'personal',  icon: '👥', title: 'Personal del centre', desc: 'Horaris, correus i accés' },
           { key: 'grups',     icon: '📚', title: 'Grups',               desc: 'Horaris per grup i aula' },
           { key: 'intensiva', icon: '🌅', title: 'Intensiva',           desc: 'Jornada intensiva',        dot: configIntensiva?.actiu },
+          { key: 'sortides',  icon: '🚌', title: 'Sortides',            desc: 'Gestiona sortides escolars' },
           { key: 'baixes',    icon: '🩹', title: 'Baixes',              desc: baixes.filter(b => b.estat !== 'tancada').length ? `${baixes.filter(b => b.estat !== 'tancada').length} actives` : 'Cap baixa activa' },
         ].map(c => {
           const isActive = c.key === 'baixes' ? showBaixes : viewMode === c.key;
@@ -482,7 +500,17 @@ export default function HorarisPage() {
           showToast={showToast}
         />
       )}
-      {viewMode !== 'grups' && viewMode !== 'intensiva' && (<>
+      {viewMode === 'sortides' && (
+        <SortidesView
+          docents={docents}
+          franjes={franjes}
+          api={api}
+          escola={escola}
+          baixes={baixes}
+          showToast={showToast}
+        />
+      )}
+      {viewMode !== 'grups' && viewMode !== 'intensiva' && viewMode !== 'sortides' && (<>
 
       {showBaixes && (
         <div className="card" style={{ marginBottom: 14 }}>
@@ -645,10 +673,26 @@ export default function HorarisPage() {
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="card-head">
             <h3>✅ Docents carregats</h3>
-            <span className="sp sp-green">{docents.length} docents</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="sp sp-green">{docents.length} docents</span>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: 7, fontSize: 12, color: 'var(--ink-3)', pointerEvents: 'none', userSelect: 'none' }}>🔍</span>
+                <input
+                  type="search"
+                  placeholder="Cercar..."
+                  value={searchDocent}
+                  onChange={e => setSearchDocent(e.target.value)}
+                  style={{ paddingLeft: 26, paddingRight: 8, height: 28, border: '1.5px solid var(--border)', borderRadius: 20, background: 'var(--bg)', fontFamily: 'inherit', fontSize: 12, width: 110, outline: 'none', color: 'var(--ink)' }}
+                />
+              </div>
+            </div>
           </div>
           {NIVELLS.map(n => {
-            const items = n.sort ? [...groups[n.key]].sort(n.sort) : groups[n.key];
+            const normSearch = searchDocent.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+            const allItems = n.sort ? [...groups[n.key]].sort(n.sort) : groups[n.key];
+            const items = normSearch
+              ? allItems.filter(({ d }) => (d.nom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(normSearch))
+              : allItems;
             if (!items.length) return null;
             return (
               <div key={n.key}>
@@ -823,7 +867,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
             Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
           });
         }
-        map[d.id] = base;
+        map[d.id] = convertTo15Min(base);
         const tpSlots = [];
         for (const dia of DIES_ALL) {
           for (const fid of tardesIds) {
@@ -867,7 +911,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
         editingMap={editingMap}
         tpPendents={tpPendents}
         resumGeneracio={resumGeneracio}
-        franjes={franjes}
+        franjes={FRANJES_INTENSIVA}
         onCellEdit={(id, dia, fid, val) => setEditingMap(prev => ({
           ...prev,
           [id]: { ...prev[id], [dia]: { ...(prev[id][dia] || {}), [fid]: val } },
@@ -1064,6 +1108,253 @@ function EditingIntensivaView({ docents, editingMap, tpPendents, resumGeneracio,
   );
 }
 
+function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [title, setTitle] = useState('');
+  const [grupsSeleccionats, setGrupsSeleccionats] = useState(new Set());
+  const [docentsAniran, setDocentsAniran] = useState(new Set());
+  const [saving, setSaving] = useState(false);
+  const [savedOk, setSavedOk] = useState(null);
+
+  // null → disponible
+  // { status:'baixa' }        → de baixa, clarament no disponible (exclou de llistes)
+  // { status:'pendent', fi }  → baixa amb fi prevista ANTERIOR a la sortida → inclou però avisa
+  function estatBaixa(nom) {
+    const nomN = (nom || '').toLowerCase().trim();
+    for (const b of (baixes || [])) {
+      if (b.estat === 'tancada') continue;
+      if ((b.absent || '').toLowerCase().trim() !== nomN) continue;
+      // és l'absent — comprovem si s'espera que ja hagi tornat
+      if (b.data_fi_prevista && date > b.data_fi_prevista) {
+        return { status: 'pendent', fi: b.data_fi_prevista };
+      }
+      return { status: 'baixa' };
+    }
+    return null; // substituts i altres → disponibles sense restricció
+  }
+
+  const allGrups = useMemo(() =>
+    [...new Set(docents.filter(d => d.rol === 'tutor' && d.grup_principal?.trim()).map(d => d.grup_principal.trim()))]
+      .sort((a, b) => sortRivoGrupKey(a).localeCompare(sortRivoGrupKey(b))),
+    [docents]
+  );
+
+  const tutorsDeGrups = useMemo(() =>
+    docents.filter(d => d.rol === 'tutor' && grupsSeleccionats.has(d.grup_principal?.trim())),
+    [docents, grupsSeleccionats]
+  );
+
+  const diaSetm = ['diumenge', 'dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres', 'dissabte'][new Date(date + 'T12:00:00').getDay()];
+
+  const especialistesSuggerits = useMemo(() => {
+    if (!grupsSeleccionats.size) return [];
+    const tutorIds = new Set(tutorsDeGrups.map(d => d.id));
+    const scores = {};
+    for (const d of docents) {
+      if (tutorIds.has(d.id) || !d.horari) continue;
+      if (estatBaixa(d.nom)?.status === 'baixa') continue; // exclou absents sense retorn previst
+      let count = 0;
+      for (const dH of Object.values(d.horari)) {
+        for (const v of Object.values(dH || {})) {
+          for (const g of grupsSeleccionats) { if (matchesGrup(v, g)) count++; }
+        }
+      }
+      if (!count) continue;
+      const daySlots = Object.values(d.horari[diaSetm] || {}).filter(v => {
+        const vl = (v || '').toLowerCase().trim();
+        return vl && vl !== 'lliure' && vl !== 'libre';
+      }).length;
+      scores[d.id] = { d, count, daySlots, leaveStatus: estatBaixa(d.nom) };
+    }
+    return Object.values(scores).sort((a, b) => b.count - a.count || a.daySlots - b.daySlots);
+  }, [docents, grupsSeleccionats, diaSetm, tutorsDeGrups, baixes, date]);
+
+  // Auto-selecciona tutors: exclou absents sense retorn previst ni els "pendent" (la cap decideix)
+  useEffect(() => {
+    setDocentsAniran(new Set(tutorsDeGrups.filter(d => !estatBaixa(d.nom)).map(d => d.nom)));
+  }, [tutorsDeGrups, baixes, date]);
+
+  function toggleGrup(g) {
+    setGrupsSeleccionats(prev => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n; });
+  }
+  function toggleDocent(nom) {
+    setDocentsAniran(prev => { const n = new Set(prev); n.has(nom) ? n.delete(nom) : n.add(nom); return n; });
+  }
+
+  async function confirmarSortida() {
+    if (!title.trim()) return showToast('Introdueix un títol per a la sortida');
+    if (!grupsSeleccionats.size) return showToast('Selecciona almenys un grup');
+    if (!docentsAniran.size) return showToast('Selecciona almenys un docent');
+    setSaving(true);
+    try {
+      const absenciaFranges = franjes.filter(f => !f.lliure).map(f => f.id);
+      const motiu = `Sortida: ${title.trim()}`;
+      const notes = `Grups de sortida: ${[...grupsSeleccionats].join(', ')}`;
+      await Promise.all([...docentsAniran].map(nom => {
+        const doc = docents.find(d => d.nom === nom);
+        return api.saveAbsencia({
+          escola_id: escola.id,
+          docent_id: doc?.id || null,
+          docent_nom: nom,
+          data: date,
+          franges: absenciaFranges,
+          motiu,
+          notes,
+          estat: 'pendent',
+        });
+      }));
+      const info = { count: docentsAniran.size, title: title.trim(), date };
+      setSavedOk(info);
+      showToast(`✓ ${info.count} avisos creats per "${info.title}"`);
+      setTitle('');
+      setGrupsSeleccionats(new Set());
+      setDocentsAniran(new Set());
+    } catch (e) { showToast('Error: ' + e.message); }
+    finally { setSaving(false); }
+  }
+
+  const fmtData = iso => new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  return (
+    <>
+      {savedOk && (
+        <div style={{ padding: '10px 14px', background: 'var(--green-bg)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 14, fontSize: 13, lineHeight: 1.5 }}>
+          ✅ <strong>{savedOk.count} avisos creats</strong> per la sortida "{savedOk.title}" ({fmtData(savedOk.date)}). Gestiona les cobertures des de <strong>Avisos</strong>.
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head"><h3>🚌 Nova sortida escolar</h3></div>
+        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
+            <div>
+              <label className="f-label">Nom de la sortida</label>
+              <input className="f-ctrl" placeholder="Ex: Visita al Museu, Colònies 5è..." value={title} onChange={e => setTitle(e.target.value)} />
+            </div>
+            <div>
+              <label className="f-label">Data</label>
+              <input type="date" className="f-ctrl" value={date} onChange={e => setDate(e.target.value)} style={{ width: 148 }} />
+            </div>
+          </div>
+
+          {(diaSetm === 'dissabte' || diaSetm === 'diumenge') && (
+            <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚠ La data seleccionada és cap de setmana.</div>
+          )}
+
+          <div>
+            <label className="f-label">Grups que van de sortida</label>
+            {allGrups.length === 0
+              ? <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>Primer puja els horaris dels tutors des de Personal.</p>
+              : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {allGrups.map(g => (
+                    <button key={g} className="btn btn-sm"
+                      style={grupsSeleccionats.has(g)
+                        ? { background: 'var(--blue)', color: '#fff', border: 'none', fontWeight: 700 }
+                        : { background: 'var(--bg-2)', borderColor: 'var(--border)' }
+                      }
+                      onClick={() => toggleGrup(g)}
+                    >{g}</button>
+                  ))}
+                </div>
+              )
+            }
+          </div>
+        </div>
+      </div>
+
+      {grupsSeleccionats.size > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head">
+            <h3>👥 Qui va a la sortida</h3>
+            <span className="sp sp-blue">{docentsAniran.size} docents</span>
+          </div>
+
+          <div style={{ padding: '7px 14px', background: 'var(--blue-bg)', borderBottom: '1px solid var(--border)', fontSize: 11.5, color: 'var(--blue)' }}>
+            ℹ️ Els tutors/es s'inclouen automàticament. Afegeix els especialistes que acompanyen els grups. Les cobertures es gestionaran des d'<strong>Avisos</strong>.
+          </div>
+
+          {tutorsDeGrups.length > 0 && (
+            <>
+              <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
+                Tutors/es dels grups · Inclosos automàticament
+              </div>
+              {tutorsDeGrups.map(d => (
+                <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} isTutor leaveStatus={estatBaixa(d.nom)} diaSetm={diaSetm} />
+              ))}
+            </>
+          )}
+
+          {especialistesSuggerits.length > 0 && (
+            <>
+              <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
+                Especialistes · Ordenats per afinitat amb els grups
+              </div>
+              {especialistesSuggerits.slice(0, 10).map(({ d, count, daySlots, leaveStatus }) => (
+                <SortidaDocentsRow
+                  key={d.id} d={d}
+                  selected={docentsAniran.has(d.nom)}
+                  onToggle={() => toggleDocent(d.nom)}
+                  leaveStatus={leaveStatus}
+                  hint={`${count} sessions setmanals amb ${[...grupsSeleccionats].join('+')} · ${daySlots} sl. ocupats el ${diaSetm}`}
+                  diaSetm={diaSetm}
+                />
+              ))}
+            </>
+          )}
+
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {!title.trim() && (
+              <div style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600 }}>⚠ Introdueix el nom de la sortida per poder confirmar.</div>
+            )}
+            <button className="btn btn-primary btn-full" onClick={confirmarSortida} disabled={saving || !title.trim()}>
+              {saving ? 'Creant avisos...' : `🚌 Crear ${docentsAniran.size} avís${docentsAniran.size !== 1 ? 'os' : ''} d'absència per a la sortida`}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function SortidaDocentsRow({ d, selected, onToggle, isTutor, leaveStatus, hint, diaSetm }) {
+  const isBaixa   = leaveStatus?.status === 'baixa';
+  const isPendent = leaveStatus?.status === 'pendent';
+  const fmtFi = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
+
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
+        borderBottom: '1px solid var(--border)',
+        background: isBaixa ? 'var(--amber-bg)' : isPendent ? 'var(--amber-bg)' : selected ? 'var(--blue-bg)' : undefined,
+        cursor: 'pointer', transition: 'background .1s',
+        opacity: isBaixa ? 0.65 : 1,
+      }}
+    >
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: (isBaixa || isPendent) ? 'var(--amber)' : selected ? 'var(--blue)' : avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+        {initials(d.nom)}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: selected ? 600 : 400, color: isBaixa ? 'var(--ink-3)' : isPendent ? 'var(--amber)' : selected ? 'var(--blue)' : 'var(--ink)', textDecoration: isBaixa ? 'line-through' : undefined }}>
+          {d.nom}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>
+          {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}
+          {hint && <span style={{ marginLeft: 6, color: 'var(--ink-4)' }}>· {hint}</span>}
+        </div>
+      </div>
+      {isBaixa   && <span className="sp sp-amber" style={{ fontSize: 9.5, flexShrink: 0 }}>🩹 De baixa</span>}
+      {isPendent && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 7px', fontWeight: 700, whiteSpace: 'nowrap' }}>⚠ Permís fins {fmtFi(leaveStatus.fi)}</span>}
+      {!leaveStatus && isTutor && <span className="sp sp-blue" style={{ fontSize: 9.5, flexShrink: 0 }}>tutor/a</span>}
+      <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected ? 'var(--blue)' : 'var(--border)'}`, background: selected ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .1s' }}>
+        {selected && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+      </div>
+    </div>
+  );
+}
+
 function HorariInline({ horari, tpFranges = [], franjes, onCellSave }) {
   const [editing, setEditing] = useState(null);
   const [editVal, setEditVal] = useState('');
@@ -1105,8 +1396,10 @@ function HorariInline({ horari, tpFranges = [], franjes, onCellSave }) {
             {franjes.map(f => {
               const grp = horaGroups[f.hora] || [];
               const isFirst = grp[0]?.id === f.id;
+              const rowH = (f.min || 30) * 1.5;
+              const pad  = (f.min || 30) <= 15 ? '2px 3px' : '4px 3px';
               return (
-                <tr key={f.id}>
+                <tr key={f.id} style={{ height: rowH }}>
                   {isFirst && (
                     <td rowSpan={grp.length} style={{ ...tdS, fontWeight: 700, verticalAlign: 'middle', color: 'var(--ink-2)' }}>{f.label}</td>
                   )}
@@ -1129,7 +1422,7 @@ function HorariInline({ horari, tpFranges = [], franjes, onCellSave }) {
                         ) : (
                           <span
                             onClick={() => onCellSave && startEdit(dia, f.id, val)}
-                            style={{ fontSize: 9, color: cellColor(val), fontWeight: val ? 500 : 400, display: 'block', padding: '4px 3px', cursor: onCellSave ? 'text' : 'default', minHeight: 20 }}
+                            style={{ fontSize: 9, color: cellColor(val), fontWeight: val ? 500 : 400, display: 'block', padding: pad, cursor: onCellSave ? 'text' : 'default' }}
                           >
                             {val || ''}
                           </span>

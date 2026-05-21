@@ -223,7 +223,7 @@ async function loadMeusAvisos() {
       >
         <span style={{ fontSize: 22 }}>🏥</span>
         <div style={{ textAlign: 'left' }}>
-          <div>Falto avui tot el dia</div>
+          <div>Falto <strong>AVUI</strong> tot el dia</div>
           <div style={{ fontSize: 12, fontWeight: 400, opacity: .75 }}>{nomDia} - Totes les franges</div>
         </div>
       </button>
@@ -249,15 +249,23 @@ async function loadMeusAvisos() {
               <span style={{ fontSize: 12, fontWeight: 600 }}>Altre dia</span>
             </button>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             {datesArr.length === 0
               ? <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '8px 12px', background: 'var(--bg-2)', borderRadius: 6, width: '100%' }}>Cap dia seleccionat</div>
-              : datesArr.map(d => (
-                <div key={d} className="sp sp-ink" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12.5 }}>
-                  {new Date(d + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
-                  <span onClick={() => removeDate(d)} style={{ cursor: 'pointer', opacity: .6, fontSize: 14, fontWeight: 700 }}>×</span>
-                </div>
-              ))
+              : datesArr.map(d => {
+                  const dt = new Date(d + 'T12:00:00');
+                  return (
+                    <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px 7px 8px', background: 'var(--green-bg)', border: '1.5px solid var(--green-mid)', borderRadius: 24, color: 'var(--green)', fontWeight: 600 }}>
+                      <span style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--green)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+                        {dt.getDate()}
+                      </span>
+                      <span style={{ fontSize: 13 }}>
+                        {dt.toLocaleDateString('ca-ES', { weekday: 'short', month: 'short' })}
+                      </span>
+                      <span onClick={() => removeDate(d)} style={{ cursor: 'pointer', opacity: .5, fontSize: 16, fontWeight: 700, lineHeight: 1 }}>×</span>
+                    </div>
+                  );
+                })
             }
           </div>
         </div>
@@ -265,10 +273,12 @@ async function loadMeusAvisos() {
         {/* Franges */}
         <div>
           <label className="f-label" style={{ marginBottom: 8 }}>Franges afectades</label>
-          <div className="sel-all-row">
-            <button className="btn btn-ghost btn-sm" onClick={selectAll}>Tot el dia</button>
-            <button className="btn btn-ghost btn-sm" onClick={clearAll}>Cap</button>
-          </div>
+          <button
+            onClick={selectAll}
+            style={{ width: '100%', padding: '14px 16px', background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 'var(--r-sm)', fontFamily: "'Instrument Sans',sans-serif", fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 10, letterSpacing: '.01em' }}
+          >
+            ☀️ Tot el dia
+          </button>
           <div className="franjes-grid">
             {schoolFranjesAct.map(f => (
               <div
