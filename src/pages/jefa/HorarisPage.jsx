@@ -1113,24 +1113,26 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   const [title, setTitle] = useState('');
   const [grupsSeleccionats, setGrupsSeleccionats] = useState(new Set());
   const [docentsAniran, setDocentsAniran] = useState(new Set());
+  // acompanyants manuals: noms fora dels tutors/especialistes suggerits
+  const [acompanyantSearch, setAcompanyantSearch] = useState('');
+  const [showAcompanyantPicker, setShowAcompanyantPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(null);
 
   // null → disponible
-  // { status:'baixa' }        → de baixa, clarament no disponible (exclou de llistes)
-  // { status:'pendent', fi }  → baixa amb fi prevista ANTERIOR a la sortida → inclou però avisa
+  // { status:'baixa' }        → de baixa sense retorn previst (exclou de suggeriments)
+  // { status:'pendent', fi }  → baixa amb fi prevista < data sortida (avisa en ambre)
   function estatBaixa(nom) {
     const nomN = (nom || '').toLowerCase().trim();
     for (const b of (baixes || [])) {
       if (b.estat === 'tancada') continue;
       if ((b.absent || '').toLowerCase().trim() !== nomN) continue;
-      // és l'absent — comprovem si s'espera que ja hagi tornat
       if (b.data_fi_prevista && date > b.data_fi_prevista) {
         return { status: 'pendent', fi: b.data_fi_prevista };
       }
       return { status: 'baixa' };
     }
-    return null; // substituts i altres → disponibles sense restricció
+    return null;
   }
 
   const allGrups = useMemo(() =>
@@ -1152,7 +1154,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     const scores = {};
     for (const d of docents) {
       if (tutorIds.has(d.id) || !d.horari) continue;
-      if (estatBaixa(d.nom)?.status === 'baixa') continue; // exclou absents sense retorn previst
+      if (estatBaixa(d.nom)?.status === 'baixa') continue;
       let count = 0;
       for (const dH of Object.values(d.horari)) {
         for (const v of Object.values(dH || {})) {
@@ -1169,7 +1171,20 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     return Object.values(scores).sort((a, b) => b.count - a.count || a.daySlots - b.daySlots);
   }, [docents, grupsSeleccionats, diaSetm, tutorsDeGrups, baixes, date]);
 
-  // Auto-selecciona tutors: exclou absents sense retorn previst ni els "pendent" (la cap decideix)
+  // Docents disponibles per afegir manualment (no tutors dels grups, no en els suggerits, no de baixa total)
+  const tutorNoms = useMemo(() => new Set(tutorsDeGrups.map(d => d.nom)), [tutorsDeGrups]);
+  const especialisteNoms = useMemo(() => new Set(especialistesSuggerits.map(({ d }) => d.nom)), [especialistesSuggerits]);
+  const docentsManualsDisponibles = useMemo(() => {
+    const normS = acompanyantSearch.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return docents.filter(d => {
+      if (tutorNoms.has(d.nom) || especialisteNoms.has(d.nom)) return false;
+      if (estatBaixa(d.nom)?.status === 'baixa') return false;
+      if (!normS) return true;
+      return (d.nom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(normS);
+    });
+  }, [docents, tutorNoms, especialisteNoms, acompanyantSearch, baixes, date]);
+
+  // Auto-selecciona tutors disponibles
   useEffect(() => {
     setDocentsAniran(new Set(tutorsDeGrups.filter(d => !estatBaixa(d.nom)).map(d => d.nom)));
   }, [tutorsDeGrups, baixes, date]);
@@ -1180,6 +1195,14 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   function toggleDocent(nom) {
     setDocentsAniran(prev => { const n = new Set(prev); n.has(nom) ? n.delete(nom) : n.add(nom); return n; });
   }
+  function afegirManual(nom) {
+    setDocentsAniran(prev => new Set([...prev, nom]));
+    setAcompanyantSearch('');
+    setShowAcompanyantPicker(false);
+  }
+
+  // Noms dels tutors dels grups seleccionats (van AMB el grup → ambGrup: true)
+  const nomsTutors = useMemo(() => new Set(tutorsDeGrups.map(d => d.nom)), [tutorsDeGrups]);
 
   async function confirmarSortida() {
     if (!title.trim()) return showToast('Introdueix un títol per a la sortida');
@@ -1188,10 +1211,13 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     setSaving(true);
     try {
       const absenciaFranges = franjes.filter(f => !f.lliure).map(f => f.id);
+      const grupsStr = [...grupsSeleccionats].join(', ');
       const motiu = `Sortida: ${title.trim()}`;
-      const notes = `Grups de sortida: ${[...grupsSeleccionats].join(', ')}`;
+
+      // Crea avís per a cada docent, diferenciant tutors (ambGrup) d'acompanyants
       await Promise.all([...docentsAniran].map(nom => {
         const doc = docents.find(d => d.nom === nom);
+        const esTutor = nomsTutors.has(nom);
         return api.saveAbsencia({
           escola_id: escola.id,
           docent_id: doc?.id || null,
@@ -1199,27 +1225,60 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           data: date,
           franges: absenciaFranges,
           motiu,
-          notes,
+          notes: esTutor
+            ? `Surt AMB el grup a la sortida (${grupsStr}) · No cal cobertura per al grup`
+            : `Acompanyant a la sortida (${grupsStr}) · Cal cobrir les seves franges habituals`,
           estat: 'pendent',
         });
       }));
+
+      // Crea entrada a info_extra perquè la IA de cobertures sàpiga que aquells grups no són al centre
+      try {
+        const rawInfoExtra = await api.getInfoExtra();
+        const infoExtraActual = (() => {
+          const raw = rawInfoExtra?.[0]?.info_extra;
+          if (!raw) return [];
+          if (Array.isArray(raw)) return raw;
+          return [raw];
+        })();
+        const novaEntrada = {
+          titol: `Sortida: ${title.trim()}`,
+          resum: `${[...grupsSeleccionats].join(', ')} surten del centre. Acompanyants: ${[...docentsAniran].join(', ')}.`,
+          docentsBlocats: [...docentsAniran].map(nom => ({
+            nom,
+            hores: 'tot el dia',
+            ambGrup: nomsTutors.has(nom),
+          })),
+          grups_fora: [...grupsSeleccionats],
+          context: `Sortida escolar "${title.trim()}". Grups fora del centre: ${grupsStr}. Les franges dels tutors acompanyants no necessiten cobertura per al grup. Els acompanyants extra sí que deixen franges descobertes.`,
+          data_inici: date,
+          data_fi: date,
+        };
+        await api.saveInfoExtra([...infoExtraActual, novaEntrada]);
+      } catch { /* si falla info_extra, els avisos ja estan creats */ }
+
       const info = { count: docentsAniran.size, title: title.trim(), date };
       setSavedOk(info);
       showToast(`✓ ${info.count} avisos creats per "${info.title}"`);
       setTitle('');
       setGrupsSeleccionats(new Set());
       setDocentsAniran(new Set());
+      setShowAcompanyantPicker(false);
     } catch (e) { showToast('Error: ' + e.message); }
     finally { setSaving(false); }
   }
 
   const fmtData = iso => new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  // Docents manuals ja afegits (no tutors ni suggerits però sí a docentsAniran)
+  const docentsManualsAfegits = [...docentsAniran].filter(nom => !tutorNoms.has(nom) && !especialisteNoms.has(nom));
+
   return (
     <>
       {savedOk && (
         <div style={{ padding: '10px 14px', background: 'var(--green-bg)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 14, fontSize: 13, lineHeight: 1.5 }}>
-          ✅ <strong>{savedOk.count} avisos creats</strong> per la sortida "{savedOk.title}" ({fmtData(savedOk.date)}). Gestiona les cobertures des de <strong>Avisos</strong>.
+          ✅ <strong>{savedOk.count} avisos creats</strong> per la sortida "{savedOk.title}" ({fmtData(savedOk.date)}).
+          La IA ja sap quins grups surten. Gestiona les cobertures des de <strong>Avisos</strong>.
         </div>
       )}
 
@@ -1271,16 +1330,16 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           </div>
 
           <div style={{ padding: '7px 14px', background: 'var(--blue-bg)', borderBottom: '1px solid var(--border)', fontSize: 11.5, color: 'var(--blue)' }}>
-            ℹ️ Els tutors/es s'inclouen automàticament. Afegeix els especialistes que acompanyen els grups. Les cobertures es gestionaran des d'<strong>Avisos</strong>.
+            ℹ️ Tutors/es: avís sense cobertura del grup (surten amb els alumnes). Acompanyants extra: cal cobrir les seves franges habituals.
           </div>
 
           {tutorsDeGrups.length > 0 && (
             <>
               <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
-                Tutors/es dels grups · Inclosos automàticament
+                Tutors/es dels grups · Surten amb els alumnes
               </div>
               {tutorsDeGrups.map(d => (
-                <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} isTutor leaveStatus={estatBaixa(d.nom)} diaSetm={diaSetm} />
+                <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} isTutor leaveStatus={estatBaixa(d.nom)} />
               ))}
             </>
           )}
@@ -1288,7 +1347,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           {especialistesSuggerits.length > 0 && (
             <>
               <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
-                Especialistes · Ordenats per afinitat amb els grups
+                Especialistes suggerits · Per afinitat amb els grups
               </div>
               {especialistesSuggerits.slice(0, 10).map(({ d, count, daySlots, leaveStatus }) => (
                 <SortidaDocentsRow
@@ -1297,18 +1356,88 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
                   onToggle={() => toggleDocent(d.nom)}
                   leaveStatus={leaveStatus}
                   hint={`${count} sessions setmanals amb ${[...grupsSeleccionats].join('+')} · ${daySlots} sl. ocupats el ${diaSetm}`}
-                  diaSetm={diaSetm}
                 />
               ))}
             </>
           )}
 
-          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Acompanyants manuals ja afegits */}
+          {docentsManualsAfegits.length > 0 && (
+            <>
+              <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--purple-bg)', borderBottom: '1px solid var(--border)' }}>
+                Acompanyants afegits manualment
+              </div>
+              {docentsManualsAfegits.map(nom => {
+                const d = docents.find(x => x.nom === nom) || { nom, rol: '', grup_principal: '' };
+                return (
+                  <SortidaDocentsRow key={nom} d={d} selected onToggle={() => toggleDocent(nom)} leaveStatus={estatBaixa(nom)} isManual />
+                );
+              })}
+            </>
+          )}
+
+          {/* Botó afegir acompanyant manual */}
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+            {!showAcompanyantPicker ? (
+              <button
+                className="btn btn-sm"
+                style={{ background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)', fontWeight: 600 }}
+                onClick={() => setShowAcompanyantPicker(true)}
+              >
+                + Afegir acompanyant per criteri personal
+              </button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--purple)' }}>Cerca un docent del centre</div>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--ink-3)', pointerEvents: 'none' }}>🔍</span>
+                  <input
+                    autoFocus
+                    className="f-ctrl"
+                    style={{ paddingLeft: 28 }}
+                    placeholder="Nom del docent..."
+                    value={acompanyantSearch}
+                    onChange={e => setAcompanyantSearch(e.target.value)}
+                  />
+                </div>
+                <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)' }}>
+                  {docentsManualsDisponibles.length === 0 && (
+                    <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--ink-3)' }}>Cap docent coincident</div>
+                  )}
+                  {docentsManualsDisponibles.map(d => {
+                    const jaAfegit = docentsAniran.has(d.nom);
+                    const ls = estatBaixa(d.nom);
+                    return (
+                      <div key={d.id}
+                        onClick={() => !jaAfegit && afegirManual(d.nom)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: jaAfegit ? 'default' : 'pointer', background: jaAfegit ? 'var(--bg-2)' : undefined, opacity: jaAfegit ? 0.5 : 1 }}
+                      >
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                          {initials(d.nom)}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 500 }}>{d.nom}</div>
+                          <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>{rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}</div>
+                        </div>
+                        {ls?.status === 'pendent' && <span style={{ fontSize: 9, color: 'var(--amber)', fontWeight: 700, flexShrink: 0 }}>⚠ Permís</span>}
+                        {jaAfegit ? <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>Ja afegit</span> : <span style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 700 }}>+</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => { setShowAcompanyantPicker(false); setAcompanyantSearch(''); }}>
+                  Tancar
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {!title.trim() && (
               <div style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600 }}>⚠ Introdueix el nom de la sortida per poder confirmar.</div>
             )}
             <button className="btn btn-primary btn-full" onClick={confirmarSortida} disabled={saving || !title.trim()}>
-              {saving ? 'Creant avisos...' : `🚌 Crear ${docentsAniran.size} avís${docentsAniran.size !== 1 ? 'os' : ''} d'absència per a la sortida`}
+              {saving ? 'Creant avisos...' : `🚌 Crear ${docentsAniran.size} avís${docentsAniran.size !== 1 ? 'os' : ''} i registrar sortida`}
             </button>
           </div>
         </div>
@@ -1317,7 +1446,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   );
 }
 
-function SortidaDocentsRow({ d, selected, onToggle, isTutor, leaveStatus, hint, diaSetm }) {
+function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStatus, hint }) {
   const isBaixa   = leaveStatus?.status === 'baixa';
   const isPendent = leaveStatus?.status === 'pendent';
   const fmtFi = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
@@ -1347,7 +1476,8 @@ function SortidaDocentsRow({ d, selected, onToggle, isTutor, leaveStatus, hint, 
       </div>
       {isBaixa   && <span className="sp sp-amber" style={{ fontSize: 9.5, flexShrink: 0 }}>🩹 De baixa</span>}
       {isPendent && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 7px', fontWeight: 700, whiteSpace: 'nowrap' }}>⚠ Permís fins {fmtFi(leaveStatus.fi)}</span>}
-      {!leaveStatus && isTutor && <span className="sp sp-blue" style={{ fontSize: 9.5, flexShrink: 0 }}>tutor/a</span>}
+      {!leaveStatus && isTutor  && <span className="sp sp-blue" style={{ fontSize: 9.5, flexShrink: 0 }}>tutor/a</span>}
+      {!leaveStatus && isManual && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--purple-bg)', color: 'var(--purple)', border: '1px solid var(--purple)', borderRadius: 20, padding: '1px 7px', fontWeight: 700 }}>personal</span>}
       <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected ? 'var(--blue)' : 'var(--border)'}`, background: selected ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .1s' }}>
         {selected && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1, fontWeight: 700 }}>✓</span>}
       </div>
