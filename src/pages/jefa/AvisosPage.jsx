@@ -515,8 +515,12 @@ export default function AvisosPage() {
         (!ie.data_inici || ie.data_inici <= absDataGen) && (!ie.data_fi || ie.data_fi >= absDataGen)
       );
       const nomsBlocats = infoExtraActivaGen.flatMap(ie => (ie.docentsBlocats || []).map(b => b.nom || b));
-      // 'directiu' i 'suport' NO exclosos: l'AI gestiona via normes qui pot cobrir realment
-      const ROLS_EXCLOSOS = new Set(['vetllador', 'educador', 'tei']);
+      // Si falta tutora SIEI/SIEI+ → PAE i vetlladors entren al pool (norma 9)
+      const absentDocent = docents.find(d => d.nom === avis.docent_nom);
+      const esSIEITutor  = ['SIEI', 'SIEI+'].includes(absentDocent?.grup_principal);
+      const ROLS_EXCLOSOS = esSIEITutor
+        ? new Set(['tei'])
+        : new Set(['vetllador', 'educador', 'tei']);
       const docentsFiltrats = docents.filter(d =>
         d.nom === avis.docent_nom || // sempre incloure l'absent per poder llegir el seu grup/horari
         (

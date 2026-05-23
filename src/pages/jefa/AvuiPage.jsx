@@ -165,7 +165,7 @@ export default function AvuiPage() {
 
       setCells(newCells);
 
-      const sieiStudents = escola?.nom?.toLowerCase().includes('rivo') ? SIEI_ALUMNES.rivo : [];
+      const sieiStudents = escola?.nom?.toLowerCase().includes('rivo') ? SIEI_ALUMNES.rivo.all : [];
       const newSieiCells = {};
       if (sieiStudents.length > 0) {
         const todayDia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][today.getDay()];
@@ -192,8 +192,9 @@ export default function AvuiPage() {
     } catch (e) { console.error('loadAvuiData:', e); }
   }
 
-  const groupSpans = useMemo(() => computeSpans(GRUPS, cells, BLOCS), [cells, isOriol]);
-  const sieiSpans  = useMemo(() => computeSpans(SIEI_ALUMNES.rivo || [], sieiCells, BLOCS), [sieiCells, isOriol]);
+  const groupSpans    = useMemo(() => computeSpans(GRUPS, cells, BLOCS), [cells, isOriol]);
+  const sieiSpans     = useMemo(() => computeSpans(SIEI_ALUMNES.rivo?.siei     || [], sieiCells, BLOCS), [sieiCells, isOriol]);
+  const sieiPlusSpans = useMemo(() => computeSpans(SIEI_ALUMNES.rivo?.sieiPlus || [], sieiCells, BLOCS), [sieiCells, isOriol]);
 
   return (
     <>
@@ -254,17 +255,30 @@ export default function AvuiPage() {
       />
 
       {escola?.nom?.toLowerCase().includes('rivo') && (
-        <GraellaCard
-          title="SIEI · Alumnes"
-          items={SIEI_ALUMNES.rivo}
-          cells={sieiCells}
-          spans={sieiSpans}
-          blocs={BLOCS}
-          franjesAct={FRANJES_ACT}
-          pendentLabel="Sense suport"
-          onPendentClick={() => setPage('javis')}
-          style={{ marginTop: 14 }}
-        />
+        <>
+          <GraellaCard
+            title="SIEI · Clara"
+            items={SIEI_ALUMNES.rivo.siei}
+            cells={sieiCells}
+            spans={sieiSpans}
+            blocs={BLOCS}
+            franjesAct={FRANJES_ACT}
+            pendentLabel="Sense suport"
+            onPendentClick={() => setPage('javis')}
+            style={{ marginTop: 14 }}
+          />
+          <GraellaCard
+            title="SIEI+ · Aurora"
+            items={SIEI_ALUMNES.rivo.sieiPlus}
+            cells={sieiCells}
+            spans={sieiPlusSpans}
+            blocs={BLOCS}
+            franjesAct={FRANJES_ACT}
+            pendentLabel="Sense suport"
+            onPendentClick={() => setPage('javis')}
+            style={{ marginTop: 10 }}
+          />
+        </>
       )}
     </>
   );

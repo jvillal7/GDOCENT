@@ -242,7 +242,11 @@ export const MOTIUS_ABSENCIA = [
 ];
 
 export const SIEI_ALUMNES = {
-  rivo: ['THEO','SEBAS','TYLER','POL','AARON','MOHAMED','CLAUDIA','MAXIM','MIRANDA','ADAM'],
+  rivo: {
+    siei:     ['THEO', 'TYLER', 'POL', 'MOHAMED', 'MIRANDA', 'ADAM'],
+    sieiPlus: ['SEBAS', 'AARON', 'CLAUDIA', 'MAXIM'],
+    all:      ['THEO', 'TYLER', 'POL', 'MOHAMED', 'MIRANDA', 'ADAM', 'SEBAS', 'AARON', 'CLAUDIA', 'MAXIM'],
+  },
 };
 
 // ── CA N'ORIOL — horari específic ──────────────────────────────────────────
