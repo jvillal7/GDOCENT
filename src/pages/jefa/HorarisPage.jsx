@@ -103,7 +103,6 @@ export default function HorarisPage() {
   const [configIntensiva, setConfigIntensiva] = useState(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [intensiuMode, setIntensiuMode] = useState(new Set());
-  const [showBaixes,  setShowBaixes]  = useState(false);
   const [baixes,      setBaixes]      = useState([]);
   const [baixesLoaded, setBaixesLoaded] = useState(false);
   const [baixesSaving, setBaixesSaving] = useState(false);
@@ -133,8 +132,10 @@ export default function HorarisPage() {
     if (baixesLoaded) return;
     try {
       const res = await api.getBaixes();
-      setBaixes(res?.[0]?.oriol_baixes || []);
+      const list = res?.[0]?.oriol_baixes || [];
+      setBaixes(list);
       setBaixesLoaded(true);
+      if (list.length) loadBaixaCobStats(list);
     } catch { setBaixes([]); setBaixesLoaded(true); }
   }
 
@@ -455,14 +456,14 @@ export default function HorarisPage() {
           { key: 'sortides',  icon: '🚌', title: 'Sortides',            desc: 'Gestiona sortides escolars' },
           { key: 'baixes',    icon: '🩹', title: 'Baixes',              desc: baixes.filter(b => b.estat !== 'tancada').length ? `${baixes.filter(b => b.estat !== 'tancada').length} actives` : 'Cap baixa activa' },
         ].map(c => {
-          const isActive = c.key === 'baixes' ? showBaixes : viewMode === c.key;
+          const isActive = viewMode === c.key;
           const isAmber  = c.key === 'baixes';
           return (
             <button
               key={c.key}
               onClick={() => {
-                if (c.key === 'baixes') { setShowBaixes(o => !o); if (!baixesLoaded) loadBaixes(); }
-                else { setViewMode(c.key); }
+                setViewMode(c.key);
+                if (c.key === 'baixes' && !baixesLoaded) loadBaixes();
               }}
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
@@ -510,11 +511,8 @@ export default function HorarisPage() {
           showToast={showToast}
         />
       )}
-      {viewMode !== 'grups' && viewMode !== 'intensiva' && viewMode !== 'sortides' && (<>
-
-      {showBaixes && (
+      {viewMode === 'baixes' && (
         <div className="card" style={{ marginBottom: 14 }}>
-          {/* Capçalera */}
           <div className="card-head">
             <h3>🩹 Baixes amb substitucions</h3>
             <span className="sp sp-amber">{baixes.filter(b => b.estat !== 'tancada').length} actives</span>
@@ -668,6 +666,8 @@ export default function HorarisPage() {
           </>)}
         </div>
       )}
+
+      {viewMode !== 'grups' && viewMode !== 'intensiva' && viewMode !== 'sortides' && viewMode !== 'baixes' && (<>
 
       <div className="alert alert-blue">
         ℹ️ Puja el PDF o una foto (PNG, JPG) de l'horari de cada docent. La IA llegirà l'horari automàticament.
