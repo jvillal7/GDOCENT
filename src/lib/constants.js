@@ -43,6 +43,29 @@ export const MAP_NORMAL_TO_INTENSIVA = {
   // f4/f5a/f5b/f5c → no inclosos a l'horari intensiu
 };
 
+// Franges intensiva Ca N'Oriol (horari 9:30–13:00, slots de 15 min)
+export const FRANJES_INTENSIVA_ORIOL = [
+  { id: 'io1a', label: '1a hora', sub: '9:30–9:45',   hora: '1a hora', min: 15 },
+  { id: 'io1b', label: '1a hora', sub: '9:45–10:00',  hora: '1a hora', min: 15 },
+  { id: 'io1c', label: '1a hora', sub: '10:00–10:15', hora: '1a hora', min: 15 },
+  { id: 'io1d', label: '1a hora', sub: '10:15–10:30', hora: '1a hora', min: 15 },
+  { id: 'io2a', label: '2a hora', sub: '10:30–10:45', hora: '2a hora', min: 15 },
+  { id: 'io2b', label: '2a hora', sub: '10:45–11:00', hora: '2a hora', min: 15 },
+  { id: 'ioPA', label: 'Pati',    sub: '11:00–12:00', hora: 'Pati',    min: 60, patio: true },
+  { id: 'io3a', label: '3a hora', sub: '12:00–12:15', hora: '3a hora', min: 15 },
+  { id: 'io3b', label: '3a hora', sub: '12:15–12:30', hora: '3a hora', min: 15 },
+  { id: 'io3c', label: '3a hora', sub: '12:30–12:45', hora: '3a hora', min: 15 },
+  { id: 'io3d', label: '3a hora', sub: '12:45–13:00', hora: '3a hora', min: 15 },
+];
+
+export const MAP_ORIOL_TO_INTENSIVA = {
+  o1a: ['io1a', 'io1b'], o1b: ['io1c', 'io1d'],
+  o2a: ['io2a', 'io2b'],
+  o3a: ['io3a', 'io3b'], o3b: ['io3c', 'io3d'],
+  // opatiA+opatiB → ioPA gestionat per separat
+  // o4/o5x → no inclosos a l'horari intensiu
+};
+
 // Franges que poden tenir absències (sense Dinar)
 export const SCHOOL_FRANJES = FRANJES.filter(f => !f.lliure);
 

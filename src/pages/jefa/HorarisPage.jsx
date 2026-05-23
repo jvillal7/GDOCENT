@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, DIES, GRUPS_ORIOL, COORDINADORS_CICLE } from '../../lib/constants';
+import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, FRANJES_INTENSIVA_ORIOL, MAP_ORIOL_TO_INTENSIVA, DIES, GRUPS_ORIOL, COORDINADORS_CICLE } from '../../lib/constants';
 import { initials, oriolInitials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF, generarHorarisIntensius } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
@@ -84,6 +84,22 @@ function convertTo15Min(horari30) {
       for (const f15 of f15s) result[dia][f15] = val;
     }
     result[dia]['iPA'] = src['patiA'] || src['patiB'] || '';
+  }
+  return result;
+}
+
+function convertOriolTo15Min(horari30) {
+  const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+  const result = {};
+  for (const dia of DIES_ALL) {
+    result[dia] = {};
+    const src = horari30[dia] || {};
+    FRANJES_INTENSIVA_ORIOL.forEach(f => { result[dia][f.id] = ''; });
+    for (const [fo, f15s] of Object.entries(MAP_ORIOL_TO_INTENSIVA)) {
+      const val = src[fo] || '';
+      for (const f15 of f15s) result[dia][f15] = val;
+    }
+    result[dia]['ioPA'] = src['opatiA'] || src['opatiB'] || '';
   }
   return result;
 }
@@ -874,9 +890,8 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
             Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
           });
         }
-        // Oriol usa franges pròpies (o1a, o1b…): no convertir a 15 min
         const isOriolFranjes = franjes.some(f => f.id.startsWith('o'));
-        map[d.id] = isOriolFranjes ? base : convertTo15Min(base);
+        map[d.id] = isOriolFranjes ? convertOriolTo15Min(base) : convertTo15Min(base);
         const tpSlots = [];
         for (const dia of DIES_ALL) {
           for (const fid of tardesIds) {
@@ -915,9 +930,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
 
   if (editingMap) {
     const isOriolFranjes = franjes.some(f => f.id.startsWith('o'));
-    const editFranjes = isOriolFranjes
-      ? franjes.filter(f => !f.lliure)   // Oriol: franges normals sense Dinar
-      : FRANJES_INTENSIVA;               // Rivo: franges de 15 min
+    const editFranjes = isOriolFranjes ? FRANJES_INTENSIVA_ORIOL : FRANJES_INTENSIVA;
     return (
       <EditingIntensivaView
         docents={docents.filter(d => editingMap[d.id] !== undefined)}
