@@ -517,15 +517,19 @@ export default function HorarisPage() {
           {/* Capçalera */}
           <div className="card-head">
             <h3>🩹 Baixes amb substitucions</h3>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {baixaForm !== 'new' && (
-                <button className="btn btn-sm" style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 12, fontWeight: 600 }} onClick={() => openBaixaForm('new')}>
-                  + Nova baixa
-                </button>
-              )}
-              <span className="sp sp-amber">{baixes.filter(b => b.estat !== 'tancada').length} actives</span>
-            </div>
+            <span className="sp sp-amber">{baixes.filter(b => b.estat !== 'tancada').length} actives</span>
           </div>
+          {baixaForm !== 'new' && (
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+              <button
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 16px', background: 'var(--green-bg)', color: 'var(--green)', border: '1.5px dashed var(--green)', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700 }}
+                onClick={() => openBaixaForm('new')}
+              >
+                <span style={{ fontSize: 20, lineHeight: 1 }}>＋</span>
+                <span>Nova baixa amb substitució</span>
+              </button>
+            </div>
+          )}
 
           <div style={{ fontSize: 12, color: 'var(--blue)', background: 'var(--blue-bg)', padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
             ℹ️ La IA llegeix aquesta llista. El substitut farà l'horari i les cobertures del docent de baixa.
@@ -673,18 +677,21 @@ export default function HorarisPage() {
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="card-head">
             <h3>✅ Docents carregats</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="sp sp-green">{docents.length} docents</span>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <span style={{ position: 'absolute', left: 7, fontSize: 12, color: 'var(--ink-3)', pointerEvents: 'none', userSelect: 'none' }}>🔍</span>
-                <input
-                  type="search"
-                  placeholder="Cercar..."
-                  value={searchDocent}
-                  onChange={e => setSearchDocent(e.target.value)}
-                  style={{ paddingLeft: 26, paddingRight: 8, height: 28, border: '1.5px solid var(--border)', borderRadius: 20, background: 'var(--bg)', fontFamily: 'inherit', fontSize: 12, width: 110, outline: 'none', color: 'var(--ink)' }}
-                />
-              </div>
+            <span className="sp sp-green">{docents.length} docents</span>
+          </div>
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{ position: 'absolute', left: 11, fontSize: 15, color: 'var(--ink-3)', pointerEvents: 'none', userSelect: 'none' }}>🔍</span>
+              <input
+                type="search"
+                placeholder="Cercar docent per nom..."
+                value={searchDocent}
+                onChange={e => setSearchDocent(e.target.value)}
+                style={{ paddingLeft: 34, paddingRight: 12, height: 36, border: '1.5px solid var(--border-2)', borderRadius: 20, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 13.5, width: '100%', outline: 'none', color: 'var(--ink)', boxSizing: 'border-box' }}
+              />
+              {searchDocent && (
+                <button onClick={() => setSearchDocent('')} style={{ position: 'absolute', right: 10, border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--ink-3)', lineHeight: 1, padding: 2 }}>✕</button>
+              )}
             </div>
           </div>
           {NIVELLS.map(n => {
