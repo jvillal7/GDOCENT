@@ -874,7 +874,9 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
             Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
           });
         }
-        map[d.id] = convertTo15Min(base);
+        // Oriol usa franges pròpies (o1a, o1b…): no convertir a 15 min
+        const isOriolFranjes = franjes.some(f => f.id.startsWith('o'));
+        map[d.id] = isOriolFranjes ? base : convertTo15Min(base);
         const tpSlots = [];
         for (const dia of DIES_ALL) {
           for (const fid of tardesIds) {
@@ -912,13 +914,17 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   const docentAmbIntensiu = docents.filter(d => d.horari_intensiu).length;
 
   if (editingMap) {
+    const isOriolFranjes = franjes.some(f => f.id.startsWith('o'));
+    const editFranjes = isOriolFranjes
+      ? franjes.filter(f => !f.lliure)   // Oriol: franges normals sense Dinar
+      : FRANJES_INTENSIVA;               // Rivo: franges de 15 min
     return (
       <EditingIntensivaView
         docents={docents.filter(d => editingMap[d.id] !== undefined)}
         editingMap={editingMap}
         tpPendents={tpPendents}
         resumGeneracio={resumGeneracio}
-        franjes={FRANJES_INTENSIVA}
+        franjes={editFranjes}
         onCellEdit={(id, dia, fid, val) => setEditingMap(prev => ({
           ...prev,
           [id]: { ...prev[id], [dia]: { ...(prev[id][dia] || {}), [fid]: val } },
