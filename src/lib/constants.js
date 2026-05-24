@@ -148,6 +148,12 @@ export const MANAGEMENT_USERS = {
     { id: 'm_sec_oriol',  nom: 'Agnès',           rol: 'secretaria', grup_principal: 'Secretaria',           pin: '1234' },
     { id: 'm_dev_oriol',  nom: 'Administrador',   rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
   ],
+  demo: [
+    { id: 'm_dir_demo',  nom: 'Xavier Tort',     rol: 'director',   grup_principal: 'Director',             pin: '1234' },
+    { id: 'm_jefa_demo', nom: 'Laura Mas',        rol: 'jefa',       grup_principal: "Cap d'Estudis",        pin: '1234' },
+    { id: 'm_sec_demo',  nom: 'Montse Bosch',     rol: 'secretaria', grup_principal: 'Secretaria',           pin: '1234' },
+    { id: 'm_dev_demo',  nom: 'Administrador',    rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
+  ],
 };
 
 export const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
