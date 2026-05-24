@@ -66,12 +66,14 @@ export async function callClaude(messages, maxTokens = 1000, retries = 2) {
   }
 }
 
-export async function callClaudeRaw(messages, maxTokens = 1500, onChunk = null) {
+export async function callClaudeRaw(messages, maxTokens = 1500, onChunk = null, system = null) {
   const streaming = typeof onChunk === 'function';
+  const payload = { model: MODEL, max_tokens: maxTokens, messages, stream: streaming };
+  if (system) payload.system = system;
   const res = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Auth-Token': WORKER_AUTH_TOKEN },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages, stream: streaming }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error('Error al Worker: ' + res.status);
 

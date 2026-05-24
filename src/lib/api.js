@@ -93,6 +93,18 @@ export async function uploadFitxer(file, absenciaId) {
   };
 }
 
+export async function notifyCobertura({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }) {
+  if (!escola_id || !cobridors?.length) return;
+  try {
+    const res = await fetch(`${SUPA_URL}/functions/v1/coverage-notifier`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` },
+      body: JSON.stringify({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }),
+    });
+    if (!res.ok) console.error('[notifyCobertura]', await res.text().catch(() => res.status));
+  } catch (e) { console.error('[notifyCobertura]', e?.message || e); }
+}
+
 // Returns all API methods scoped to a school
 export function makeApi(escolaId) {
   const f = (path, opts) => supaFetch(path, opts, escolaId);

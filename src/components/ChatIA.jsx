@@ -2,6 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { xatIA, logChat } from '../lib/claude';
 import Spinner from './Spinner';
 
+const LOADING_MSGS = [
+  "📅 Llegint l'horari del dia...",
+  "⚖️ Comprovant deutes de TP...",
+  "🔍 Buscant la millor opció...",
+  "📋 Preparant la proposta...",
+  "✍️ Últims detalls...",
+];
+
 function parsePropostaFromText(text) {
   const m = /<proposta>([\s\S]*?)<\/proposta>/i.exec(text);
   if (!m) return null;
@@ -78,17 +86,24 @@ function MessageBubble({ msg, onAplicar, messages }) {
   );
 }
 
-export default function ChatIA({ systemContext, greeting, onAplicarProposta, onClose, initialMessage, escolaId, absenciaId, docentAbsent, dataAbsencia }) {
+export default function ChatIA({ systemContext, greeting, onAplicarProposta, onClose, onMinimize, initialMessage, escolaId, absenciaId, docentAbsent, dataAbsencia }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: greeting, _local: true },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const sentInitial = useRef(false);
   const sessioId = useRef(crypto.randomUUID());
   const lastErrorRef = useRef(null);
+
+  useEffect(() => {
+    if (!loading) { setLoadingMsgIdx(0); return; }
+    const timer = setInterval(() => setLoadingMsgIdx(i => (i + 1) % LOADING_MSGS.length), 4000);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -207,15 +222,27 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
         boxShadow: '-4px 0 32px rgba(0,0,0,.22)',
       }}>
         {/* Header */}
-        <div style={{
-          padding: '13px 16px', borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
-        }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(to right, #7c3aed, #2563eb)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>💬 Horaria</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>Assistent expert en cobertures</div>
+        <div style={{ flexShrink: 0 }}>
+          <div style={{
+            padding: '13px 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(to right, #7c3aed, #2563eb)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>💬 Horaria</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>Assistent expert en cobertures</div>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {onMinimize && (
+                <button className="btn btn-ghost btn-sm" onClick={onMinimize} style={{ fontSize: 16, padding: '4px 10px' }} title="Minimitzar">−</button>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={() => { guardarLog(messages, 'abandonada'); onClose(); }} style={{ fontSize: 16, padding: '4px 10px' }}>✕</button>
+            </div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => { guardarLog(messages, 'abandonada'); onClose(); }} style={{ fontSize: 16, padding: '4px 10px' }}>✕</button>
+          {/* Barra de progrés indeterminada mentre carrega */}
+          <div style={{ height: 3, background: 'var(--border)', overflow: 'hidden', opacity: loading ? 1 : 0, transition: 'opacity .3s' }}>
+            <div style={{ height: '100%', width: '25%', background: 'linear-gradient(90deg,#7c3aed,#2563eb)', borderRadius: 2, animation: 'horaria-progress 1.6s ease-in-out infinite' }} />
+          </div>
+          <div style={{ height: '1px', background: 'var(--border)', opacity: loading ? 0 : 1, transition: 'opacity .3s' }} />
         </div>
 
         {/* Messages */}
@@ -227,10 +254,12 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>
               <div style={{
                 background: 'var(--bg-2)', borderRadius: '14px 14px 14px 4px',
-                padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, minWidth: 220,
               }}>
                 <Spinner size={14} />
-                <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Pensant...</span>
+                <span style={{ fontSize: 12, color: 'var(--ink-3)', animation: 'horaria-pulse .8s ease-in-out infinite' }}>
+                  {LOADING_MSGS[loadingMsgIdx]}
+                </span>
               </div>
             </div>
           )}

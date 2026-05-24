@@ -1,5 +1,6 @@
 import { FRANJES, FRANJES_ORIOL } from './constants';
 import { callClaudeRaw } from './claude-api';
+import { notifyCobertura } from './api';
 
 export function construirContextXat(escola, docents, normes, isOriol, absenciaContext = null, docentsBlocats = [], baixes = [], decisionsPassades = [], contextIA = '', frangesIA = null) {
   const FRANJES_ACT = frangesIA || (isOriol ? FRANJES_ORIOL : FRANJES);
@@ -9,8 +10,10 @@ export function construirContextXat(escola, docents, normes, isOriol, absenciaCo
   const normesTxt   = (normes || '').trim() || 'No hi ha normes específiques definides.';
   const franjesList = FRANJES_ACT.filter(f => !f.lliure);
 
+  // Opció A: si tenim el dia de l'absència, mostrem només aquell dia (~80% menys tokens)
+  const diesAMostrar = absenciaContext?.dia ? [absenciaContext.dia] : dies;
   const horarisDesc = docents.map(d => {
-    const diesTxt = dies.map(dia => {
+    const diesTxt = diesAMostrar.map(dia => {
       const h = d.horari?.[dia];
       if (!h) return `  ${diesShort[dia]}: (sense horari)`;
       const vals = franjesList.map(f => `${f.id}=${h[f.id] || '_'}`).join(' | ');
@@ -149,10 +152,94 @@ export async function proposarCoberturaViaChat(absent, frangesIds, docents, norm
 }
 
 export async function xatIA(systemContext, conversationMessages, maxTokens = 1500, onChunk = null) {
-  const messages = [
-    { role: 'user',      content: systemContext },
-    { role: 'assistant', content: 'Entès. Conec tots els horaris i normes del centre. Com et puc ajudar?' },
-    ...conversationMessages,
-  ];
-  return callClaudeRaw(messages, maxTokens, onChunk);
+  const system = [{ type: 'text', text: systemContext, cache_control: { type: 'ephemeral' } }];
+  return callClaudeRaw(conversationMessages, maxTokens, onChunk, system);
+}
+
+// Funció autònoma: aplica una proposta del chat HORARIA independentment de quina pàgina és activa
+export async function aplicarPropostaChat(avis, proposta, chatMsgs, { api, escola, docents, iaDecisions, showToast }) {
+  const propostaArr = Array.isArray(proposta) ? proposta : (proposta ? [proposta] : []);
+  const avui = new Date().toISOString().split('T')[0];
+  const absData = avis.data || avui;
+  const esFutura = absData > avui;
+
+  // 1. Esborrar cobertures anteriors + deutes TP associats
+  const cobsExistents = await api.getCoberturesByAbsencia(avis.id).catch(() => []);
+  if (cobsExistents?.length) {
+    const cobsAmbTP = cobsExistents.filter(c => c.tp_afectat);
+    await Promise.all(cobsAmbTP.map(c =>
+      api.deleteDeutesTPCobertura(c.docent_cobrint_nom, absData, avis.docent_nom).catch(() => {})
+    ));
+    await api.deleteCobertures(avis.id);
+  }
+
+  const absentDocent = docents.find(d => d.nom === avis.docent_nom);
+  const grupDestí = absentDocent?.grup_principal || '';
+
+  // 2. Guardar noves cobertures + deutes TP
+  for (const p of propostaArr) {
+    const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
+    for (const fid of frangesACobrir) {
+      await api.saveCobertura({
+        escola_id:          escola.id,
+        absencia_id:        avis.id,
+        docent_cobrint_nom: p.docent,
+        franja:             fid,
+        docent_absent_nom:  avis.docent_nom,
+        grup:               grupDestí,
+        data:               absData,
+        tp_afectat:         p.tp_afectat || false,
+        motiu:              p.motiu || '',
+      });
+    }
+    if (p.tp_afectat && !esFutura) {
+      await api.saveDeuteTP({
+        escola_id:  escola.id,
+        docent_nom: p.docent,
+        data_deute: absData,
+        motiu:      `Cobertura ${p.hores || p.franja} (${avis.docent_nom})`,
+        retornat:   false,
+        minuts:     (p.franges_ids?.length || 1) * 30,
+      });
+    }
+  }
+
+  // 3. Actualitzar estat absència
+  await api.patchAbsencia(avis.id, { estat: esFutura ? 'provisional' : 'resolt' });
+
+  // 4. Guardar decisió aprovada per a aprenentatge futur (max 30)
+  if (!esFutura) {
+    const dateObj = absData ? new Date(absData + 'T12:00:00') : null;
+    const diaDecisio = dateObj
+      ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][dateObj.getDay()]
+      : null;
+    const correccions = (chatMsgs || [])
+      .filter(m => m.role === 'user' && !m._local).slice(1)
+      .map(m => m.content).join(' | ') || null;
+    const novaLlista = [
+      { absent: avis.docent_nom, dia: diaDecisio, data: absData, proposta: propostaArr, correccions, creat_el: new Date().toISOString() },
+      ...(iaDecisions || []),
+    ].slice(0, 30);
+    api.saveIaDecisions(novaLlista).catch(() => {});
+  }
+
+  // 5. Toast de confirmació
+  showToast(esFutura ? '📅 Cobertura provisional guardada' : '✓ Cobertura confirmada');
+
+  // 6. Notificació per correu (fire-and-forget)
+  notifyCobertura({
+    escola_id:    escola.id,
+    absent_nom:   avis.docent_nom,
+    absent_notes: avis.notes,
+    cobridors: propostaArr.map(p => ({
+      nom:        p.docent,
+      email:      docents.find(d => d.nom === p.docent)?.email || null,
+      franges_ids: p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean),
+      grup:       grupDestí,
+    })),
+    data:      absData,
+    is_futura: esFutura,
+  });
+
+  return { esFutura, grupDestí };
 }

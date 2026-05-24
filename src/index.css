@@ -170,6 +170,8 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--i
 .sd-item:hover .icon-anim-write{animation:anim-write .7s ease}
 @keyframes anim-pulse{0%,100%{transform:scale(1)}14%{transform:scale(1.3)}28%{transform:scale(1)}42%{transform:scale(1.2)}70%{transform:scale(1)}}
 @keyframes anim-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes horaria-progress{0%{transform:translateX(-150%)}100%{transform:translateX(500%)}}
+@keyframes horaria-pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .sd-item:hover .icon-anim-pulse{animation:anim-pulse .7s ease}
 .sd-item:hover .icon-anim-spin{animation:anim-spin .6s linear infinite}
 .sd-item:hover .icon-anim-bell{animation:anim-bell .75s ease}

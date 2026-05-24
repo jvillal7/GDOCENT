@@ -46,6 +46,7 @@ export function AppProvider({ children }) {
   const [contextIA,  setContextIA]  = useState('');
   const [frangesIA,  setFrangesIA]  = useState(null);
   const [toast, setToast]     = useState(null);
+  const [chatConfig, setChatConfig] = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('gd_dark') === 'true';
     document.documentElement.setAttribute('data-theme', saved ? 'dark' : 'light');
@@ -96,10 +97,18 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast(t => t?.id === id ? null : t), 3000);
   }, []);
 
+  const openChat    = useCallback((cfg) => setChatConfig({ ...cfg, isMinimized: false }), []);
+  const closeChat   = useCallback(() => setChatConfig(null), []);
+  const minimizeChat = useCallback(() => setChatConfig(c => c ? { ...c, isMinimized: true } : null), []);
+  const maximizeChat = useCallback(() => setChatConfig(c => c ? { ...c, isMinimized: false } : null), []);
+
   const value = useMemo(() => ({
     perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
+    chatConfig,
     setPage, setDocents, setNormes, setContextIA, setEscola, login, logout, showToast, toggleDark,
-  }), [perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode, login, logout, showToast, toggleDark]);
+    openChat, closeChat, minimizeChat, maximizeChat,
+  }), [perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
+       chatConfig, login, logout, showToast, toggleDark, openChat, closeChat, minimizeChat, maximizeChat]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
