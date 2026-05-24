@@ -15,6 +15,7 @@ import OriolAbsentsPage  from './jefa/oriol/OriolAbsentsPage';
 import OriolReunionsPage from './jefa/oriol/OriolReunionsPage';
 import OriolCeepsirPage  from './jefa/oriol/OriolCeepsirPage';
 import OriolBaixesPage   from './jefa/oriol/OriolBaixesPage';
+import OriolPDFPage      from './jefa/oriol/OriolPDFPage';
 
 const PAGES = {
   jd: AvuiPage,   javis: AvisosPage,  jtp: TPPage,
@@ -22,10 +23,11 @@ const PAGES = {
   ta: AvisarPage, tc: CoberturasPage, tt: MeuTPPage,
   di: HistorialPage, df: InformesPage, dv: AdminPage, dv_context: ContextIAPage,
   oj_abs: OriolAbsentsPage, oj_reu: OriolReunionsPage,
-  oj_cee: OriolCeepsirPage, oj_bai: OriolBaixesPage,
+  oj_cee: OriolCeepsirPage,
+  oj_pdf: OriolPDFPage,
 };
 
-const JEFA_PAGES = new Set(['jd','javis','jtp','jh','jhoraris','oj_abs','oj_reu','oj_cee','oj_bai']);
+const JEFA_PAGES = new Set(['jd','javis','jtp','jh','jhoraris','oj_abs','oj_reu','oj_cee','oj_pdf']);
 
 export default function PageRouter() {
   const { page, role } = useApp();

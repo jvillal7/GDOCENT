@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, APP_URL, MOTIUS_ABSENCIA, SUPA_URL, SUPA_KEY } from '../../lib/constants';
-import { proposarCobertura, analitzarInfoExtra, construirContextXat } from '../../lib/claude';
+import { proposarCobertura, analitzarInfoExtra, classificarDiariOriol, construirContextXat } from '../../lib/claude';
 import { parseFranges, escHtml, frangesHorari, normGrup } from '../../lib/utils';
 
 async function notifyCobertura({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }) {
@@ -356,10 +356,43 @@ export default function AvisosPage() {
       setShowInfoPanel(false);
       setInfoNotes('');
       setInfoFitxer(null);
-      // Detectar si algun docent blocat té classes descobertes
+
+      // Detectar si algun docent blocat té classes descobertes (tots els centres)
       const descoberts = detectarClassesDescobertes(result);
       if (descoberts.length > 0) setAvisosDescoberts(descoberts);
-      else showToast('✓ Informació extra guardada');
+
+      // Per Ca N'Oriol: classificar la info als apartats del diari
+      if (isOriol && infoNotes.trim()) {
+        try {
+          const cls = await classificarDiariOriol(infoNotes);
+          const avuiStr = new Date().toISOString().split('T')[0];
+          const diariRes = await api.getOriolDiari();
+          const diari = diariRes?.[0] || {};
+          const merge = (existing, newText) => {
+            if (!newText) return undefined;
+            const curr = existing?.data === avuiStr ? (existing.text || '') : '';
+            return { text: curr ? curr + '\n' + newText : newText, data: avuiStr };
+          };
+          const patch = {};
+          const mA = merge(diari.oriol_absents,  cls.absents);
+          const mR = merge(diari.oriol_reunions, cls.reunions);
+          const mC = merge(diari.oriol_ceepsir,  cls.ceepsir);
+          if (mA) patch.oriol_absents  = mA;
+          if (mR) patch.oriol_reunions = mR;
+          if (mC) patch.oriol_ceepsir  = mC;
+          if (Object.keys(patch).length) {
+            await api.saveOriolDiariClassificacio(patch);
+            const secs = [mA && 'Absents', mR && 'Reunions', mC && 'CEEPSIR'].filter(Boolean).join(', ');
+            if (!descoberts.length) showToast(`✓ Info classificada → ${secs}`);
+          } else if (!descoberts.length) {
+            showToast('✓ Informació extra guardada');
+          }
+        } catch {
+          if (!descoberts.length) showToast('✓ Informació extra guardada');
+        }
+      } else if (!descoberts.length) {
+        showToast('✓ Informació extra guardada');
+      }
     } catch (e) {
       showToast('Error analitzant: ' + e.message);
     } finally {

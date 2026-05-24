@@ -84,7 +84,7 @@ export const NAV_CFG = {
       { id: 'oj_abs', icon: '👤', label: "Persones que s'absenten", anim: 'bob' },
       { id: 'oj_reu', icon: '📝', label: 'Reunions i organització',  anim: 'write' },
       { id: 'oj_cee', icon: '🏥', label: 'Actuacions CEEPSIR',       anim: 'pulse' },
-      { id: 'oj_bai', icon: '📋', label: 'Baixes amb substitucions', anim: 'flip' },
+      { id: 'oj_pdf', icon: '📄', label: 'Generar PDF diari',       anim: 'pulse' },
     ]},
   ],
   teacher: [
@@ -129,7 +129,8 @@ export const PAGE_TITLES = {
   ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP',
   di: 'Historial', df: 'Informes', dv: 'Normes IA', dv_context: 'Context IA',
   oj_abs: "Persones que s'absenten", oj_reu: 'Reunions i organització',
-  oj_cee: 'Actuacions CEEPSIR',      oj_bai: 'Baixes amb substitucions',
+  oj_cee: 'Actuacions CEEPSIR',
+  oj_pdf: 'Generar PDF diari',
 };
 
 export const AVATAR_COLORS = ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#A142F4', '#24C1E0'];

@@ -122,6 +122,25 @@ export async function proposarCoberturaCella(grup, hora, fid, temps, docents, no
   return callClaude([{ role: 'user', content: prompt }], 500);
 }
 
+export async function classificarDiariOriol(notes) {
+  const avui = new Date().toISOString().split('T')[0];
+  const prompt = `Ets l'assistent de la cap d'estudis de l'EE Ca n'Oriol (centre d'educació especial). Avui és ${avui}.
+
+La cap ha escrit:
+"${notes.trim()}"
+
+Classifica la informació en tres seccions del document diari "Modificacions Horàries".
+
+ABSENTS — Docents o personal que no és al centre avui (permisos, baixes, reunions que els fan sortir). Format per línia: "Nom (motiu)"
+REUNIONS — Reunions al centre i aspectes organitzatius. Format per línia: "HHh: descripció (participants si escau)" o "descripció"
+CEEPSIR — Actuacions de suport extern a altres centres (coordinacions, tancaments, reunions CEEPSIR). Format per línia: "HHh a HHh: activitat (persona)"
+
+Si una secció no té informació rellevant retorna null per aquell camp.
+Respon ÚNICAMENT JSON sense text addicional:
+{"absents":"text multilínia o null","reunions":"text multilínia o null","ceepsir":"text multilínia o null"}`;
+  return callClaude([{ role: 'user', content: prompt }], 600);
+}
+
 export async function analitzarInfoExtra(notes, base64Pdf, nomsDocents = []) {
   const content = [];
   if (base64Pdf) {
