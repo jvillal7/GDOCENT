@@ -1,13 +1,5 @@
 import { WORKER_URL, WORKER_AUTH_TOKEN, SUPA_URL, SUPA_KEY } from './constants';
 
-const DB_URL = `${SUPA_URL}/functions/v1/db`;
-const DB_HEADERS = () => ({
-  'Content-Type': 'application/json',
-  'apikey': SUPA_KEY,
-  'Authorization': `Bearer ${SUPA_KEY}`,
-  'x-auth-token': WORKER_AUTH_TOKEN,
-});
-
 export const MODEL = 'claude-sonnet-4-6';
 
 // Extreu i parseja el primer objecte JSON vàlid de la resposta del model.
@@ -92,10 +84,15 @@ export async function callClaudeRaw(messages, maxTokens = 2000) {
 // Fire-and-forget — no bloqueja mai el flux principal
 export async function logIA(entry) {
   try {
-    await fetch(DB_URL, {
+    await fetch(`${SUPA_URL}/rest/v1/ia_logs`, {
       method: 'POST',
-      headers: DB_HEADERS(),
-      body: JSON.stringify({ path: 'ia_logs', method: 'POST', body: JSON.stringify(entry), prefer: 'return=minimal' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(entry),
     });
   } catch { /* silencioso */ }
 }
@@ -103,10 +100,15 @@ export async function logIA(entry) {
 // Registra una conversa de xat (fire-and-forget)
 export async function logChat(entry) {
   try {
-    await fetch(DB_URL, {
+    await fetch(`${SUPA_URL}/rest/v1/chat_logs`, {
       method: 'POST',
-      headers: DB_HEADERS(),
-      body: JSON.stringify({ path: 'chat_logs', method: 'POST', body: JSON.stringify(entry), prefer: 'return=minimal' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(entry),
     });
   } catch { /* silencioso */ }
 }

@@ -148,7 +148,7 @@ export async function proposarCoberturaViaChat(absent, frangesIds, docents, norm
   return { proposta, resum };
 }
 
-export async function xatIA(systemContext, conversationMessages, maxTokens = 3500) {
+export async function xatIA(systemContext, conversationMessages, maxTokens = 1500) {
   const messages = [
     { role: 'user',      content: systemContext },
     { role: 'assistant', content: 'Entès. Conec tots els horaris i normes del centre. Com et puc ajudar?' },

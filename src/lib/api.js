@@ -1,12 +1,4 @@
-import { SUPA_URL, SUPA_KEY, WORKER_AUTH_TOKEN } from './constants';
-
-const DB_URL = `${SUPA_URL}/functions/v1/db`;
-const DB_HEADERS = () => ({
-  'Content-Type': 'application/json',
-  'apikey': SUPA_KEY,
-  'Authorization': `Bearer ${SUPA_KEY}`,
-  'x-auth-token': WORKER_AUTH_TOKEN,
-});
+import { SUPA_URL, SUPA_KEY } from './constants';
 
 const _cache = new Map();
 const CACHE_TTL = 120_000;
@@ -53,17 +45,17 @@ export async function supaFetch(path, opts = {}, escolaId = null) {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), 10000);
   try {
-    const res = await fetch(DB_URL, {
-      method: 'POST',
+    const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+      method: opts.method || 'GET',
       signal: ctrl.signal,
-      headers: DB_HEADERS(),
-      body: JSON.stringify({
-        path,
-        method: opts.method || 'GET',
-        body: opts.body,
-        prefer: opts.prefer,
-        headers: opts.headers || {},
-      }),
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPA_KEY,
+        Authorization: `Bearer ${SUPA_KEY}`,
+        Prefer: opts.prefer || 'return=representation',
+        ...opts.headers,
+      },
+      body: opts.body,
     });
     clearTimeout(tid);
     if (!res.ok) throw new Error(`Supabase Error (${res.status}): ${await res.text()}`);
