@@ -101,12 +101,28 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
     const initMsgs = [
       { role: 'assistant', content: greeting, _local: true },
       { role: 'user', content: initialMessage },
+      { role: 'assistant', content: '', _streaming: true },
     ];
     setMessages(initMsgs);
     setLoading(true);
-    xatIA(systemContext, [{ role: 'user', content: initialMessage }])
-      .then(response => setMessages(prev => [...prev, { role: 'assistant', content: response }]))
-      .catch(e => setMessages(prev => [...prev, { role: 'assistant', content: `❌ Error: ${e.message}` }]))
+    xatIA(systemContext, [{ role: 'user', content: initialMessage }], 1500, (partial) => {
+      setLoading(false);
+      setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: 'assistant', content: partial, _streaming: true };
+        return next;
+      });
+    })
+      .then(response => setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: 'assistant', content: response };
+        return next;
+      }))
+      .catch(e => setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: 'assistant', content: `❌ Error: ${e.message}` };
+        return next;
+      }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -139,17 +155,33 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
     const userMsg = input.trim();
     setInput('');
     const newMessages = [...messages, { role: 'user', content: userMsg }];
-    setMessages(newMessages);
+    const withPlaceholder = [...newMessages, { role: 'assistant', content: '', _streaming: true }];
+    setMessages(withPlaceholder);
     setLoading(true);
+    const apiMessages = newMessages
+      .filter(m => !m._local)
+      .map(m => ({ role: m.role, content: m.content }));
     try {
-      const apiMessages = newMessages
-        .filter(m => !m._local)
-        .map(m => ({ role: m.role, content: m.content }));
-      const response = await xatIA(systemContext, apiMessages);
-      setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      const response = await xatIA(systemContext, apiMessages, 1500, (partial) => {
+        setLoading(false);
+        setMessages(prev => {
+          const next = [...prev];
+          next[next.length - 1] = { role: 'assistant', content: partial, _streaming: true };
+          return next;
+        });
+      });
+      setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: 'assistant', content: response };
+        return next;
+      });
     } catch (e) {
       lastErrorRef.current = e.message;
-      setMessages(prev => [...prev, { role: 'assistant', content: `❌ Error: ${e.message}` }]);
+      setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: 'assistant', content: `❌ Error: ${e.message}` };
+        return next;
+      });
     } finally {
       setLoading(false);
     }

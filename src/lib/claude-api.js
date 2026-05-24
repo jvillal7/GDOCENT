@@ -66,13 +66,42 @@ export async function callClaude(messages, maxTokens = 1000, retries = 2) {
   }
 }
 
-export async function callClaudeRaw(messages, maxTokens = 2000) {
+export async function callClaudeRaw(messages, maxTokens = 1500, onChunk = null) {
+  const streaming = typeof onChunk === 'function';
   const res = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Auth-Token': WORKER_AUTH_TOKEN },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages, stream: streaming }),
   });
   if (!res.ok) throw new Error('Error al Worker: ' + res.status);
+
+  if (streaming && res.headers.get('content-type')?.includes('event-stream')) {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let full = '', buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(raw);
+          if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+            full += evt.delta.text;
+            onChunk(full);
+          }
+          if (evt.type === 'error') throw new Error(evt.error?.message || 'Error streaming IA');
+        } catch (e) { if (e.message.startsWith('Error streaming')) throw e; }
+      }
+    }
+    return full;
+  }
+
   const data = await res.json();
   if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
   if (Array.isArray(data.content)) return data.content.map(b => b.text || '').join('');

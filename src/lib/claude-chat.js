@@ -148,11 +148,11 @@ export async function proposarCoberturaViaChat(absent, frangesIds, docents, norm
   return { proposta, resum };
 }
 
-export async function xatIA(systemContext, conversationMessages, maxTokens = 1500) {
+export async function xatIA(systemContext, conversationMessages, maxTokens = 1500, onChunk = null) {
   const messages = [
     { role: 'user',      content: systemContext },
     { role: 'assistant', content: 'Entès. Conec tots els horaris i normes del centre. Com et puc ajudar?' },
     ...conversationMessages,
   ];
-  return callClaudeRaw(messages, maxTokens);
+  return callClaudeRaw(messages, maxTokens, onChunk);
 }
