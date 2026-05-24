@@ -165,7 +165,10 @@ export default function AvuiPage() {
 
       setCells(newCells);
 
-      const sieiStudents = escola?.nom?.toLowerCase().includes('rivo') ? SIEI_ALUMNES.rivo.all : [];
+      const sieiKey = escola?.nom?.toLowerCase().includes('rivo') ? 'rivo'
+                    : escola?.nom?.toLowerCase().includes('demo') ? 'demo'
+                    : null;
+      const sieiStudents = sieiKey ? SIEI_ALUMNES[sieiKey].all : [];
       const newSieiCells = {};
       if (sieiStudents.length > 0) {
         const todayDia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][today.getDay()];
@@ -192,9 +195,13 @@ export default function AvuiPage() {
     } catch (e) { console.error('loadAvuiData:', e); }
   }
 
+  const sieiKey2      = escola?.nom?.toLowerCase().includes('rivo') ? 'rivo'
+                      : escola?.nom?.toLowerCase().includes('demo') ? 'demo'
+                      : null;
+  const sieiData      = sieiKey2 ? SIEI_ALUMNES[sieiKey2] : null;
   const groupSpans    = useMemo(() => computeSpans(GRUPS, cells, BLOCS), [cells, isOriol]);
-  const sieiSpans     = useMemo(() => computeSpans(SIEI_ALUMNES.rivo?.siei     || [], sieiCells, BLOCS), [sieiCells, isOriol]);
-  const sieiPlusSpans = useMemo(() => computeSpans(SIEI_ALUMNES.rivo?.sieiPlus || [], sieiCells, BLOCS), [sieiCells, isOriol]);
+  const sieiSpans     = useMemo(() => computeSpans(sieiData?.siei     || [], sieiCells, BLOCS), [sieiCells, isOriol]);
+  const sieiPlusSpans = useMemo(() => computeSpans(sieiData?.sieiPlus || [], sieiCells, BLOCS), [sieiCells, isOriol]);
 
   return (
     <>
@@ -254,11 +261,11 @@ export default function AvuiPage() {
         onPendentClick={() => setPage('javis')}
       />
 
-      {escola?.nom?.toLowerCase().includes('rivo') && (
+      {sieiData && (
         <>
           <GraellaCard
             title="SIEI · Clara"
-            items={SIEI_ALUMNES.rivo.siei}
+            items={sieiData.siei}
             cells={sieiCells}
             spans={sieiSpans}
             blocs={BLOCS}
@@ -269,7 +276,7 @@ export default function AvuiPage() {
           />
           <GraellaCard
             title="SIEI+ · Aurora"
-            items={SIEI_ALUMNES.rivo.sieiPlus}
+            items={sieiData.sieiPlus}
             cells={sieiCells}
             spans={sieiPlusSpans}
             blocs={BLOCS}

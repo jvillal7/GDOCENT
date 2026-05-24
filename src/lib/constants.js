@@ -254,6 +254,11 @@ export const SIEI_ALUMNES = {
     sieiPlus: ['SEBAS', 'AARON', 'CLAUDIA', 'MAXIM'],
     all:      ['THEO', 'TYLER', 'POL', 'MOHAMED', 'MIRANDA', 'ADAM', 'SEBAS', 'AARON', 'CLAUDIA', 'MAXIM'],
   },
+  demo: {
+    siei:     ['ALEX', 'DIANA', 'KEVIN', 'MARC'],
+    sieiPlus: ['JULIA', 'BIEL', 'NORA'],
+    all:      ['ALEX', 'DIANA', 'KEVIN', 'MARC', 'JULIA', 'BIEL', 'NORA'],
+  },
 };
 
 // ── CA N'ORIOL — horari específic ──────────────────────────────────────────
