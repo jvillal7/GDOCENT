@@ -11,6 +11,7 @@ import MeuTPPage     from './teacher/MeuTPPage';
 import { ResumPage, InformesPage } from './StaticPages';
 import AdminPage from './admin/AdminPage';
 import ContextIAPage from './admin/ContextIAPage';
+import LogsPage from './admin/LogsPage';
 import OriolAbsentsPage  from './jefa/oriol/OriolAbsentsPage';
 import OriolReunionsPage from './jefa/oriol/OriolReunionsPage';
 import OriolCeepsirPage  from './jefa/oriol/OriolCeepsirPage';
@@ -21,7 +22,7 @@ const PAGES = {
   jd: AvuiPage,   javis: AvisosPage,  jtp: TPPage,
   jh: HistorialPage, jhoraris: HorarisPage,
   ta: AvisarPage, tc: CoberturasPage, tt: MeuTPPage,
-  di: HistorialPage, df: InformesPage, dv: AdminPage, dv_context: ContextIAPage,
+  di: HistorialPage, df: InformesPage, dv: AdminPage, dv_context: ContextIAPage, dv_logs: LogsPage,
   oj_abs: OriolAbsentsPage, oj_reu: OriolReunionsPage,
   oj_cee: OriolCeepsirPage,
   oj_pdf: OriolPDFPage,

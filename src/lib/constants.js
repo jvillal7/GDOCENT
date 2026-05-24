@@ -108,7 +108,7 @@ export const NAV_CFG = {
   ],
   director:  [{ sec: 'Direcció',  items: [{ id: 'di', icon: '📋', label: 'Historial' }] }],
   secretaria:[{ sec: 'Secretaria',items: [{ id: 'di', icon: '📋', label: 'Historial' }] }],
-  dev:       [{ sec: 'Configuració IA', items: [{ id: 'dv', icon: '🤖', label: 'Normes IA' }, { id: 'dv_context', icon: '🏫', label: 'Context IA' }] }],
+  dev:       [{ sec: 'Configuració IA', items: [{ id: 'dv', icon: '🤖', label: 'Normes IA' }, { id: 'dv_context', icon: '🏫', label: 'Context IA' }, { id: 'dv_logs', icon: '📋', label: 'Logs xat' }] }],
 };
 
 export const BNAV = {
@@ -118,7 +118,7 @@ export const BNAV = {
   vetllador: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   director:  [{ id: 'di', icon: '📋', label: 'Historial' }],
   secretaria:[{ id: 'di', icon: '📋', label: 'Historial' }],
-  dev:       [{ id: 'dv', icon: '🤖', label: 'Normes' }, { id: 'dv_context', icon: '🏫', label: 'Context' }],
+  dev:       [{ id: 'dv', icon: '🤖', label: 'Normes' }, { id: 'dv_context', icon: '🏫', label: 'Context' }, { id: 'dv_logs', icon: '📜', label: 'Logs' }],
 };
 
 export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', educador: 'ta', vetllador: 'ta', tei: 'ta', director: 'di', secretaria: 'di', dev: 'dv' };
@@ -127,7 +127,7 @@ export const PAGE_TITLES = {
   jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal',
   jh: 'Historial', jhoraris: 'Gestions del centre',
   ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP',
-  di: 'Historial', df: 'Informes', dv: 'Normes IA', dv_context: 'Context IA',
+  di: 'Historial', df: 'Informes', dv: 'Normes IA', dv_context: 'Context IA', dv_logs: 'Logs xat IA',
   oj_abs: "Persones que s'absenten", oj_reu: 'Reunions i organització',
   oj_cee: 'Actuacions CEEPSIR',
   oj_pdf: 'Generar PDF diari',

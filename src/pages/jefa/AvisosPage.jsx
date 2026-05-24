@@ -1260,6 +1260,10 @@ export default function AvisosPage() {
           systemContext={chatSystemCtx}
           greeting={isOriol ? 'Hola Mireia! Com et puc ajudar avui?' : 'Hola Veronica! Com et puc ajudar avui?'}
           initialMessage={chatInitialMessage}
+          escolaId={escola?.id}
+          absenciaId={chatAvis?.id}
+          docentAbsent={chatAvis?.docent_nom}
+          dataAbsencia={chatAvis?.data}
           onAplicarProposta={(proposta, chatMsgs) => {
             const avis = chatAvisRef.current;
             setShowChat(false);

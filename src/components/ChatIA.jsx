@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { xatIA } from '../lib/claude';
+import { xatIA, logChat } from '../lib/claude';
 import Spinner from './Spinner';
 
 function parsePropostaFromText(text) {
@@ -78,7 +78,7 @@ function MessageBubble({ msg, onAplicar, messages }) {
   );
 }
 
-export default function ChatIA({ systemContext, greeting, onAplicarProposta, onClose, initialMessage }) {
+export default function ChatIA({ systemContext, greeting, onAplicarProposta, onClose, initialMessage, escolaId, absenciaId, docentAbsent, dataAbsencia }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: greeting, _local: true },
   ]);
@@ -87,6 +87,8 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const sentInitial = useRef(false);
+  const sessioId = useRef(crypto.randomUUID());
+  const lastErrorRef = useRef(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -112,6 +114,26 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
     if (!initialMessage) inputRef.current?.focus();
   }, []);
 
+  function guardarLog(msgsActuals, resultat, propostaAprovada = null) {
+    if (!escolaId) return;
+    const missatgesNet = msgsActuals
+      .filter(m => !m._local)
+      .map(({ role, content }) => ({ role, content }));
+    if (!missatgesNet.length) return;
+    logChat({
+      escola_id: escolaId,
+      sessio_id: sessioId.current,
+      absencia_id: absenciaId || null,
+      docent_absent: docentAbsent || null,
+      data_absencia: dataAbsencia || null,
+      missatges: missatgesNet,
+      proposta_aprovada: propostaAprovada || null,
+      resultat,
+      num_missatges: missatgesNet.length,
+      error_msg: lastErrorRef.current || null,
+    });
+  }
+
   async function send() {
     if (!input.trim() || loading) return;
     const userMsg = input.trim();
@@ -126,6 +148,7 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
       const response = await xatIA(systemContext, apiMessages);
       setMessages(prev => [...prev, { role: 'assistant', content: response }]);
     } catch (e) {
+      lastErrorRef.current = e.message;
       setMessages(prev => [...prev, { role: 'assistant', content: `❌ Error: ${e.message}` }]);
     } finally {
       setLoading(false);
@@ -134,14 +157,14 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-    if (e.key === 'Escape') onClose();
+    if (e.key === 'Escape') { guardarLog(messages, 'abandonada'); onClose(); }
   }
 
   return (
     <>
       <div
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 300 }}
-        onClick={onClose}
+        onClick={() => { guardarLog(messages, 'abandonada'); onClose(); }}
       />
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
@@ -160,13 +183,13 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
             <div style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(to right, #7c3aed, #2563eb)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>💬 Horaria</div>
             <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>Assistent expert en cobertures</div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ fontSize: 16, padding: '4px 10px' }}>✕</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { guardarLog(messages, 'abandonada'); onClose(); }} style={{ fontSize: 16, padding: '4px 10px' }}>✕</button>
         </div>
 
         {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {messages.map((m, i) => (
-            <MessageBubble key={i} msg={m} onAplicar={onAplicarProposta} messages={messages} />
+            <MessageBubble key={i} msg={m} onAplicar={(proposta, msgs) => { guardarLog(msgs, 'aprovada', proposta); onAplicarProposta(proposta, msgs); }} messages={messages} />
           ))}
           {loading && (
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>

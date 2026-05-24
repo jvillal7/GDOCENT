@@ -1552,8 +1552,8 @@ function HorariInline({ horari, tpFranges = [], franjes, onCellSave }) {
             {franjes.map(f => {
               const grp = horaGroups[f.hora] || [];
               const isFirst = grp[0]?.id === f.id;
-              const rowH = (f.min || 30) * 1.5;
-              const pad  = (f.min || 30) <= 15 ? '2px 3px' : '4px 3px';
+              const rowH = f.lliure ? 18 : f.patio ? 22 : (f.min || 30) * 1.5;
+              const pad  = (f.lliure || f.patio || (f.min || 30) <= 15) ? '1px 3px' : '4px 3px';
               return (
                 <tr key={f.id} style={{ height: rowH }}>
                   {isFirst && (

@@ -96,3 +96,19 @@ export async function logIA(entry) {
     });
   } catch { /* silencioso */ }
 }
+
+// Registra una conversa de xat (fire-and-forget)
+export async function logChat(entry) {
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/chat_logs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(entry),
+    });
+  } catch { /* silencioso */ }
+}

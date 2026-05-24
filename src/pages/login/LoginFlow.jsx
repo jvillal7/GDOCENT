@@ -101,7 +101,9 @@ export default function LoginFlow() {
     }
 
     // Amb u= → deep link de l'equip directiu
-    const key = matched.nom.toLowerCase().includes('rivo') ? 'rivo' : 'oriol';
+    const key = matched.nom.toLowerCase().includes('rivo') ? 'rivo'
+              : matched.nom.toLowerCase().includes('oriol') ? 'oriol'
+              : 'demo';
     const mgmtUsers = (MANAGEMENT_USERS[key] || []).map(u => ({ ...u, escola_id: matched.id }));
     const targetUser = mgmtUsers.find(u => u.nom === userParam);
 
@@ -168,7 +170,9 @@ export default function LoginFlow() {
         // Intentar carregar des de la taula `directius` a Supabase (si existeix).
         // SQL per crear-la: CREATE TABLE directius (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         // escola_id uuid REFERENCES escoles(id), nom text, rol text, grup_principal text, pin text, actiu boolean DEFAULT true);
-        const key = school.nom.toLowerCase().includes('rivo') ? 'rivo' : 'oriol';
+        const key = school.nom.toLowerCase().includes('rivo') ? 'rivo'
+                  : school.nom.toLowerCase().includes('oriol') ? 'oriol'
+                  : 'demo';
         let mgmt = null;
         try {
           const fromDb = await supaFetch(`directius?actiu=eq.true&escola_id=eq.${school.id}&order=posicio`, { bypassSchoolId: true });
@@ -329,15 +333,17 @@ export default function LoginFlow() {
               {[
                 { key: 'rivo',  src: 'logo_rivo.png',      alt: 'Rivo Rubeo',    fallback: 'RIVO RUBEO' },
                 { key: 'oriol', src: 'logo_canoriol.png',  alt: "Ca n'Oriol",    fallback: "CEE CA N'ORIOL" },
+                { key: 'demo',  src: null,                  alt: 'Escola Demo',   fallback: 'ESCOLA DEMO' },
               ].map(({ key, src, alt, fallback }) => {
                 const url = `${window.location.origin}${window.location.pathname}?escola=${key}`;
                 const open = linkOpen === key;
                 return (
                   <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <button className="school-logo-btn" onClick={() => selectSchool(key)}>
-                      <img src={src} alt={alt}
-                        onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
-                      <div className="fallback-logo-text" style={{ display: 'none' }}>{fallback}</div>
+                      {src
+                        ? <img src={src} alt={alt} onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
+                        : null}
+                      <div className="fallback-logo-text" style={{ display: src ? 'none' : 'block' }}>{fallback}</div>
                     </button>
                     <button
                       onClick={() => setLinkOpen(open ? null : key)}
