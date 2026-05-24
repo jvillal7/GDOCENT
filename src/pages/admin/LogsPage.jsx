@@ -1,15 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
+import { SUPA_URL, SUPA_KEY, WORKER_AUTH_TOKEN } from '../../lib/constants';
 import Spinner from '../../components/Spinner';
 
+const DB_URL = `${SUPA_URL}/functions/v1/db`;
+
 async function fetchChatLogs(escolaId, limit = 50) {
-  const url = new URL(`${SUPA_URL}/rest/v1/chat_logs`);
-  url.searchParams.set('escola_id', `eq.${escolaId}`);
-  url.searchParams.set('order', 'creat_el.desc');
-  url.searchParams.set('limit', limit);
-  const res = await fetch(url, {
-    headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` },
+  const path = `chat_logs?escola_id=eq.${escolaId}&order=creat_el.desc&limit=${limit}`;
+  const res = await fetch(DB_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPA_KEY,
+      'Authorization': `Bearer ${SUPA_KEY}`,
+      'x-auth-token': WORKER_AUTH_TOKEN,
+    },
+    body: JSON.stringify({ path }),
   });
   if (!res.ok) throw new Error('Error carregant logs');
   return res.json();
