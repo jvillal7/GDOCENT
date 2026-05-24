@@ -251,7 +251,7 @@ export default function AppShell() {
               { id: 'oj_abs', icon: '👤', label: "Persones que s'absenten" },
               { id: 'oj_reu', icon: '📝', label: 'Reunions i organització' },
               { id: 'oj_cee', icon: '🏥', label: 'Actuacions CEEPSIR' },
-              { id: 'oj_bai', icon: '📋', label: 'Baixes amb substitucions' },
+              { id: 'oj_pdf', icon: '📄', label: 'Generar PDF diari' },
             ].map((it, i, arr) => (
               <div
                 key={it.id}
@@ -274,7 +274,7 @@ export default function AppShell() {
           </div>
         ))}
         {isOriol && role === 'jefa' && (() => {
-          const oriolActive = ['oj_abs','oj_reu','oj_cee','oj_bai'].includes(page);
+          const oriolActive = ['oj_abs','oj_reu','oj_cee','oj_pdf'].includes(page);
           return (
             <div className={`bn-item${oriolActive || oriolMenu ? ' active' : ''}`} onClick={() => setOriolMenu(p => !p)}>
               <span className="bn-icon">{oriolMenu ? '✕' : '＋'}</span>
