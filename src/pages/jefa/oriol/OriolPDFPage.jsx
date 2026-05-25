@@ -222,6 +222,7 @@ export default function OriolPDFPage() {
 
   // Dades llegides automàticament
   const [absentsText,  setAbsentsText]  = useState('');
+  const [absentsCount, setAbsentsCount] = useState(0);
   const [baixes,       setBaixes]       = useState([]);
   const [reunionsText, setReunionsText] = useState('');
   const [ceepsirText,  setCeepsirText]  = useState('');
@@ -251,13 +252,17 @@ export default function OriolPDFPage() {
       const d   = diariRes?.[0] || {};
       const cob = cobRes || [];
 
-      // Absents: text guardat avui o auto-generat des de la taula d'absències
-      const storedAbsents = d.oriol_absents?.data === avui ? (d.oriol_absents?.text || '') : '';
-      const autoAbsents = (absRes || [])
-        .filter(a => a.estat !== 'arxivat')
-        .map(a => `• ${a.docent_nom} — ${a.motiu || 'Absència'}`)
-        .join('\n');
-      setAbsentsText(storedAbsents || autoAbsents);
+      // Absents: sempre llegit de la taula d'absències (font de veritat)
+      // Ignora el text guardat manualment — aquest pot ser parcial o desactualitzat
+      const SCHOOL_F = FRANJES_ORIOL.filter(f => !f.lliure);
+      const liveAbsents = (absRes || []).filter(a => a.estat !== 'arxivat');
+      setAbsentsCount(liveAbsents.length);
+      const autoAbsents = liveAbsents.map(a => {
+        const isFullDay = (a.franges?.length || 0) >= SCHOOL_F.length;
+        const timeRange = !isFullDay && a.franges?.length ? horaRange(a.franges) : '';
+        return `• ${a.docent_nom} — ${a.motiu || 'Absència'}${timeRange ? ` (${timeRange})` : ''}`;
+      }).join('\n');
+      setAbsentsText(autoAbsents);
       setBaixes(d.oriol_baixes || []);
       setReunionsText(d.oriol_reunions?.data === avui ? (d.oriol_reunions?.text || '') : '');
       setCeepsirText(d.oriol_ceepsir?.data === avui ? (d.oriol_ceepsir?.text || '') : '');
@@ -306,9 +311,8 @@ export default function OriolPDFPage() {
 
   if (loading) return <div style={{ padding:40, textAlign:'center' }}><Spinner /></div>;
 
-  const nCob     = taulaGrups.length;
-  const nEsp     = taulaEsp.length;
-  const nAbsents = absentsText.split('\n').filter(l => l.trim()).length;
+  const nCob = taulaGrups.length;
+  const nEsp = taulaEsp.length;
 
   return (
     <>
@@ -335,7 +339,7 @@ export default function OriolPDFPage() {
         </div>
         <div style={{ padding:'10px 14px', display:'flex', flexWrap:'wrap', gap:10 }}>
           {[
-            { icon: '👤', label: 'Absents',      val: nAbsents,          ok: nAbsents > 0 },
+            { icon: '👤', label: 'Absents',      val: absentsCount,      ok: absentsCount > 0 },
             { icon: '📋', label: 'Baixes',        val: baixes.length,     ok: true },
             { icon: '📝', label: 'Reunions',      val: reunionsText ? '✓' : '–', ok: !!reunionsText },
             { icon: '🏥', label: 'CEEPSIR',       val: ceepsirText ? '✓' : '–', ok: !!ceepsirText },
