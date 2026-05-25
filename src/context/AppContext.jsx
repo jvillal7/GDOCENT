@@ -47,6 +47,7 @@ export function AppProvider({ children }) {
   const [frangesIA,  setFrangesIA]  = useState(null);
   const [toast, setToast]     = useState(null);
   const [chatConfig, setChatConfig] = useState(null);
+  const [coverageAppliedAt, setCoverageAppliedAt] = useState(0);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('gd_dark') === 'true';
     document.documentElement.setAttribute('data-theme', saved ? 'dark' : 'light');
@@ -101,14 +102,16 @@ export function AppProvider({ children }) {
   const closeChat   = useCallback(() => setChatConfig(null), []);
   const minimizeChat = useCallback(() => setChatConfig(c => c ? { ...c, isMinimized: true } : null), []);
   const maximizeChat = useCallback(() => setChatConfig(c => c ? { ...c, isMinimized: false } : null), []);
+  const notifyCoverageApplied = useCallback(() => setCoverageAppliedAt(Date.now()), []);
 
   const value = useMemo(() => ({
     perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
-    chatConfig,
+    chatConfig, coverageAppliedAt,
     setPage, setDocents, setNormes, setContextIA, setEscola, login, logout, showToast, toggleDark,
-    openChat, closeChat, minimizeChat, maximizeChat,
+    openChat, closeChat, minimizeChat, maximizeChat, notifyCoverageApplied,
   }), [perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
-       chatConfig, login, logout, showToast, toggleDark, openChat, closeChat, minimizeChat, maximizeChat]);
+       chatConfig, coverageAppliedAt, login, logout, showToast, toggleDark,
+       openChat, closeChat, minimizeChat, maximizeChat, notifyCoverageApplied]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

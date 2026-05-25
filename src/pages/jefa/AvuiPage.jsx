@@ -17,7 +17,7 @@ const BLOCS_RIVO = [
 ];
 
 export default function AvuiPage() {
-  const { api, docents, escola, setPage } = useApp();
+  const { api, docents, escola, setPage, coverageAppliedAt } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const GRUPS   = isOriol ? GRUPS_ORIOL : GRUPS_RIVO;
   const BLOCS   = isOriol ? BLOCS_ORIOL : BLOCS_RIVO;
@@ -35,7 +35,7 @@ export default function AvuiPage() {
     ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'][today.getMonth()] +
     ' de ' + today.getFullYear();
 
-  useEffect(() => { if (api && docents.length > 0) loadData(); }, [api, docents.length]);
+  useEffect(() => { if (api && docents.length > 0) loadData(); }, [api, docents.length, coverageAppliedAt]);
 
   async function loadData() {
     try {

@@ -11,7 +11,8 @@ const isDesktop = () => window.innerWidth >= 768;
 export default function AppShell() {
   const { perfil, escola, role, page, setPage, logout, darkMode, toggleDark,
           docents, api, showToast,
-          chatConfig, openChat, closeChat, minimizeChat, maximizeChat } = useApp();
+          chatConfig, openChat, closeChat, minimizeChat, maximizeChat,
+          notifyCoverageApplied } = useApp();
   const [desktop, setDesktop] = useState(isDesktop);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [oriolMenu, setOriolMenu] = useState(false);
@@ -45,7 +46,7 @@ export default function AppShell() {
     const { avis, iaDecisions, onApplied } = chatConfig || {};
     closeChat();
     aplicarPropostaChat(avis, proposta, chatMsgs, { api, escola, docents, iaDecisions, showToast })
-      .then(() => onApplied?.())
+      .then(() => { onApplied?.(); notifyCoverageApplied(); })
       .catch(e => showToast('Error: ' + e.message));
   }
 

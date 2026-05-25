@@ -211,7 +211,7 @@ function PracticantsEditor({ items, setItems }) {
 // ── Pàgina principal ──────────────────────────────────────────────────────────
 
 export default function OriolPDFPage() {
-  const { api, docents, showToast } = useApp();
+  const { api, docents, showToast, coverageAppliedAt } = useApp();
   const [loading,    setLoading]    = useState(true);
   const [generating, setGenerating] = useState(false);
 
@@ -233,7 +233,7 @@ export default function OriolPDFPage() {
   const today = new Date();
   const todayDia = DIES_KEY[today.getDay()];
 
-  useEffect(() => { if (api && docents.length > 0) load(); }, [api, docents.length]);
+  useEffect(() => { if (api && docents.length > 0) load(); }, [api, docents.length, coverageAppliedAt]);
 
   async function load() {
     setLoading(true);
