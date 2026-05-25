@@ -158,10 +158,24 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia) {
       return v.split('·')[0].split('/')[0].trim().toUpperCase();
     });
 
+    // Color del bloc: determinat per l'etapa dels grups que cobreix
+    const grupsCoberts = coberturesD.map(c => c.grup).filter(g => g && g !== 'Suport' && !g.startsWith('Cob.'));
+    let colorFons;
+    if (grupsCoberts.length) {
+      const nSec = grupsCoberts.filter(g => getEtapa(g) === 'SECUNDÀRIA').length;
+      colorFons = nSec > grupsCoberts.length / 2 ? COLOR_SEC : COLOR_INF_PRI;
+    } else {
+      colorFons = ESP_COLORS[idx % ESP_COLORS.length];
+    }
+
     const nomCurt = nom.split(' ')[0].toUpperCase();
-    return { nom: nomCurt, color_fons: ESP_COLORS[idx % ESP_COLORS.length], horaris };
+    return { nom: nomCurt, color_fons: colorFons, horaris };
   }).filter(Boolean);
 }
+
+// Colors per etapa — especialistes
+const COLOR_INF_PRI = '#D4EDD0'; // verd clar  — Infantil/Primària
+const COLOR_SEC     = '#FFE4C0'; // taronja clar — Secundària
 
 // ── Colors pels practicants ───────────────────────────────────────────────────
 const PRAC_COLORS = ['#E8D5C4','#D9C8E8','#D4E6F1'];
