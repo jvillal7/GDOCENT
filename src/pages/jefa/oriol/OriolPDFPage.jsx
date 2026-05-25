@@ -121,7 +121,19 @@ function buildTaulaGrups(cobertures) {
 }
 
 function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
-  const absentNoms = new Set((absentsAvui || []).map(a => a.docent_nom));
+  // Per cada docent absent: quines franges cobreix l'absència?
+  // '*' = tot el dia (quan franges és buit o null)
+  const absentFranges = new Map();
+  for (const a of (absentsAvui || [])) {
+    if (!absentFranges.has(a.docent_nom)) absentFranges.set(a.docent_nom, new Set());
+    const s = absentFranges.get(a.docent_nom);
+    if (!a.franges?.length) s.add('*'); else a.franges.forEach(f => s.add(f));
+  }
+  const isAbsent = (nom, fid) => {
+    const s = absentFranges.get(nom);
+    return !!s && (s.has('*') || s.has(fid));
+  };
+
   const cobrintNoms = [...new Set(cobertures.map(c => c.docent_cobrint_nom).filter(Boolean))];
   const normStr = s => (s || '').toLowerCase().replace(/\s+/g, '');
 
@@ -183,7 +195,7 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
         const rawNorm = normStr(rawVal);
         const supportPresent = docents.filter(d => {
           if (d.nom === docent?.nom) return false;
-          return rawNorm.includes(normStr(d.nom)) && !absentNoms.has(d.nom);
+          return rawNorm.includes(normStr(d.nom)) && !isAbsent(d.nom, fid);
         });
 
         if (!supportPresent.length) return `${grupTutor} SOL/A`;
