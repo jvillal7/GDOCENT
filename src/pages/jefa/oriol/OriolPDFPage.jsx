@@ -112,8 +112,8 @@ function buildTaulaGrups(cobertures) {
   });
 }
 
-function buildTaulaEspecialistes(cobertures, docents, todayDia) {
-  // Qui cobreix avui?
+function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
+  const absentNoms = new Set((absentsAvui || []).map(a => a.docent_nom));
   const cobrintNoms = [...new Set(cobertures.map(c => c.docent_cobrint_nom).filter(Boolean))];
 
   return cobrintNoms.map((nom, idx) => {
@@ -121,7 +121,6 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia) {
     // Nom de cobertura pot ser "A.R" mentre a la BD és "A.R (MEE)" — cerca per prefix
     const docent = docents?.find(d => d.nom === nom || d.nom.startsWith(nom + ' '));
 
-    // Construir mapa franja→activitat: primer cobertures (overrides), despres horari normal
     const slotMap = new Map();
 
     // Horari normal del docent (sense lliures i trivials)
@@ -137,27 +136,58 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia) {
     // Cobertures del dia (sobreescriuen horari normal per aquella franja)
     for (const c of coberturesD) {
       if (!c.franja) continue;
-      // Si grup és buit (especialista sense grup_principal), mostrem el nom de l'absent
       const activitat = c.grup || (c.docent_absent_nom ? `Cob. ${c.docent_absent_nom.split(' ')[0]}` : 'Cobertura');
       slotMap.set(c.franja, activitat);
     }
 
     if (!slotMap.size) return null;
 
-    // Ordenar per ordre de franja
+    const cobFranges = new Set(coberturesD.map(c => c.franja).filter(Boolean));
+    const grupPrincipal = docent?.grup_principal || '';
+    // Tutor = té un grup real assignat (no "Suport" ni buit)
+    const esTutor = !!(grupPrincipal && !/^suport$/i.test(grupPrincipal.trim()));
+
+    function labelSlot(fid, rawVal) {
+      const vl = (rawVal || '').toLowerCase().trim();
+      // Pati
+      if (vl.includes('patia') || vl === 'pati a' || vl === 'pati primaria') return 'PATI PRIMÀRIA';
+      if (vl.includes('patib') || vl === 'pati b' || vl === 'pati secundaria') return 'PATI SECUNDÀRIA';
+
+      // Neteja: strip "Suport " prefix i text addicional
+      let grupLabel = rawVal.split('·')[0].split('/')[0].trim();
+      if (/^suport\s+/i.test(grupLabel)) grupLabel = grupLabel.replace(/^suport\s+/i, '');
+      grupLabel = grupLabel.trim().toUpperCase();
+
+      // Franja de cobertura manual: mostrar directament el grup
+      if (cobFranges.has(fid)) return grupLabel;
+
+      // Franja normal del tutor en el seu propi grup: mostrar qui entra de suport
+      if (esTutor && grupLabel === grupPrincipal.toUpperCase()) {
+        const suports = docents.filter(d => {
+          if (!d.horari?.[todayDia]?.[fid]) return false;
+          if (d.nom === (docent?.nom || '')) return false;
+          // El valor de l'horari ha de referenciar exactament el grup del tutor
+          const hv = (d.horari[todayDia][fid] || '')
+            .replace(/^suport\s+/i, '').split('·')[0].split('/')[0].trim().toUpperCase();
+          return hv === grupPrincipal.toUpperCase();
+        }).filter(d => !absentNoms.has(d.nom));
+
+        if (!suports.length) return `${grupPrincipal.toUpperCase()} SOL/A`;
+        const labels = suports.map(d => d.nom.split(' ')[0]).join('/');
+        return `${grupPrincipal.toUpperCase()} + ${labels}`;
+      }
+
+      return grupLabel;
+    }
+
+    // Pre-labeling: aplicar labelSlot a cada slot ABANS d'agregar
     const slots = [...slotMap.entries()]
-      .map(([fid, activitat]) => ({ fid, activitat, fidIdx: franjaOrder(fid) }))
+      .map(([fid, activitat]) => ({ fid, activitat: labelSlot(fid, activitat), fidIdx: franjaOrder(fid) }))
       .filter(s => s.fidIdx >= 0)
       .sort((a,b) => a.fidIdx - b.fidIdx);
 
-    const horaris = aggregateSlots(slots, v => {
-      // Formata el label del horari (ex: "patiA" → "PATI PRIMÀRIA")
-      const vl = (v || '').toLowerCase();
-      if (vl.includes('patia') || vl === 'pati a' || vl === 'pati primaria') return 'PATI PRIMÀRIA';
-      if (vl.includes('patib') || vl === 'pati b' || vl === 'pati secundaria') return 'PATI SECUNDÀRIA';
-      // Elimina text extra (ex: "G1 · Matemàtiques" → "G1")
-      return v.split('·')[0].split('/')[0].trim().toUpperCase();
-    });
+    // Agregar consecutius amb la mateixa etiqueta (ja processada)
+    const horaris = aggregateSlots(slots, v => v);
 
     // Color del bloc: determinat per l'etapa dels grups que cobreix
     const grupsCoberts = coberturesD.map(c => c.grup).filter(g => g && g !== 'Suport' && !g.startsWith('Cob.'));
@@ -285,7 +315,7 @@ export default function OriolPDFPage() {
 
       // Derivació automàtica de les taules
       setTaulaGrups(buildTaulaGrups(cob));
-      setTaulaEsp(buildTaulaEspecialistes(cob, docents, todayDia));
+      setTaulaEsp(buildTaulaEspecialistes(cob, docents, todayDia, liveAbsents));
 
       // Practicants: llegits de BD o buits
       const pdfData = d.oriol_pdf_data;
