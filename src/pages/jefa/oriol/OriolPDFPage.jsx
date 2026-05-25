@@ -54,17 +54,19 @@ function aggregateSlots(slots, labelFn) {
 
 function getEtapa(grup) {
   const n = parseInt(grup.replace(/\D/g,'')) || 0;
-  if (grup.toLowerCase().includes('mxi') || grup.toLowerCase().includes('mxI')) return 'INFANTIL/PRIMÀRIA';
-  return n >= 8 ? 'SECUNDÀRIA' : 'INFANTIL/PRIMÀRIA';
+  if (grup.toLowerCase().includes('mxi')) return 'INFANTIL/PRIMÀRIA';
+  if (!n) return 'INFANTIL/PRIMÀRIA';
+  return n >= 7 ? 'SECUNDÀRIA' : 'INFANTIL/PRIMÀRIA';
 }
 
 function buildTaulaGrups(cobertures) {
-  // Cada cobertura: {grup, franja, docent_cobrint_nom}
+  // Cada cobertura: {grup, franja, docent_cobrint_nom, docent_absent_nom}
   // Agrupar per grup → per (grup, set_cobrint) → franges consecutives
   const map = new Map(); // `${grup}|${cobrint_sorted}` → {grup, cobrint, fids: Set}
 
   for (const c of cobertures) {
-    const grup = c.grup;
+    // Quan grup és buit (especialistes itinerants), usem les inicials de l'absent com a referència
+    const grup = c.grup || c.docent_absent_nom?.split(' ')[0] || null;
     const nom  = (c.docent_cobrint_nom || '').split(' ')[0];
     const fid  = c.franja;
     if (!grup || !fid) continue;
@@ -133,7 +135,10 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia) {
 
     // Cobertures del dia (sobreescriuen horari normal per aquella franja)
     for (const c of coberturesD) {
-      if (c.franja && c.grup) slotMap.set(c.franja, c.grup);
+      if (!c.franja) continue;
+      // Si grup és buit (especialista sense grup_principal), mostrem el nom de l'absent
+      const activitat = c.grup || (c.docent_absent_nom ? `Cob. ${c.docent_absent_nom.split(' ')[0]}` : 'Cobertura');
+      slotMap.set(c.franja, activitat);
     }
 
     if (!slotMap.size) return null;

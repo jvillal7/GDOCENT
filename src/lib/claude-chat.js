@@ -174,10 +174,13 @@ export async function aplicarPropostaChat(avis, proposta, chatMsgs, { api, escol
   }
 
   const absentDocent = docents.find(d => d.nom === avis.docent_nom);
-  const grupDestí = absentDocent?.grup_principal || '';
+  const grupFallback = absentDocent?.grup_principal || '';
 
   // 2. Guardar noves cobertures + deutes TP
   for (const p of propostaArr) {
+    // grup_origen ve de la proposta IA (grup específic del docent absent en aquella franja)
+    // és més precís que grup_principal quan l'absent és un especialista itinerant
+    const grupCobertura = p.grup_origen || grupFallback;
     const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
     for (const fid of frangesACobrir) {
       await api.saveCobertura({
@@ -186,7 +189,7 @@ export async function aplicarPropostaChat(avis, proposta, chatMsgs, { api, escol
         docent_cobrint_nom: p.docent,
         franja:             fid,
         docent_absent_nom:  avis.docent_nom,
-        grup:               grupDestí,
+        grup:               grupCobertura,
         data:               absData,
         tp_afectat:         p.tp_afectat || false,
         motiu:              p.motiu || '',

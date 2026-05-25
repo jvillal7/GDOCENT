@@ -553,11 +553,12 @@ export default function AvisosPage() {
     const esFutura = absData > avui;
     const nouEstat = esFutura ? 'provisional' : 'resolt';
     try {
-      // Grup destí = grup del docent ABSENT (on ha d'anar el cobrint)
+      // Grup destí: preferim grup_origen de la proposta (específic de la franja) sobre grup_principal (genèric)
       const absentDocent = docents.find(d => d.nom === iaTarget.docent_nom);
-      const grupDestí = absentDocent?.grup_principal || '';
+      const grupFallback = absentDocent?.grup_principal || '';
 
       for (const p of proposta) {
+        const grupCobertura = p.grup_origen || grupFallback;
         // Nou format: franges_ids (array). Antic: franja (string). Guardem 1 cobertura per franja.
         const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja];
         for (const fid of frangesACobrir) {
@@ -567,7 +568,7 @@ export default function AvisosPage() {
             docent_cobrint_nom: p.docent,
             franja:             fid,
             docent_absent_nom:  iaTarget.docent_nom,
-            grup:               grupDestí,
+            grup:               grupCobertura,
             data:               absData,
             tp_afectat:         p.tp_afectat || false,
             motiu:              p.motiu || '',
