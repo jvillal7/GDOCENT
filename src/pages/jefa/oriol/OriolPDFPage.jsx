@@ -172,13 +172,22 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
     function labelSlot(fid, rawVal) {
       const vl = (rawVal || '').toLowerCase().trim();
 
-      // Pati
-      if (vl.includes('patia') || vl === 'pati a' || vl === 'pati primaria') return 'PATI PRIMÀRIA';
-      if (vl.includes('patib') || vl === 'pati b' || vl === 'pati secundaria') return 'PATI SECUNDÀRIA';
+      // Pati — detectar tant per valor com per ID de franja (valors: "Pati", "patiA", "Pati B", etc.)
+      const isPatiVal = vl === 'pati' || vl === 'patio' || vl === 'descans' ||
+        vl.includes('patia') || vl === 'pati a' || vl === 'pati primaria' ||
+        vl.includes('patib') || vl === 'pati b' || vl === 'pati secundaria';
+      if (isPatiVal || fid === 'opatiA' && !extractGrupFromHorari(rawVal) ||
+          fid === 'opatiB' && !extractGrupFromHorari(rawVal) && !/\w+\.\s*\w+/i.test(rawVal)) {
+        if (fid === 'opatiA' || vl.includes('patia') || vl === 'pati a' || vl === 'pati primaria') return 'PATI PRIMÀRIA';
+        if (fid === 'opatiB' || vl.includes('patib') || vl === 'pati b' || vl === 'pati secundaria') return 'PATI SECUNDÀRIA';
+        return 'PATI';
+      }
 
-      // Franja de cobertura: extreure grup del valor o mostrar-lo net
+      // Franja de cobertura: si el tutor cobreix el seu propi grup és perquè el suport és absent
       if (cobFranges.has(fid)) {
-        return extractGrupFromHorari(rawVal) || rawVal.split('·')[0].split('/')[0].trim().toUpperCase();
+        const grupCov = extractGrupFromHorari(rawVal) || rawVal.split('·')[0].split('/')[0].trim().toUpperCase();
+        if (grupTutor && grupCov === grupTutor) return `${grupTutor} SOL/A`;
+        return grupCov;
       }
 
       // Horari normal: extreure grup del valor (funciona per a tots els formats)
