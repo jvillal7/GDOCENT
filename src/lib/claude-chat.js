@@ -238,11 +238,11 @@ export async function aplicarPropostaChat(avis, proposta, chatMsgs, { api, escol
       nom:        p.docent,
       email:      docents.find(d => d.nom === p.docent)?.email || null,
       franges_ids: p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean),
-      grup:       grupDestí,
+      grup:       p.grup_origen || grupFallback,
     })),
     data:      absData,
     is_futura: esFutura,
   });
 
-  return { esFutura, grupDestí };
+  return { esFutura, grupDestí: grupFallback };
 }
