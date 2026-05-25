@@ -10,6 +10,8 @@ const LINE_H = 5.5;
 const PURPLE       = [91, 75, 138];
 const PURPLE_LIGHT = [216, 199, 232];
 const GRAY_ROW     = [240, 240, 240];
+const COLOR_INF    = [212, 237, 208]; // verd clar  — Infantil/Primària
+const COLOR_SEC    = [255, 228, 192]; // taronja clar — Secundària
 
 function hexToRgb(hex) {
   if (!hex || hex.length < 7) return [232, 213, 196];
@@ -296,7 +298,13 @@ export async function generarOriolPDF(data) {
         lineColor: [0, 0, 0],
         lineWidth: 0.15,
       },
-      alternateRowStyles: { fillColor: GRAY_ROW },
+      didParseCell: (d) => {
+        if (d.section !== 'body') return;
+        const etapa = grups[d.row.index]?.etapa;
+        if (etapa === 'INFANTIL/PRIMÀRIA') d.cell.styles.fillColor = COLOR_INF;
+        else if (etapa === 'SECUNDÀRIA')   d.cell.styles.fillColor = COLOR_SEC;
+        else                               d.cell.styles.fillColor = GRAY_ROW;
+      },
       columnStyles: {
         0: { cellWidth: 34, halign: 'center' },
         1: { cellWidth: 17, halign: 'center' },
