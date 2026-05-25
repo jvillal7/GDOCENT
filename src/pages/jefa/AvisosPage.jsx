@@ -1030,8 +1030,19 @@ export default function AvisosPage() {
                 </div>
               )}
               {!esPendent && !esProvisional && (
-                <div style={{ padding: '0 16px 14px' }}>
+                <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <button className="btn btn-ghost btn-sm btn-full" style={{ fontSize: 12 }} onClick={() => arxivar(a.id)}>🗑️ Esborrar del registre</button>
+                  <button
+                    style={{
+                      fontSize: 12, fontWeight: 700, padding: '7px 16px', width: '100%',
+                      background: 'linear-gradient(to right, #fff 0%, #7c3aed 40%, #2563eb 60%, #fff 100%)',
+                      color: '#fff', border: '1px solid #ddd6fe', borderRadius: 'var(--r-sm)',
+                      cursor: 'pointer', letterSpacing: '.02em', textShadow: '0 1px 3px rgba(0,0,0,.3)',
+                    }}
+                    onClick={() => obrirChat(a)}
+                  >
+                    ✏️ Editar cobertura
+                  </button>
                 </div>
               )}
               {iaTarget?.id === a.id && (
