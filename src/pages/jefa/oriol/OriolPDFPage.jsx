@@ -52,6 +52,14 @@ function aggregateSlots(slots, labelFn) {
 
 // ── Derivació automàtica ──────────────────────────────────────────────────────
 
+// Extreu el primer grup (G1-G14, MxI, CEEPSIR) d'un valor de horari qualsevol.
+// Funciona per a tots els formats: "Suport G13", "G13 Suport", "G8 · Suport", "G14. Suport", "G7. SUPORT", etc.
+function extractGrupFromHorari(val) {
+  if (!val) return null;
+  const m = (val || '').match(/\b(G\d{1,2}|MxI|CEEPSIR)\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
 function getEtapa(grup) {
   const n = parseInt(grup.replace(/\D/g,'')) || 0;
   if (grup.toLowerCase().includes('mxi')) return 'INFANTIL/PRIMÀRIA';
@@ -115,6 +123,7 @@ function buildTaulaGrups(cobertures) {
 function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
   const absentNoms = new Set((absentsAvui || []).map(a => a.docent_nom));
   const cobrintNoms = [...new Set(cobertures.map(c => c.docent_cobrint_nom).filter(Boolean))];
+  const normStr = s => (s || '').toLowerCase().replace(/\s+/g, '');
 
   return cobrintNoms.map((nom, idx) => {
     const coberturesD = cobertures.filter(c => c.docent_cobrint_nom === nom);
@@ -123,7 +132,7 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
 
     const slotMap = new Map();
 
-    // Horari normal del docent (sense lliures i trivials)
+    // Horari normal (sense lliures i trivials)
     if (docent?.horari?.[todayDia]) {
       for (const [fid, val] of Object.entries(docent.horari[todayDia])) {
         if (!val) continue;
@@ -143,50 +152,61 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
     if (!slotMap.size) return null;
 
     const cobFranges = new Set(coberturesD.map(c => c.franja).filter(Boolean));
-    const grupPrincipal = docent?.grup_principal || '';
-    // Tutor = té un grup real assignat (no "Suport" ni buit)
-    const esTutor = !!(grupPrincipal && !/^suport$/i.test(grupPrincipal.trim()));
+    // Detectem si és tutor: grup_principal conté un grup real (G1-G14, MxI)
+    const grupTutor = extractGrupFromHorari(docent?.grup_principal || '');
 
     function labelSlot(fid, rawVal) {
       const vl = (rawVal || '').toLowerCase().trim();
+
       // Pati
       if (vl.includes('patia') || vl === 'pati a' || vl === 'pati primaria') return 'PATI PRIMÀRIA';
       if (vl.includes('patib') || vl === 'pati b' || vl === 'pati secundaria') return 'PATI SECUNDÀRIA';
 
-      // Neteja: strip "Suport " prefix i text addicional
-      let grupLabel = rawVal.split('·')[0].split('/')[0].trim();
-      if (/^suport\s+/i.test(grupLabel)) grupLabel = grupLabel.replace(/^suport\s+/i, '');
-      grupLabel = grupLabel.trim().toUpperCase();
-
-      // Franja de cobertura manual: mostrar directament el grup
-      if (cobFranges.has(fid)) return grupLabel;
-
-      // Franja normal del tutor en el seu propi grup: mostrar qui entra de suport
-      if (esTutor && grupLabel === grupPrincipal.toUpperCase()) {
-        const suports = docents.filter(d => {
-          if (!d.horari?.[todayDia]?.[fid]) return false;
-          if (d.nom === (docent?.nom || '')) return false;
-          // El valor de l'horari ha de referenciar exactament el grup del tutor
-          const hv = (d.horari[todayDia][fid] || '')
-            .replace(/^suport\s+/i, '').split('·')[0].split('/')[0].trim().toUpperCase();
-          return hv === grupPrincipal.toUpperCase();
-        }).filter(d => !absentNoms.has(d.nom));
-
-        if (!suports.length) return `${grupPrincipal.toUpperCase()} SOL/A`;
-        const labels = suports.map(d => d.nom.split(' ')[0]).join('/');
-        return `${grupPrincipal.toUpperCase()} + ${labels}`;
+      // Franja de cobertura: extreure grup del valor o mostrar-lo net
+      if (cobFranges.has(fid)) {
+        return extractGrupFromHorari(rawVal) || rawVal.split('·')[0].split('/')[0].trim().toUpperCase();
       }
 
-      return grupLabel;
+      // Horari normal: extreure grup del valor (funciona per a tots els formats)
+      const grup = extractGrupFromHorari(rawVal);
+      if (grup) return grup;
+
+      // No s'ha trobat grup en el valor:
+
+      if (grupTutor) {
+        // El tutor SEMPRE és en el seu propi grup. El valor mostra qui entra de suport.
+        // Detectem noms de persona (patró "X.X" o "X. X")
+        const anyNames = /\w+\.\s*\w+/i.test(rawVal);
+        if (!anyNames) return grupTutor; // cap suport definit per aquesta franja
+
+        // Comprovem quins dels docents esmentats estan presents avui
+        const rawNorm = normStr(rawVal);
+        const supportPresent = docents.filter(d => {
+          if (d.nom === docent?.nom) return false;
+          return rawNorm.includes(normStr(d.nom)) && !absentNoms.has(d.nom);
+        });
+
+        if (!supportPresent.length) return `${grupTutor} SOL/A`;
+        const labels = supportPresent.map(d => d.nom.split(' ')[0]).join('/');
+        return `${grupTutor} + ${labels}`;
+      }
+
+      // Especialista sense grup determinat (ex. "SUPORT" sol): saltem la franja
+      return null;
     }
 
-    // Pre-labeling: aplicar labelSlot a cada slot ABANS d'agregar
+    // Aplica labelSlot a cada slot i filtra els null
     const slots = [...slotMap.entries()]
-      .map(([fid, activitat]) => ({ fid, activitat: labelSlot(fid, activitat), fidIdx: franjaOrder(fid) }))
-      .filter(s => s.fidIdx >= 0)
+      .map(([fid, activitat]) => {
+        const label = labelSlot(fid, activitat);
+        return label ? { fid, activitat: label, fidIdx: franjaOrder(fid) } : null;
+      })
+      .filter(s => s && s.fidIdx >= 0)
       .sort((a,b) => a.fidIdx - b.fidIdx);
 
-    // Agregar consecutius amb la mateixa etiqueta (ja processada)
+    if (!slots.length) return null;
+
+    // Agregar consecutius amb la mateixa etiqueta
     const horaris = aggregateSlots(slots, v => v);
 
     // Color del bloc: determinat per l'etapa dels grups que cobreix
