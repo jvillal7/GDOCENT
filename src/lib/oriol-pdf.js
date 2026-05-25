@@ -194,23 +194,19 @@ function drawPersonsTable(doc, persons, startY, title) {
   underlineTitle(doc, title, MX, y + 4);
   y += 12;
 
-  const GAP  = 3;
-  const colW = (CW - GAP) / 2;
-  const half  = Math.ceil(persons.length / 2);
-  const left  = persons.slice(0, half);
-  const right = persons.slice(half);
+  const GAP   = 3;
+  const colW  = (CW - GAP) / 2;
+  const colsX = [MX, MX + colW + GAP];
+  const colsY = [y, y];
 
-  let yL = y, yR = y;
-  for (const p of left) {
-    yL = guard(doc, yL, personBlockHeight(p));
-    yL = drawPersonBlock(doc, p, MX, yL, colW);
-    yL += 2;
+  // Bin-packing greedy: cada bloc va a la columna més baixa (menys ocupada)
+  for (const p of persons) {
+    const col = colsY[0] <= colsY[1] ? 0 : 1;
+    colsY[col] = guard(doc, colsY[col], personBlockHeight(p));
+    colsY[col] = drawPersonBlock(doc, p, colsX[col], colsY[col], colW);
+    colsY[col] += 2;
   }
-  for (const p of right) {
-    yR = drawPersonBlock(doc, p, MX + colW + GAP, yR, colW);
-    yR += 2;
-  }
-  return Math.max(yL, yR) + 2;
+  return Math.max(colsY[0], colsY[1]) + 2;
 }
 
 export async function generarOriolPDF(data) {
