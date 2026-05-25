@@ -127,7 +127,8 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
   for (const a of (absentsAvui || [])) {
     if (!absentFranges.has(a.docent_nom)) absentFranges.set(a.docent_nom, new Set());
     const s = absentFranges.get(a.docent_nom);
-    if (!a.franges?.length) s.add('*'); else a.franges.forEach(f => s.add(f));
+    const fr = Array.isArray(a.franges) ? a.franges : [];
+    if (!fr.length) s.add('*'); else fr.forEach(f => s.add(f));
   }
   const isAbsent = (nom, fid) => {
     const s = absentFranges.get(nom);
