@@ -118,7 +118,8 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia) {
 
   return cobrintNoms.map((nom, idx) => {
     const coberturesD = cobertures.filter(c => c.docent_cobrint_nom === nom);
-    const docent      = docents?.find(d => d.nom === nom);
+    // Nom de cobertura pot ser "A.R" mentre a la BD és "A.R (MEE)" — cerca per prefix
+    const docent = docents?.find(d => d.nom === nom || d.nom.startsWith(nom + ' '));
 
     // Construir mapa franja→activitat: primer cobertures (overrides), despres horari normal
     const slotMap = new Map();
