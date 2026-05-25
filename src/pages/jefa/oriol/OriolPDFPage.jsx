@@ -128,7 +128,7 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia) {
       for (const [fid, val] of Object.entries(docent.horari[todayDia])) {
         if (!val) continue;
         const vl = val.toLowerCase().trim();
-        if (vl === 'lliure' || vl === 'libre' || vl === '' || vl === 'tp') continue;
+        if (vl === 'lliure' || vl === 'libre' || vl === '' || vl === 'tp' || vl === '_') continue;
         slotMap.set(fid, val);
       }
     }
