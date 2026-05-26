@@ -55,46 +55,47 @@ export default function AppShell() {
     const isOriol = escola?.nom?.toLowerCase().includes('oriol');
     const greeting = isOriol ? "Hola Mireia! Com et puc ajudar avui?" : "Hola Veronica! Com et puc ajudar avui?";
 
-    if (chatConfig.isMinimized) {
-      return (
-        <div
-          onClick={maximizeChat}
-          style={{
-            position: 'fixed', bottom: 80, right: 16, zIndex: 400,
-            background: 'linear-gradient(135deg,#7c3aed,#2563eb)',
-            color: '#fff', borderRadius: 28,
-            padding: '10px 18px 10px 14px',
-            display: 'flex', alignItems: 'center', gap: 10,
-            boxShadow: '0 4px 20px rgba(124,58,237,.4)',
-            cursor: 'pointer', userSelect: 'none',
-            fontSize: 13, fontWeight: 600,
-          }}
-        >
-          <span style={{ fontSize: 18 }}>💬</span>
-          <span>Horaria</span>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#a5f3fc', animation: 'horaria-pulse .9s ease-in-out infinite', flexShrink: 0 }} />
-          <button
-            onClick={e => { e.stopPropagation(); closeChat(); }}
-            style={{ background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: '50%', width: 22, height: 22, color: '#fff', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}
-          >✕</button>
-        </div>
-      );
-    }
-
     return (
-      <ChatIA
-        key={chatConfig.avis?.id}
-        systemContext={chatConfig.systemContext}
-        greeting={greeting}
-        initialMessage={chatConfig.initialMessage}
-        escolaId={escola?.id}
-        absenciaId={chatConfig.avis?.id}
-        docentAbsent={chatConfig.avis?.docent_nom}
-        dataAbsencia={chatConfig.avis?.data}
-        onAplicarProposta={handleAplicarProposta}
-        onClose={closeChat}
-        onMinimize={minimizeChat}
-      />
+      <>
+        {chatConfig.isMinimized && (
+          <div
+            onClick={maximizeChat}
+            style={{
+              position: 'fixed', bottom: 80, right: 16, zIndex: 400,
+              background: 'linear-gradient(135deg,#7c3aed,#2563eb)',
+              color: '#fff', borderRadius: 28,
+              padding: '10px 18px 10px 14px',
+              display: 'flex', alignItems: 'center', gap: 10,
+              boxShadow: '0 4px 20px rgba(124,58,237,.4)',
+              cursor: 'pointer', userSelect: 'none',
+              fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>💬</span>
+            <span>Horaria</span>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#a5f3fc', animation: 'horaria-pulse .9s ease-in-out infinite', flexShrink: 0 }} />
+            <button
+              onClick={e => { e.stopPropagation(); closeChat(); }}
+              style={{ background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: '50%', width: 22, height: 22, color: '#fff', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}
+            >✕</button>
+          </div>
+        )}
+        <div style={{ display: chatConfig.isMinimized ? 'none' : 'contents' }}>
+          <ChatIA
+            key={chatConfig.avis?.id}
+            systemContext={chatConfig.systemContext}
+            greeting={greeting}
+            initialMessage={chatConfig.initialMessage}
+            escolaId={escola?.id}
+            absenciaId={chatConfig.avis?.id}
+            docentAbsent={chatConfig.avis?.docent_nom}
+            dataAbsencia={chatConfig.avis?.data}
+            onAplicarProposta={handleAplicarProposta}
+            onClose={closeChat}
+            onMinimize={minimizeChat}
+          />
+        </div>
+      </>
     );
   };
 

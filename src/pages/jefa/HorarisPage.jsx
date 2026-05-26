@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
-import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, FRANJES_INTENSIVA_ORIOL, MAP_ORIOL_TO_INTENSIVA, DIES, GRUPS_ORIOL, COORDINADORS_CICLE } from '../../lib/constants';
+import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, FRANJES_INTENSIVA_ORIOL, MAP_ORIOL_TO_INTENSIVA, DIES, GRUPS_ORIOL, COORDINADORS_CICLE, MOTIUS_ABSENCIA, esMotuiATRI, MOTIUS_AMB_JUSTIFICANT } from '../../lib/constants';
 import { initials, oriolInitials, avatarColor, rolLabel } from '../../lib/utils';
 import { extractHorariFromPDF, generarHorarisIntensius } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
@@ -123,7 +123,7 @@ export default function HorarisPage() {
   const [baixesLoaded, setBaixesLoaded] = useState(false);
   const [baixesSaving, setBaixesSaving] = useState(false);
   const [baixaForm,   setBaixaForm]   = useState(null); // null | 'new' | index
-  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', tipus: 'malaltia', estat: 'activa' });
+  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', motiu_detall: '', estat: 'activa' });
   const [baixaMes,    setBaixaMes]    = useState('actives');
   const [baixaCobStats, setBaixaCobStats] = useState({});
   const [searchDocent, setSearchDocent] = useState('');
@@ -167,10 +167,10 @@ export default function HorarisPage() {
 
   function openBaixaForm(idx) {
     if (idx === 'new') {
-      setBaixaDraft({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', tipus: 'malaltia', estat: 'activa' });
+      setBaixaDraft({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', motiu_detall: '', estat: 'activa' });
     } else {
       const b = baixes[idx];
-      setBaixaDraft({ ...b, pin: '1234', email: b.email || '', data_inici: b.data_inici || new Date().toISOString().split('T')[0], data_fi_prevista: b.data_fi_prevista || '', tipus: b.tipus || 'malaltia', estat: b.estat || 'activa' });
+      setBaixaDraft({ ...b, pin: '1234', email: b.email || '', data_inici: b.data_inici || new Date().toISOString().split('T')[0], data_fi_prevista: b.data_fi_prevista || '', motiu_detall: b.motiu_detall || '', estat: b.estat || 'activa' });
     }
     setBaixaForm(idx);
   }
@@ -186,7 +186,7 @@ export default function HorarisPage() {
       data_inici: baixaDraft.data_inici || new Date().toISOString().split('T')[0],
       data_fi_prevista: baixaDraft.data_fi_prevista || null,
       data_fi_real: existing?.data_fi_real || null,
-      tipus: baixaDraft.tipus || 'malaltia',
+      motiu_detall: baixaDraft.motiu_detall || '',
       estat: existing?.estat || 'activa',
     };
     const nova = baixaForm === 'new'
@@ -254,7 +254,7 @@ export default function HorarisPage() {
   }
 
   function imprimirInforme(baixa, cobCount) {
-    const tipusInfo = TIPUS_BAIXA.find(t => t.key === baixa.tipus) || TIPUS_BAIXA[0];
+    const tipusInfo = { label: baixa.motiu_detall || baixa.tipus || 'Malaltia' };
     const dies = duradaDies(baixa);
     const fmtData = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
     const html = `<!DOCTYPE html><html lang="ca"><head><meta charset="utf-8"><title>Baixa – ${baixa.absent}</title>
@@ -615,7 +615,7 @@ export default function HorarisPage() {
             {/* Cards de baixes */}
             {baixesDelMes.map(b => {
               const idx = baixes.indexOf(b);
-              const tipusInfo = TIPUS_BAIXA.find(t => t.key === b.tipus) || TIPUS_BAIXA[0];
+              const tipusInfo = { label: b.motiu_detall || b.tipus || 'Malaltia', color: b.motiu_detall ? (esMotuiATRI(b.motiu_detall) ? '#2563eb' : '#dc2626') : (TIPUS_BAIXA.find(t => t.key === b.tipus)?.color || '#dc2626') };
               const dies = duradaDies(b);
               const isActiva = b.estat !== 'tancada';
               const cobCount = baixaCobStats[b.absent] ?? 0;
@@ -1820,23 +1820,39 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docent
         </div>
       </div>
 
-      {/* Fila 2: Tipus + Dates */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+      {/* Fila 2: Motiu + Dates */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div>
-          <label className="f-label">Tipus de baixa</label>
-          <select className="f-ctrl" value={draft.tipus || 'malaltia'} onChange={e => onChange(d => ({ ...d, tipus: e.target.value }))}>
-            {TIPUS_BAIXA.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+          <label className="f-label">Dates d'inici i fi prevista</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="date" className="f-ctrl" value={draft.data_inici || ''} onChange={e => onChange(d => ({ ...d, data_inici: e.target.value }))} />
+            <input type="date" className="f-ctrl" value={draft.data_fi_prevista || ''} onChange={e => onChange(d => ({ ...d, data_fi_prevista: e.target.value }))} placeholder="Fi prevista" />
+          </div>
+        </div>
+        <div>
+          <label className="f-label">Motiu / Tipus de baixa</label>
+          <select className="f-ctrl" value={draft.motiu_detall || ''} onChange={e => onChange(d => ({ ...d, motiu_detall: e.target.value }))}>
+            <option value="">Seleccionar motiu...</option>
+            {MOTIUS_ABSENCIA.map(g => (
+              <optgroup key={g.grup} label={g.grup}>
+                {g.opcions.map(o => <option key={o} value={o}>{o}</option>)}
+              </optgroup>
+            ))}
           </select>
         </div>
-        <div>
-          <label className="f-label">Data d'inici</label>
-          <input type="date" className="f-ctrl" value={draft.data_inici || ''} onChange={e => onChange(d => ({ ...d, data_inici: e.target.value }))} />
-        </div>
-        <div>
-          <label className="f-label">Fi prevista (opcional)</label>
-          <input type="date" className="f-ctrl" value={draft.data_fi_prevista || ''} onChange={e => onChange(d => ({ ...d, data_fi_prevista: e.target.value }))} />
-        </div>
       </div>
+
+      {/* Alertes motiu */}
+      {draft.motiu_detall && esMotuiATRI(draft.motiu_detall) && (
+        <div className="f-warn" style={{ background: '#eff6ff', borderColor: '#93c5fd', color: '#1d4ed8', fontSize: 12 }}>
+          🖥️ No oblidis gestionar aquest permís per <strong>ATRI</strong> (portal Generalitat).
+        </div>
+      )}
+      {draft.motiu_detall && MOTIUS_AMB_JUSTIFICANT.has(draft.motiu_detall) && (
+        <div className="f-warn" style={{ fontSize: 12 }}>
+          📄 Recorda sol·licitar el <strong>justificant</strong> corresponent.
+        </div>
+      )}
 
       {/* Notes */}
       <div>

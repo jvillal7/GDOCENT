@@ -8,7 +8,7 @@ const MESOS_CAT = ['Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agos
 const PAGE_SIZE = 50;
 
 export default function HistorialPage() {
-  const { api, escola } = useApp();
+  const { api, escola, docents } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
 
   const [absencies, setAbsencies]     = useState(null);
@@ -107,10 +107,32 @@ export default function HistorialPage() {
     });
   }
 
+  function categoriaMotiu(motiu) {
+    if (!motiu) return 'Altres';
+    if (['Malaltia', 'Visita mèdica / Especialista', 'Urgència mèdica'].includes(motiu)) return 'Salut';
+    if (motiu === 'Acompanyar fill/a activitat escolar') return 'Acompanyar';
+    if (motiu === 'Flexibilització Horària') return 'Flexibilització';
+    if (motiu.startsWith('Reducció')) return 'Reducció jornada';
+    if (motiu.startsWith('Permís per') || motiu.startsWith('Llicència')) {
+      const famKey = ['familiar', 'fill', 'mort', 'hospitali', 'malaltia greu', 'matrimoni d\'un fill', 'atendre fill', 'discapacitat'];
+      if (famKey.some(k => motiu.toLowerCase().includes(k))) return 'ATRI Família';
+      return 'ATRI Personal';
+    }
+    return 'Altres';
+  }
+
   function exportExcel() {
     const DIES_CAT = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'];
-    const ABS_HDRS = ['Data', 'Dia', 'Docent', 'Tipus', 'Motiu', 'Franges', 'Estat', 'Cobert per', 'Núm. cob.'];
+    const ABS_HDRS = ['Data', 'Dia', 'Docent', 'Motiu complet', 'Franges', 'Estat', 'Cobert per', 'Núm. cob.'];
     const COB_HDRS = ['Data', 'Dia', 'Docent cobrint', 'Docent absent', 'Franja', 'Grup', 'TP afectat'];
+
+    // Derivar curs acadèmic
+    const ara = new Date();
+    const anyInici = ara.getMonth() >= 8 ? ara.getFullYear() : ara.getFullYear() - 1;
+    const cursLabel = `Curs ${anyInici}–${anyInici + 1}`;
+
+    const nomEscola = escola?.nom || 'Centre educatiu';
+    const dataGen   = new Date().toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' });
 
     function absRow(dia, a, cobs) {
       const myCobs = (cobs || []).filter(c => c.absencia_id === a.id || c.docent_absent_nom === a.docent_nom);
@@ -118,7 +140,7 @@ export default function HistorialPage() {
       const dataObj = dia !== 'sense-data' ? new Date(dia + 'T12:00:00') : null;
       let frangesText = '';
       try { frangesText = JSON.parse(a.franges || '[]').join(', '); } catch { frangesText = a.franges || ''; }
-      return [dia !== 'sense-data' ? dia : 'Sense data', dataObj ? DIES_CAT[dataObj.getDay()] : '', a.docent_nom || '', a.tipus === 'sortida' ? 'Sortida' : 'Absència', a.motiu || '', frangesText, a.estat === 'pendent' ? 'Pendent' : a.estat === 'arxivat' ? 'Arxivat' : 'Resolt', cobsNoms, myCobs.length];
+      return [dia !== 'sense-data' ? dia : 'Sense data', dataObj ? DIES_CAT[dataObj.getDay()] : '', a.docent_nom || '', a.motiu || '—', frangesText, a.estat === 'pendent' ? 'Pendent' : a.estat === 'arxivat' ? 'Arxivat' : 'Resolt', cobsNoms, myCobs.length];
     }
 
     function cobRow(dia, c) {
@@ -126,42 +148,142 @@ export default function HistorialPage() {
       return [dia !== 'sense-data' ? dia : 'Sense data', dataObj ? DIES_CAT[dataObj.getDay()] : '', c.docent_cobrint_nom || '', c.docent_absent_nom || '', c.franja || '', c.grup || '', c.tp_afectat ? 'Sí' : 'No'];
     }
 
-    // Full 1: Absències (total)
-    const absRows = [ABS_HDRS];
-    diesFiltrats.forEach(dia => {
-      const { abs, cobs } = byDay[dia] || {};
-      (abs || []).forEach(a => absRows.push(absRow(dia, a, cobs)));
-    });
+    // Afegeix capçalera de marca a un array de files (prepend)
+    function withBranding(dataRows, hdrs) {
+      const nCols = Math.max(hdrs.length, ...dataRows.map(r => r.length));
+      const brand = [
+        [nomEscola, ...Array(Math.max(0, nCols - 2)).fill(''), 'HorariaPro'],
+        [cursLabel + ' · Generat el ' + dataGen],
+        [],
+        hdrs,
+      ];
+      return [...brand, ...dataRows];
+    }
 
-    // Full 2: Cobertures (total)
-    const cobRows = [COB_HDRS];
-    diesFiltrats.forEach(dia => {
-      const { cobs } = byDay[dia] || {};
-      (cobs || []).forEach(c => cobRows.push(cobRow(dia, c)));
-    });
+    // Aplica estils a un sheet (capçalera marca + capçalera columnes + alternança files)
+    function styleSheet(ws, nHeaderRow, nDataHdrRow) {
+      const rng = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let r = rng.s.r; r <= rng.e.r; r++) {
+        for (let c = rng.s.c; c <= rng.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          if (!ws[addr]) continue;
+          if (r === nHeaderRow) {
+            ws[addr].s = { font: { bold: true, sz: 13, color: { rgb: '1A3A5C' } }, fill: { fgColor: { rgb: 'FFFFFF' } } };
+          } else if (r === nDataHdrRow) {
+            ws[addr].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1A3A5C' } } };
+          } else if (r > nDataHdrRow && (r - nDataHdrRow) % 2 === 0) {
+            ws[addr].s = { fill: { fgColor: { rgb: 'EEF3F9' } } };
+          }
+        }
+      }
+    }
 
     const wb = XLSX.utils.book_new();
 
-    function addSheet(rows, name) {
-      if (rows.length <= 1) return;
+    function addSheet(dataRows, hdrs, name) {
+      if (dataRows.length === 0) return;
+      const rows = withBranding(dataRows, hdrs);
       const ws = XLSX.utils.aoa_to_sheet(rows);
-      const maxCols = Math.max(...rows.map(r => r.length));
-      ws['!cols'] = Array.from({ length: maxCols }, (_, ci) => ({
-        wch: Math.min(40, Math.max(8, ...rows.map(r => String(r[ci] ?? '').length + 2)))
+      const nCols = Math.max(...rows.map(r => r.length));
+      ws['!cols'] = Array.from({ length: nCols }, (_, ci) => ({
+        wch: Math.min(42, Math.max(10, ...rows.map(r => String(r[ci] ?? '').length + 2)))
       }));
-      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      for (let c = range.s.c; c <= range.e.c; c++) {
-        const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
-        if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'D9D9D9' } } };
-      }
-      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      styleSheet(ws, 0, 3);
+      ws['!freeze'] = { xSplit: 0, ySplit: 4 };
       XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
     }
 
-    addSheet(absRows, 'Absències');
-    addSheet(cobRows, 'Cobertures');
+    // ──── FULL 1: Resum per docent ────────────────────────────────────────────
+    const CAT_COLS = ['Salut', 'ATRI Família', 'ATRI Personal', 'Reducció jornada', 'Flexibilització', 'Acompanyar', 'Sortides', 'Altres'];
+    const RESUM_HDRS = ['Docent', 'Rol', ...CAT_COLS, 'TOTAL', 'Cobertures gen.'];
 
-    // Fulls mensuals: un per cada mes del curs acadèmic
+    const docentMap = {};
+    (docents || []).forEach(d => { docentMap[d.nom] = d; });
+
+    const statsByDocent = {};
+    Object.values(byDay).forEach(({ abs, cobs }) => {
+      (abs || []).forEach(a => {
+        const nom = a.docent_nom || '—';
+        if (!statsByDocent[nom]) statsByDocent[nom] = { counts: Object.fromEntries(CAT_COLS.map(c => [c, 0])), cobs: 0 };
+        const cat = a.tipus === 'sortida' ? 'Sortides' : categoriaMotiu(a.motiu);
+        statsByDocent[nom].counts[cat] = (statsByDocent[nom].counts[cat] || 0) + 1;
+      });
+      (cobs || []).forEach(c => {
+        const nom = c.docent_absent_nom || '—';
+        if (!statsByDocent[nom]) statsByDocent[nom] = { counts: Object.fromEntries(CAT_COLS.map(c => [c, 0])), cobs: 0 };
+        statsByDocent[nom].cobs++;
+      });
+    });
+
+    const resumRows = Object.entries(statsByDocent)
+      .sort((a, b) => {
+        const totA = Object.values(a[1].counts).reduce((s, v) => s + v, 0);
+        const totB = Object.values(b[1].counts).reduce((s, v) => s + v, 0);
+        return totB - totA;
+      })
+      .map(([nom, s]) => {
+        const rol = docentMap[nom]?.rol || '';
+        const total = Object.values(s.counts).reduce((sum, v) => sum + v, 0);
+        return [nom, rol, ...CAT_COLS.map(c => s.counts[c] || 0), total, s.cobs || 0];
+      });
+
+    // Fila totals
+    if (resumRows.length > 0) {
+      const totals = ['TOTAL', '', ...CAT_COLS.map((_, ci) => resumRows.reduce((s, r) => s + (r[2 + ci] || 0), 0)), resumRows.reduce((s, r) => s + (r[2 + CAT_COLS.length] || 0), 0), resumRows.reduce((s, r) => s + (r[3 + CAT_COLS.length] || 0), 0)];
+      resumRows.push(totals);
+    }
+
+    if (resumRows.length > 0) {
+      const rows = withBranding(resumRows, RESUM_HDRS);
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 28 }, { wch: 14 },
+        ...CAT_COLS.map(() => ({ wch: 14 })),
+        { wch: 10 }, { wch: 14 },
+      ];
+      // Estil capçalera marca (fila 0) i capçalera columnes (fila 3)
+      const rngR = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let r2 = rngR.s.r; r2 <= rngR.e.r; r2++) {
+        for (let c = rngR.s.c; c <= rngR.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r: r2, c });
+          if (!ws[addr]) continue;
+          const isLastRow = r2 === rows.length - 1;
+          if (r2 === 0) {
+            ws[addr].s = { font: { bold: true, sz: 13, color: { rgb: '1A3A5C' } } };
+          } else if (r2 === 3) {
+            ws[addr].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1A3A5C' } }, alignment: { horizontal: 'center' } };
+          } else if (isLastRow) {
+            ws[addr].s = { font: { bold: true }, fill: { fgColor: { rgb: 'C6D9F1' } } };
+          } else if (r2 > 3 && (r2 - 4) % 2 === 1) {
+            ws[addr].s = { fill: { fgColor: { rgb: 'EEF3F9' } } };
+          }
+          // Destacar columna TOTAL (índex 2+CAT_COLS.length)
+          if (c === 2 + CAT_COLS.length && r2 >= 4) {
+            ws[addr].s = { ...ws[addr].s, font: { bold: true } };
+          }
+        }
+      }
+      ws['!freeze'] = { xSplit: 1, ySplit: 4 };
+      XLSX.utils.book_append_sheet(wb, ws, 'Resum per docent');
+    }
+
+    // ──── FULL 2: Detall absències ────────────────────────────────────────────
+    const absDataRows = [];
+    diesFiltrats.forEach(dia => {
+      const { abs, cobs } = byDay[dia] || {};
+      (abs || []).forEach(a => absDataRows.push(absRow(dia, a, cobs)));
+    });
+    addSheet(absDataRows, ABS_HDRS, 'Absències');
+
+    // ──── FULL 3: Cobertures ──────────────────────────────────────────────────
+    const cobDataRows = [];
+    diesFiltrats.forEach(dia => {
+      const { cobs } = byDay[dia] || {};
+      (cobs || []).forEach(c => cobDataRows.push(cobRow(dia, c)));
+    });
+    addSheet(cobDataRows, COB_HDRS, 'Cobertures');
+
+    // ──── FULLS MENSUALS ──────────────────────────────────────────────────────
     const allMesos = [...new Set(
       Object.keys(byDay).filter(d => d.length === 10).map(d => d.slice(0, 7))
     )].sort((a, b) => {
@@ -186,56 +308,58 @@ export default function HistorialPage() {
 
       if (mesAbs.length === 0 && mesCob.length === 0) return;
 
-      const absReals   = mesAbs.filter(r => r[3] !== 'Sortida').length;
-      const sortides   = mesAbs.filter(r => r[3] === 'Sortida').length;
-      const docentsAf  = new Set(mesAbs.map(r => r[2]).filter(Boolean)).size;
+      const absReals  = mesAbs.length;
+      const docentsAf = new Set(mesAbs.map(r => r[2]).filter(Boolean)).size;
 
       const rows = [
+        [nomEscola, '', '', '', '', '', '', 'HorariaPro'],
+        [cursLabel + ' · ' + nomMes],
+        [],
         [nomMes],
-        ['Absències', absReals, 'Sortides', sortides, 'Cobertures', mesCob.length, 'Docents afectats', docentsAf],
+        ['Absències reals', absReals, 'Cobertures', mesCob.length, 'Docents afectats', docentsAf],
         [],
       ];
 
       if (mesAbs.length > 0) {
-        rows.push(['ABSÈNCIES']);
-        rows.push(ABS_HDRS);
+        rows.push(['ABSÈNCIES'], ABS_HDRS);
         mesAbs.forEach(r => rows.push(r));
         rows.push([]);
       }
       if (mesCob.length > 0) {
-        rows.push(['COBERTURES']);
-        rows.push(COB_HDRS);
+        rows.push(['COBERTURES'], COB_HDRS);
         mesCob.forEach(r => rows.push(r));
       }
 
-      // Afegim el full i formatem manualment les files especials
       const ws = XLSX.utils.aoa_to_sheet(rows);
-      const maxCols = Math.max(...rows.map(r => r.length));
-      ws['!cols'] = Array.from({ length: maxCols }, (_, ci) => ({
-        wch: Math.min(40, Math.max(8, ...rows.map(r => String(r[ci] ?? '').length + 2)))
+      const nCols = Math.max(...rows.map(r => r.length));
+      ws['!cols'] = Array.from({ length: nCols }, (_, ci) => ({
+        wch: Math.min(42, Math.max(10, ...rows.map(r => String(r[ci] ?? '').length + 2)))
       }));
 
-      // Negreta fila 0 (títol mes), fila 1 (stats), caps de secció
-      const boldRows = new Set([0, 1]);
-      let ri = 3;
-      if (mesAbs.length > 0) { boldRows.add(ri); boldRows.add(ri + 1); ri += mesAbs.length + 3; }
-      if (mesCob.length > 0) { boldRows.add(ri); boldRows.add(ri + 1); }
+      // Estils: fila 0 = escola, fila 3 = títol mes, fila 4 = stats, caps seccions
+      const boldStyleRows = new Set([0, 3, 4]);
+      let ri = 6;
+      if (mesAbs.length > 0) { boldStyleRows.add(ri); boldStyleRows.add(ri + 1); ri += mesAbs.length + 3; }
+      if (mesCob.length > 0) { boldStyleRows.add(ri); boldStyleRows.add(ri + 1); }
 
-      const rng = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      boldRows.forEach(r => {
-        for (let c = rng.s.c; c <= rng.e.c; c++) {
-          const cell = ws[XLSX.utils.encode_cell({ r, c })];
-          if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: r <= 1 ? 'BDD7EE' : 'D9D9D9' } } };
+      const rngM = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let r2 = rngM.s.r; r2 <= rngM.e.r; r2++) {
+        for (let c = rngM.s.c; c <= rngM.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r: r2, c });
+          if (!ws[addr]) continue;
+          if (r2 === 0) ws[addr].s = { font: { bold: true, sz: 12, color: { rgb: '1A3A5C' } } };
+          else if (boldStyleRows.has(r2) && r2 > 0 && r2 <= 4) ws[addr].s = { font: { bold: true } };
+          else if (boldStyleRows.has(r2)) ws[addr].s = { font: { bold: true }, fill: { fgColor: { rgb: r2 === 7 || r2 === ri + 1 ? '1A3A5C' : 'D9D9D9' } }, ...(r2 === 7 || r2 === ri + 1 ? { font: { bold: true, color: { rgb: 'FFFFFF' } } } : {}) };
         }
-      });
+      }
 
-      ws['!freeze'] = { xSplit: 0, ySplit: 3 };
+      ws['!freeze'] = { xSplit: 0, ySplit: 5 };
       const sheetName = (MESOS_CAT[m - 1].slice(0, 3) + ' ' + y).slice(0, 31);
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     });
 
-    const nom = `historial_${mesFiltrat !== 'tots' ? mesFiltrat : new Date().toISOString().slice(0, 7)}.xlsx`;
-    XLSX.writeFile(wb, nom);
+    const nomFitxer = `${nomEscola.replace(/\s+/g, '_')}_absencies_${mesFiltrat !== 'tots' ? mesFiltrat : `${anyInici}-${anyInici + 1}`}.xlsx`;
+    XLSX.writeFile(wb, nomFitxer);
   }
 
   if (absencies == null) {

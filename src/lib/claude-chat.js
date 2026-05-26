@@ -2,7 +2,7 @@ import { FRANJES, FRANJES_ORIOL } from './constants';
 import { callClaudeRaw } from './claude-api';
 import { notifyCobertura } from './api';
 
-export function construirContextXat(escola, docents, normes, isOriol, absenciaContext = null, docentsBlocats = [], baixes = [], decisionsPassades = [], contextIA = '', frangesIA = null) {
+export function construirContextXat(escola, docents, normes, isOriol, absenciaContext = null, docentsBlocats = [], baixes = [], decisionsPassades = [], contextIA = '', frangesIA = null, coberturesAvui = []) {
   const FRANJES_ACT = frangesIA || (isOriol ? FRANJES_ORIOL : FRANJES);
   const jefaNom     = isOriol ? 'Mireia' : 'Veronica';
   const dies        = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
@@ -111,7 +111,21 @@ ${frangesDesc}
 
 --- HORARIS DE TOTS ELS DOCENTS ---
 ${horarisDesc}
-${absDesc}${baixes?.length ? `\n--- BAIXES LLARGUES (tot el curs) ---\n${baixes.map(b => `  · ${b.absent} (de baixa) → cobert per ${b.substitut}${b.notes ? ` (${b.notes})` : ''}. NO proposar ${b.absent}.`).join('\n')}` : ''}${docentsBlocats.length ? `\n--- DOCENTS FORA AVUI (activitat especial) ---\n${docentsBlocats.map(b => `  · ${b.nom}: absent ${b.hores || 'tot el dia'}`).join('\n')}\nNO els proposis.` : ''}${decisionsDesc}`;
+${absDesc}${baixes?.length ? `\n--- BAIXES LLARGUES (tot el curs) ---\n${baixes.map(b => `  · ${b.absent} (de baixa) → cobert per ${b.substitut}${b.notes ? ` (${b.notes})` : ''}. NO proposar ${b.absent}.`).join('\n')}` : ''}${docentsBlocats.length ? `\n--- DOCENTS FORA AVUI (activitat especial) ---\n${docentsBlocats.map(b => `  · ${b.nom}: absent ${b.hores || 'tot el dia'}`).join('\n')}\nNO els proposis.` : ''}${(() => {
+  if (!coberturesAvui?.length) return '';
+  const FRANJES_ACT2 = frangesIA || (isOriol ? FRANJES_ORIOL : FRANJES);
+  const byDocent = {};
+  for (const c of coberturesAvui) {
+    if (!c.docent_cobrint_nom) continue;
+    if (!byDocent[c.docent_cobrint_nom]) byDocent[c.docent_cobrint_nom] = [];
+    const label = FRANJES_ACT2.find(f => f.id === c.franja)?.sub || c.franja;
+    byDocent[c.docent_cobrint_nom].push(label);
+  }
+  const lines = Object.entries(byDocent)
+    .map(([nom, franges]) => `  · ${nom}: JA COBREIX a ${franges.join(', ')} — NO proposar per a les mateixes franges`)
+    .join('\n');
+  return `\n--- COBERTURES JA ASSIGNADES AVUI (no repetir) ---\n${lines}\nATENCIÓ: Els docents llistats ja estan cobrint una altra absència avui. NO els tornis a proposar per a franges en conflicte.`;
+})()}${decisionsDesc}`;
 }
 
 // Versió ràpida del botó IA: mateixa lògica que el chatbot però sense UI
@@ -176,11 +190,13 @@ export async function aplicarPropostaChat(avis, proposta, chatMsgs, { api, escol
   const absentDocent = docents.find(d => d.nom === avis.docent_nom);
   const grupFallback = absentDocent?.grup_principal || '';
 
+  const _GRUPS_GEN = new Set(['suport','pae','mee','mall','estim','evip','atri']);
   // 2. Guardar noves cobertures + deutes TP
   for (const p of propostaArr) {
-    // grup_origen ve de la proposta IA (grup específic del docent absent en aquella franja)
-    // és més precís que grup_principal quan l'absent és un especialista itinerant
-    const grupCobertura = p.grup_origen || grupFallback;
+    const _rawOrigen = (p.grup_origen || '').trim();
+    const grupCobertura = (!_rawOrigen || _GRUPS_GEN.has(_rawOrigen.toLowerCase()))
+      ? ((p.motiu || '').match(/\b(G\d{1,2}|MxI|CEEPSIR)\b/i)?.[1]?.toUpperCase() || _rawOrigen || grupFallback)
+      : (_rawOrigen || grupFallback);
     const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja].filter(Boolean);
     for (const fid of frangesACobrir) {
       await api.saveCobertura({

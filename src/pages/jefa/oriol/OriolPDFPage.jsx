@@ -52,12 +52,25 @@ function aggregateSlots(slots, labelFn) {
 
 // ── Derivació automàtica ──────────────────────────────────────────────────────
 
+// Rols sense grup fix — quan una cobertura té aquest valor al camp grup,
+// cal extreure el grup real del camp motiu.
+const GRUPS_GENERICS = new Set(['suport','pae','mee','mall','estim','evip','atri']);
+
 // Extreu el primer grup (G1-G14, MxI, CEEPSIR) d'un valor de horari qualsevol.
 // Funciona per a tots els formats: "Suport G13", "G13 Suport", "G8 · Suport", "G14. Suport", "G7. SUPORT", etc.
 function extractGrupFromHorari(val) {
   if (!val) return null;
   const m = (val || '').match(/\b(G\d{1,2}|MxI|CEEPSIR)\b/i);
   return m ? m[1].toUpperCase() : null;
+}
+
+// Retorna el grup real d'una cobertura: si grup és genèric, el busca al motiu.
+function resolGrup(c) {
+  const raw = (c.grup || '').trim();
+  if (!raw || GRUPS_GENERICS.has(raw.toLowerCase())) {
+    return extractGrupFromHorari(c.motiu) || raw || null;
+  }
+  return raw;
 }
 
 function getEtapa(grup) {
@@ -68,55 +81,49 @@ function getEtapa(grup) {
 }
 
 function buildTaulaGrups(cobertures) {
-  // Cada cobertura: {grup, franja, docent_cobrint_nom, docent_absent_nom}
-  // Agrupar per grup → per (grup, set_cobrint) → franges consecutives
-  const map = new Map(); // `${grup}|${cobrint_sorted}` → {grup, cobrint, fids: Set}
+  // Clau: `${grup}|||${nom_cobrint}` → acumula tots els fids del dia
+  const map = new Map();
 
   for (const c of cobertures) {
-    // Quan grup és buit (especialistes itinerants), usem les inicials de l'absent com a referència
-    const grup = c.grup || c.docent_absent_nom?.split(' ')[0] || null;
+    const grup = resolGrup(c) || c.docent_absent_nom?.split(' ')[0] || null;
     const nom  = (c.docent_cobrint_nom || '').split(' ')[0];
     const fid  = c.franja;
-    if (!grup || !fid) continue;
+    if (!grup || !fid || !nom) continue;
 
-    // Clau provisonal per grup (al final agrupem per grup+cobrint)
-    const cellKey = `${grup}||${fid}`;
-    if (!map.has(cellKey)) map.set(cellKey, { grup, fid, suports: new Set() });
-    if (nom) map.get(cellKey).suports.add(nom);
-  }
-
-  // Ara agrupem per grup i construïm blocs consecutius
-  const byGrup = new Map();
-  for (const [, cell] of map) {
-    if (!byGrup.has(cell.grup)) byGrup.set(cell.grup, []);
-    byGrup.get(cell.grup).push({
-      fid: cell.fid,
-      fidIdx: franjaOrder(cell.fid),
-      suports: [...cell.suports].sort().join('/'),
-    });
+    const key = `${grup}|||${nom}`;
+    if (!map.has(key)) map.set(key, { grup, nom, fids: new Set() });
+    map.get(key).fids.add(fid);
   }
 
   const rows = [];
-  for (const [grup, cells] of byGrup) {
-    const sorted = cells.sort((a,b) => a.fidIdx - b.fidIdx);
-    // Agrupa franges consecutives amb mateixos suports
-    let current = null;
-    for (const c of sorted) {
-      if (current && c.suports === current.suports && c.fidIdx === current.lastIdx + 1) {
-        current.fids.push(c.fid); current.lastIdx = c.fidIdx;
+  for (const [, { grup, nom, fids }] of map) {
+    const sorted = [...fids].sort((a, b) => franjaOrder(a) - franjaOrder(b));
+    // Trobar blocs consecutius
+    const blocs = [];
+    let cur = null;
+    for (const fid of sorted) {
+      const idx = franjaOrder(fid);
+      if (cur && idx === cur.lastIdx + 1) {
+        cur.fids.push(fid); cur.lastIdx = idx;
       } else {
-        if (current) rows.push({ etapa: getEtapa(grup), grup, hora: horaRange(current.fids), suport: current.suports });
-        current = { fids: [c.fid], lastIdx: c.fidIdx, suports: c.suports };
+        if (cur) blocs.push(cur.fids);
+        cur = { fids: [fid], lastIdx: idx };
       }
     }
-    if (current) rows.push({ etapa: getEtapa(grup), grup, hora: horaRange(current.fids), suport: current.suports });
+    if (cur) blocs.push(cur.fids);
+
+    // Blocs no consecutius units per " · " en una sola fila
+    const hora = blocs.map(b => horaRange(b)).join(' · ');
+    rows.push({ etapa: getEtapa(grup), grup, hora, suport: nom });
   }
 
-  return rows.sort((a,b) => {
+  return rows.sort((a, b) => {
     const e = { 'INFANTIL/PRIMÀRIA': 0, 'SECUNDÀRIA': 1 };
     const ed = (e[a.etapa]||0) - (e[b.etapa]||0);
-    if (ed) return ed;
-    return (parseInt(a.grup.replace(/\D/g,''))||0) - (parseInt(b.grup.replace(/\D/g,''))||0);
+    if (ed !== 0) return ed;
+    const gd = (parseInt(a.grup.replace(/\D/g,''))||0) - (parseInt(b.grup.replace(/\D/g,''))||0);
+    if (gd !== 0) return gd;
+    return (a.hora || '').localeCompare(b.hora || '');
   });
 }
 
@@ -159,7 +166,7 @@ function buildTaulaEspecialistes(cobertures, docents, todayDia, absentsAvui) {
     // Cobertures del dia (sobreescriuen horari normal per aquella franja)
     for (const c of coberturesD) {
       if (!c.franja) continue;
-      const activitat = c.grup || (c.docent_absent_nom ? `Cob. ${c.docent_absent_nom.split(' ')[0]}` : 'Cobertura');
+      const activitat = resolGrup(c) || (c.docent_absent_nom ? `Cob. ${c.docent_absent_nom.split(' ')[0]}` : 'Cobertura');
       slotMap.set(c.franja, activitat);
     }
 

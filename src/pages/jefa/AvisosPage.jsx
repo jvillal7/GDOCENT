@@ -70,17 +70,11 @@ export default function AvisosPage() {
       }
       setInfoExtra(vigents);
       const actives = (data || []).filter(a => a.estat !== 'arxivat');
-      // Auto-arxivar absències resoltes de fa més de 3 dies (marge perquè la jefa les vegi)
-      const limitArxiu = new Date(); limitArxiu.setDate(limitArxiu.getDate() - 3);
-      const limitArxiuISO = limitArxiu.toISOString().split('T')[0];
-      const passades = actives.filter(a => a.estat === 'resolt' && a.data && a.data < limitArxiuISO);
-      // Auto-arxivar avisos pendents/provisionals de dies passats (ja no cal gestionar-los)
-      const passadesExpired = actives.filter(a =>
-        !passades.find(p => p.id === a.id) &&
-        ['pendent', 'provisional'].includes(a.estat) &&
+      // Auto-arxivar tots els avisos de dies passats (la cobertura ja és passada, no cal gestionar-los)
+      const totesAArxivar = actives.filter(a =>
+        ['pendent', 'provisional', 'resolt'].includes(a.estat) &&
         a.data && a.data < avui
       );
-      const totesAArxivar = [...passades, ...passadesExpired];
       if (totesAArxivar.length > 0) {
         await Promise.all(totesAArxivar.map(a => api.patchAbsencia(a.id, { estat: 'arxivat' })));
       }
@@ -217,7 +211,7 @@ export default function AvisosPage() {
           franges: JSON.stringify(av.franges),
           motiu: av.motiu || 'Activitat especial',
           estat: 'pendent',
-          tipus: 'sortida',
+          tipus: isOriol ? 'absencia' : 'sortida',
         });
       }
       setAvisosDescoberts([]);
@@ -428,7 +422,7 @@ export default function AvisosPage() {
     generarIA(avis, frangesACobrir);
   }
 
-  function obrirChat(avis) {
+  async function obrirChat(avis) {
     const dateObj = avis.data ? new Date(avis.data + 'T12:00:00') : null;
     const dia = dateObj
       ? ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][dateObj.getDay()]
@@ -440,10 +434,11 @@ export default function AvisosPage() {
     const blocsDescChat = infoExtraActiva.flatMap(ie => ie.docentsBlocats || []);
     const decisionsRellevants = iaDecisions.filter(d => nomsSimilars(d.absent, avis.docent_nom)).slice(0, 5);
     const decisionsInjectades = decisionsRellevants.length ? decisionsRellevants : iaDecisions.slice(0, 3);
+    const cobsAvui = await api.getCoberturasAvui().catch(() => []);
     const systemContext = construirContextXat(escola, docents, normes, isOriol, {
       nom: avis.docent_nom, data: avis.data, dia,
       frangesIds: parseFranges(avis.franges), motiu: avis.motiu,
-    }, blocsDescChat, baixes, decisionsInjectades, contextIA, frangesIA);
+    }, blocsDescChat, baixes, decisionsInjectades, contextIA, frangesIA, cobsAvui);
 
     const MESOS = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];
     const dataStr = dateObj ? `${dateObj.getDate()} de ${MESOS[dateObj.getMonth()]}` : '';
@@ -557,8 +552,12 @@ export default function AvisosPage() {
       const absentDocent = docents.find(d => d.nom === iaTarget.docent_nom);
       const grupFallback = absentDocent?.grup_principal || '';
 
+      const GRUPS_GENERICS = new Set(['suport','pae','mee','mall','estim','evip','atri']);
       for (const p of proposta) {
-        const grupCobertura = p.grup_origen || grupFallback;
+        const rawOrigen = (p.grup_origen || '').trim();
+        const grupCobertura = (!rawOrigen || GRUPS_GENERICS.has(rawOrigen.toLowerCase()))
+          ? ((p.motiu || '').match(/\b(G\d{1,2}|MxI|CEEPSIR)\b/i)?.[1]?.toUpperCase() || rawOrigen || grupFallback)
+          : (rawOrigen || grupFallback);
         // Nou format: franges_ids (array). Antic: franja (string). Guardem 1 cobertura per franja.
         const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja];
         for (const fid of frangesACobrir) {

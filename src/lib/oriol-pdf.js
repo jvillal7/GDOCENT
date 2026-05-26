@@ -304,8 +304,8 @@ export async function generarOriolPDF(data) {
       columnStyles: {
         0: { cellWidth: 34, halign: 'center' },
         1: { cellWidth: 17, halign: 'center' },
-        2: { cellWidth: 43, halign: 'center' },
-        3: { cellWidth: CW - 34 - 17 - 43, halign: 'left' },
+        2: { cellWidth: 58, halign: 'center' },
+        3: { cellWidth: CW - 34 - 17 - 58, halign: 'left' },
       },
     });
     y = doc.lastAutoTable.finalY + 4;

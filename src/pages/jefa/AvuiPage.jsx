@@ -163,6 +163,36 @@ export default function AvuiPage() {
         });
       });
 
+      // Pas 2b: absències d'especialistes sense grup fix (MEE/PAE/MALL…)
+      // → mostrar la cobertura a la columna del grup destí (no sobreescriu absències de tutor)
+      const GRUPS_GEN_AVUI = new Set(['suport','pae','mee','mall','estim','evip','atri']);
+      const resolGrupCob = (cob) => {
+        const raw = (cob.grup || '').trim();
+        if (!raw || GRUPS_GEN_AVUI.has(raw.toLowerCase()))
+          return (cob.motiu || '').match(/\b(G\d{1,2}|MxI|CEEPSIR)\b/i)?.[1]?.toUpperCase() || raw;
+        return raw;
+      };
+      (absencies || []).forEach(a => {
+        const docent = docents.find(d => d.nom === a.docent_nom);
+        const hasFix = docent?.grup_principal &&
+          GRUPS.find(g => normGrup(g) === normGrup(docent.grup_principal));
+        if (hasFix) return; // ja gestionat al Pas 2
+        if (a.estat !== 'resolt' && a.estat !== 'arxivat') return;
+
+        (cobertures || []).filter(c => c.absencia_id === a.id).forEach(cob => {
+          if (!cob.franja) return;
+          const grDesti = resolGrupCob(cob);
+          const colGrup = GRUPS.find(g => normGrup(g) === normGrup(grDesti));
+          if (!colGrup) return;
+          const key = `${colGrup}__${cob.franja}`;
+          // Només mostrar si la cel·la no té ja una absència de tutor pendent/resolta
+          const existing = newCells[key];
+          if (!existing || existing.estat === 'normal' || existing.estat === 'ok') {
+            newCells[key] = { estat: 'resolt', cobrint: (cob.docent_cobrint_nom || '').split(' ')[0] };
+          }
+        });
+      });
+
       setCells(newCells);
 
       const sieiKey = escola?.nom?.toLowerCase().includes('rivo') ? 'rivo'
