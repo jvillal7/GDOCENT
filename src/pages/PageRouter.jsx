@@ -8,6 +8,7 @@ import HorarisPage   from './jefa/HorarisPage';
 import AvisarPage    from './teacher/AvisarPage';
 import CoberturasPage from './teacher/CoberturasPage';
 import MeuTPPage     from './teacher/MeuTPPage';
+import MeusPatiTornsPage from './teacher/MeusPatiTornsPage';
 import { ResumPage, InformesPage } from './StaticPages';
 import AdminPage from './admin/AdminPage';
 import ContextIAPage from './admin/ContextIAPage';
@@ -21,7 +22,7 @@ import OriolPDFPage      from './jefa/oriol/OriolPDFPage';
 const PAGES = {
   jd: AvuiPage,   javis: AvisosPage,  jtp: TPPage,
   jh: HistorialPage, jhoraris: HorarisPage,
-  ta: AvisarPage, tc: CoberturasPage, tt: MeuTPPage,
+  ta: AvisarPage, tc: CoberturasPage, tt: MeuTPPage, tpati: MeusPatiTornsPage,
   di: HistorialPage, df: InformesPage, dv: AdminPage, dv_context: ContextIAPage, dv_logs: LogsPage,
   oj_abs: OriolAbsentsPage, oj_reu: OriolReunionsPage,
   oj_cee: OriolCeepsirPage,

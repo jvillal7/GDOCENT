@@ -176,5 +176,7 @@ export function makeApi(escolaId) {
     getConfigIntensiva:      ()    => f(`escoles?id=eq.${escolaId}&select=config_intensiva`, { bypassSchoolId: true }),
     saveConfigIntensiva:     cfg   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ config_intensiva: cfg }), bypassSchoolId: true }),
     saveHorariIntensiu: (id, h) => { cacheDel(`doc_${escolaId}`); return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ horari_intensiu: h }) }); },
+    getPatiTorns:       ()    => f(`escoles?id=eq.${escolaId}&select=config_pati`, { bypassSchoolId: true }),
+    savePatiTorns:      data  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ config_pati: data }), bypassSchoolId: true }),
   };
 }

@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, FRANJES_INTENSIVA_ORIOL, MAP_ORIOL_TO_INTENSIVA, DIES, GRUPS_ORIOL, COORDINADORS_CICLE, MOTIUS_ABSENCIA, esMotuiATRI, MOTIUS_AMB_JUSTIFICANT } from '../../lib/constants';
-import { initials, oriolInitials, avatarColor, rolLabel } from '../../lib/utils';
-import { extractHorariFromPDF, generarHorarisIntensius } from '../../lib/claude';
+import { initials, oriolInitials, avatarColor, rolLabel, normGrup } from '../../lib/utils';
+import { extractHorariFromPDF, generarHorarisIntensius, extractarReglesIntensiuPDF } from '../../lib/claude';
+import { callClaudeRaw, callClaude } from '../../lib/claude-api';
 import Spinner from '../../components/Spinner';
 
 const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
@@ -128,6 +129,7 @@ export default function HorarisPage() {
   const [baixaCobStats, setBaixaCobStats] = useState({});
   const [searchDocent, setSearchDocent] = useState('');
   const fileRef = useRef(null);
+  const [dragUpload, setDragUpload] = useState(false);
 
   useEffect(() => {
     if (!api) return;
@@ -143,6 +145,17 @@ export default function HorarisPage() {
       if (list.length) loadBaixaCobStats(list);
     }).catch(() => setBaixesLoaded(true));
   }, [api]);
+
+  // Sanejament automàtic: si algun substitut ja no existeix com a docent actiu, elimina la baixa
+  useEffect(() => {
+    if (!api || !baixesLoaded || docents.length === 0 || baixes.length === 0) return;
+    const nomsActius = new Set(docents.map(d => d.nom.toLowerCase().trim()));
+    const netes = baixes.filter(b => nomsActius.has((b.substitut || '').toLowerCase().trim()));
+    if (netes.length !== baixes.length) {
+      api.saveBaixes(netes).catch(() => {});
+      setBaixes(netes);
+    }
+  }, [baixesLoaded, docents.length, baixes.length]);
 
   async function loadBaixes() {
     if (baixesLoaded) return;
@@ -403,7 +416,17 @@ export default function HorarisPage() {
     const { id, nom } = deleteTarget;
     setDeleteTarget(null);
     setDocents(prev => prev.filter(d => d.id !== id));
-    try { await api.deleteDocent(id); showToast(`Docent ${nom} eliminat`); }
+    try {
+      await api.deleteDocent(id);
+      // Si el docent eliminat era un substitut, netejar la baixa corresponent
+      const nomLow = nom.toLowerCase().trim();
+      const novaBaixes = baixes.filter(b => (b.substitut || '').toLowerCase().trim() !== nomLow);
+      if (novaBaixes.length !== baixes.length) {
+        await api.saveBaixes(novaBaixes);
+        setBaixes(novaBaixes);
+      }
+      showToast(`Docent ${nom} eliminat`);
+    }
     catch (e) { showToast('Error eliminant: ' + e.message); reload(); }
   }
 
@@ -464,11 +487,12 @@ export default function HorarisPage() {
           </div>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 16 }}>
         {[
           { key: 'personal',  icon: '👥', title: 'Personal del centre', desc: 'Horaris, correus i accés' },
           { key: 'grups',     icon: '📚', title: 'Grups',               desc: 'Horaris per grup i aula' },
           { key: 'intensiva', icon: '🌅', title: 'Intensiva',           desc: 'Jornada intensiva',        dot: configIntensiva?.actiu },
+          { key: 'pati',      icon: '🕐', title: 'Pati',                desc: 'Torns de vigilància' },
           { key: 'sortides',  icon: '🚌', title: 'Sortides',            desc: 'Gestiona sortides escolars' },
           { key: 'baixes',    icon: '🩹', title: 'Baixes',              desc: baixes.filter(b => b.estat !== 'tancada').length ? `${baixes.filter(b => b.estat !== 'tancada').length} actives` : 'Cap baixa activa' },
         ].map(c => {
@@ -500,10 +524,10 @@ export default function HorarisPage() {
       </div>
 
       {viewMode === 'grups' && isOriol && (
-        <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} onCellSave={handleCellSave} />
+        <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} onCellSave={handleCellSave} configIntensiva={configIntensiva} onConfigChange={setConfigIntensiva} api={api} showToast={showToast} />
       )}
       {viewMode === 'grups' && !isOriol && (
-        <RivoGrupsView docents={docents} franjes={franjes} selectedGrup={selectedRivoGrup} onSelectGrup={setSelectedRivoGrup} onCellSave={handleCellSave} />
+        <RivoGrupsView docents={docents} franjes={franjes} selectedGrup={selectedRivoGrup} onSelectGrup={setSelectedRivoGrup} onCellSave={handleCellSave} configIntensiva={configIntensiva} onConfigChange={setConfigIntensiva} api={api} showToast={showToast} />
       )}
       {viewMode === 'intensiva' && (
         <IntensivaView
@@ -515,6 +539,18 @@ export default function HorarisPage() {
           onConfigChange={cfg => setConfigIntensiva(cfg)}
           onHorarisSaved={reload}
           showToast={showToast}
+        />
+      )}
+      {viewMode === 'pati' && (
+        <PatiView
+          docents={docents}
+          franjes={franjes}
+          configIntensiva={configIntensiva}
+          api={api}
+          showToast={showToast}
+          isOriol={isOriol}
+          baixes={baixes}
+          escola={escola}
         />
       )}
       {viewMode === 'sortides' && (
@@ -683,7 +719,7 @@ export default function HorarisPage() {
         </div>
       )}
 
-      {viewMode !== 'grups' && viewMode !== 'intensiva' && viewMode !== 'sortides' && viewMode !== 'baixes' && (<>
+      {viewMode !== 'grups' && viewMode !== 'intensiva' && viewMode !== 'pati' && viewMode !== 'sortides' && viewMode !== 'baixes' && (<>
 
       <div className="alert alert-blue">
         ℹ️ Puja el PDF o una foto (PNG, JPG) de l'horari de cada docent. La IA llegirà l'horari automàticament.
@@ -804,13 +840,17 @@ export default function HorarisPage() {
         <div className="card-head"><h3>📄 Afegir / Actualitzar horari</h3></div>
         <div style={{ padding: 16 }}>
           <div
-            style={{ border: '2px dashed var(--border-2)', borderRadius: 'var(--r)', padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: 'var(--bg)', marginBottom: 12 }}
+            style={{ border: `2px dashed ${dragUpload ? 'var(--blue)' : 'var(--border-2)'}`, borderRadius: 'var(--r)', padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: dragUpload ? 'var(--blue-bg)' : 'var(--bg)', marginBottom: 12, transition: 'all .15s' }}
             onClick={() => fileRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragUpload(true); }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragUpload(false); }}
+            onDrop={e => { e.preventDefault(); setDragUpload(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files); }}
           >
             <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
-            <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF, foto o Word de l'horari</div>
-            <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF · PNG · JPG · DOCX · Pots pujar-ne diversos alhora</div>
+            {dragUpload
+              ? <><div style={{ fontSize: 28, marginBottom: 8 }}>📂</div><div style={{ fontSize: 14, fontWeight: 600, color: 'var(--blue)' }}>Deixa anar el fitxer per pujar-lo</div></>
+              : <><div style={{ fontSize: 28, marginBottom: 8 }}>📄</div><div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF, foto o Word de l'horari</div><div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF · PNG · JPG · DOCX · Pots pujar-ne diversos alhora · o arrossega aquí</div></>
+            }
           </div>
           {uploads.map(u => (
             <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 8 }}>
@@ -838,17 +878,34 @@ export default function HorarisPage() {
 }
 
 function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfigChange, onHorarisSaved, showToast }) {
+  const { escola } = useApp();
   const cfg = configIntensiva || {};
   const [dataInici, setDataInici]   = useState(cfg.data_inici || '');
   const [dataFi, setDataFi]         = useState(cfg.data_fi || '');
   const [actiu, setActiu]           = useState(cfg.actiu || false);
-  const [instruccions, setInstruccions] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [generatingMsg, setGeneratingMsg] = useState('');
   const [editingMap, setEditingMap]         = useState(null); // { docentId: horariModificat }
-  const [tpPendents, setTpPendents]         = useState([]);   // [{ nom, grup, slots: [{dia,fid}] }]
+  const [canvisAnteriors, setCanvisAnteriors] = useState({}); // per diff visual
+  const [tornsPati, setTornsPati]           = useState(null);
+  const [tpPendents, setTpPendents]         = useState([]);
   const [resumGeneracio, setResumGeneracio] = useState('');
   const [saving, setSaving]                 = useState(false);
   const [configSaving, setConfigSaving]     = useState(false);
+  // Regles per checklist
+  const [regleTpTarda, setRegleTpTarda]       = useState(cfg.regles?.tpTarda || 'pati');
+  const [regleTpAltraText, setRegleTpAltraText] = useState(cfg.regles?.tpAltraText || '');
+  const [reglesEspecialistes, setReglesEspec] = useState(cfg.regles?.especialistesReduccio || false);
+  const [reglesEquilibraEsp, setReglesEquilibraEsp] = useState(cfg.regles?.equilibrarEspecialistes || false);
+  const [reglesGenPati, setReglesGenPati]     = useState(cfg.regles?.generarTornsPati !== false);
+  const [instruccionsLliures, setInstruccionsLliures] = useState(cfg.regles?.instruccionsLliures || '');
+  const [plantillaSaving, setPlantillaSaving] = useState(false);
+  // Importar horari passat
+  const importFileRef = useRef(null);
+  const [detectant, setDetectant]   = useState(false);
+  const [importBase64, setImportBase64] = useState(null);
+  const [importMime, setImportMime]     = useState(null);
+  const [dragImport, setDragImport] = useState(false);
 
   // Sync local state quan canvia la config externa
   useEffect(() => {
@@ -856,6 +913,14 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
       setDataInici(configIntensiva.data_inici || '');
       setDataFi(configIntensiva.data_fi || '');
       setActiu(configIntensiva.actiu || false);
+      if (configIntensiva.regles) {
+        setRegleTpTarda(configIntensiva.regles.tpTarda || 'pati');
+        setRegleTpAltraText(configIntensiva.regles.tpAltraText || '');
+        setReglesEspec(configIntensiva.regles.especialistesReduccio || false);
+        setReglesEquilibraEsp(configIntensiva.regles.equilibrarEspecialistes || false);
+        setReglesGenPati(configIntensiva.regles.generarTornsPati !== false);
+        setInstruccionsLliures(configIntensiva.regles.instruccionsLliures || '');
+      }
     }
   }, [configIntensiva]);
 
@@ -870,18 +935,112 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     finally { setConfigSaving(false); }
   }
 
+  async function guardarPlantilla() {
+    setPlantillaSaving(true);
+    try {
+      const regles = { tpTarda: regleTpTarda, tpAltraText: regleTpAltraText, especialistesReduccio: reglesEspecialistes, equilibrarEspecialistes: reglesEquilibraEsp, generarTornsPati: reglesGenPati, instruccionsLliures };
+      const nova = { ...cfg, regles };
+      await api.saveConfigIntensiva(nova);
+      onConfigChange(nova);
+      showToast('✓ Regles guardades com a plantilla');
+    } catch (e) { showToast('Error: ' + e.message); }
+    finally { setPlantillaSaving(false); }
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setImportBase64(ev.target.result.split(',')[1]);
+      setImportMime(file.type || 'application/pdf');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  async function detectarRegles() {
+    if (!importBase64) return;
+    setDetectant(true);
+    try {
+      const result = await extractarReglesIntensiuPDF(importBase64, importMime);
+      if (result.tpTarda) setRegleTpTarda(result.tpTarda);
+      if (result.especialistesReduccio !== undefined) setReglesEspec(!!result.especialistesReduccio);
+      if (result.instruccionsLliures) setInstruccionsLliures(result.instruccionsLliures);
+      showToast(`✓ Regles detectades: ${result.resum || 'OK'}`);
+    } catch (e) { showToast('Error detectant regles: ' + e.message); }
+    finally { setDetectant(false); }
+  }
+
   async function generar() {
+    const MSGS_GENERANT = [
+      '✨ Analitzant els horaris actuals...',
+      '🔍 Buscant les millors combinacions...',
+      '🧩 Encaixant franges i grups...',
+      '⚖️ Equilibrant la càrrega de cada docent...',
+      '🌅 Adaptant a la jornada intensiva...',
+      '🤖 HorarIA pensant fort...',
+      '📐 Respectant les teves instruccions...',
+      '🎯 Optimitzant els canvis...',
+      '✅ Ja quasi llest...',
+    ];
+    let msgIdx = 0;
+    setGeneratingMsg(MSGS_GENERANT[0]);
+    const msgInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % MSGS_GENERANT.length;
+      setGeneratingMsg(MSGS_GENERANT[msgIdx]);
+    }, 2200);
+
     setGenerating(true);
     try {
-      const result = await generarHorarisIntensius(docents, franjes, instruccions, normes);
+      // Si l'opció és "altra", la instrucció personalitzada gestiona el TP; internament usem 'eliminar'
+      const tpTardaEfectiu = regleTpTarda === 'altra' ? 'eliminar' : regleTpTarda;
+      let instruccionsEfectives = regleTpTarda === 'altra' && regleTpAltraText.trim()
+        ? `GESTIÓ DEL TP DE TARDA: ${regleTpAltraText.trim()}\n\n${instruccionsLliures}`
+        : instruccionsLliures;
+
+      // Anàlisi d'equitat de sessions d'especialistes
+      if (reglesEquilibraEsp) {
+        const DIES_S = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+        const espKeywords = /\b(ef|anglès|angles|música|musica|ed\.?\s*física|educació física|educacion fisica)\b/i;
+        // Mapejar sessions per especialista → grup → count
+        const sessionMap = {}; // { nomEsp: { nomGrup: count } }
+        for (const d of docents) {
+          if (!d.horari) continue;
+          const allVals = DIES_S.flatMap(dia => Object.values(d.horari[dia] || {})).filter(Boolean);
+          const espVals = allVals.filter(v => espKeywords.test(String(v)));
+          if (espVals.length === 0) continue; // no és especialista
+          // Buscar grups en el seu horari (valors amb noms de grup)
+          if (!sessionMap[d.nom]) sessionMap[d.nom] = {};
+          for (const dia of DIES_S) {
+            const cells = d.horari[dia] || {};
+            const matiVals = Object.entries(cells).filter(([, v]) => v && v !== 'Lliure' && v !== 'lliure' && !/^tp$/i.test(v));
+            for (const [, grupNom] of matiVals) {
+              sessionMap[d.nom][grupNom] = (sessionMap[d.nom][grupNom] || 0) + 1;
+            }
+          }
+        }
+        if (Object.keys(sessionMap).length > 0) {
+          const lines = Object.entries(sessionMap).map(([nom, grups]) =>
+            `${nom}: ${Object.entries(grups).map(([g, c]) => `${g}=${c}sess`).join(', ')}`
+          );
+          instruccionsEfectives = `EQUILIBRAR HORES ESPECIALISTES:\nA continuació es mostren les sessions setmanals per especialista i grup en horari normal. En intensiva, cal redistribuir les sessions perquè tots els grups tinguin sessions equivalents de cada especialitat. Proposa els canvis mínims per equilibrar:\n${lines.join('\n')}\n\n${instruccionsEfectives}`;
+        }
+      }
+
+      const regles = { tpTarda: tpTardaEfectiu, especialistesReduccio: reglesEspecialistes, generarTornsPati: reglesGenPati, instruccionsLliures: instruccionsEfectives };
+      const grups_curriculum = cfg.grups_curriculum || null;
+      const result = await generarHorarisIntensius(docents, franjes, regles, normes, grups_curriculum);
       const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
       const tardesIds = franjes.filter(f => f.hora === 'Tarda' && !f.lliure).map(f => f.id);
+      const isOriolFranjesGlobal = franjes.some(f => f.id.startsWith('o'));
       const canvisPerNom = {};
       result.canvis.forEach(c => { canvisPerNom[c.nom] = c.dies; });
       const map = {};
       const pendents = [];
       for (const d of docents) {
         if (!d.horari) continue;
+
         const base = JSON.parse(JSON.stringify(d.horari));
         const canvis = canvisPerNom[d.nom];
         if (canvis) {
@@ -890,24 +1049,51 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
             Object.entries(cells).forEach(([fid, val]) => { base[dia][fid] = val; });
           });
         }
-        const isOriolFranjes = franjes.some(f => f.id.startsWith('o'));
-        map[d.id] = isOriolFranjes ? convertOriolTo15Min(base) : convertTo15Min(base);
-        const tpSlots = [];
+
+        // Guardar contingut de tarda DESPRÉS d'aplicar canvisMap
+        // (si la IA o la Part 1 ha buidat un slot, no el posem a i4a/i4b)
+        const tardesOriginals = {};
         for (const dia of DIES_ALL) {
-          for (const fid of tardesIds) {
-            const v = ((d.horari[dia] || {})[fid] || '').trim();
-            if (/^tp$/i.test(v) || (d.tp_franges || []).includes(`${dia}-${fid}`)) {
-              tpSlots.push({ dia, fid });
+          tardesOriginals[dia] = tardesIds
+            .map(f => (base[dia] || {})[f] || '')
+            .filter(v => v && !/^tp$/i.test(v.trim()) && v.toLowerCase() !== 'lliure');
+        }
+        const converted = isOriolFranjesGlobal ? convertOriolTo15Min(base) : convertTo15Min(base);
+
+        // Omplir 4a hora intensiva (i4a, i4b) amb contingut de tarda si estava buida
+        if (!isOriolFranjesGlobal) {
+          for (const dia of DIES_ALL) {
+            const vals = tardesOriginals[dia];
+            if (vals.length > 0 && converted[dia]) {
+              if (!converted[dia]['i4a']) converted[dia]['i4a'] = vals[0];
+              if (!converted[dia]['i4b']) converted[dia]['i4b'] = vals[1] || vals[0];
             }
           }
         }
-        if (tpSlots.length) pendents.push({ nom: d.nom, grup: d.grup_principal, slots: tpSlots });
+
+        map[d.id] = converted;
+
+        // Si tpTarda no és 'pati' ni 'mati', mostra els TP pendents
+        if (regleTpTarda === 'eliminar') {
+          const tpSlots = [];
+          for (const dia of DIES_ALL) {
+            for (const fid of tardesIds) {
+              const v = ((d.horari[dia] || {})[fid] || '').trim();
+              if (/^tp$/i.test(v) || (d.tp_franges || []).includes(`${dia}-${fid}`)) {
+                tpSlots.push({ dia, fid });
+              }
+            }
+          }
+          if (tpSlots.length) pendents.push({ nom: d.nom, grup: d.grup_principal, slots: tpSlots });
+        }
       }
       setEditingMap(map);
+      setCanvisAnteriors(result.canvisAnteriors || {});
+      setTornsPati(result.tornsPati || null);
       setTpPendents(pendents);
       setResumGeneracio(result.resum || '');
     } catch (e) { showToast('Error IA: ' + e.message); }
-    finally { setGenerating(false); }
+    finally { clearInterval(msgInterval); setGenerating(false); setGeneratingMsg(''); }
   }
 
   async function confirmarIGuardar() {
@@ -917,10 +1103,16 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
         Object.entries(editingMap).map(([id, horari]) => api.saveHorariIntensiu(id, horari))
       );
       const n = Object.keys(editingMap).length;
+      // Desar torns de pati si s'han generat
+      if (tornsPati) {
+        try { await api.savePatiTorns({ torns: tornsPati, generat: new Date().toISOString().split('T')[0] }); } catch {}
+      }
       showToast(`✓ Horaris intensius guardats (${n} docents)`);
       setEditingMap(null);
       setTpPendents([]);
       setResumGeneracio('');
+      setCanvisAnteriors({});
+      setTornsPati(null);
       onHorarisSaved();
     } catch (e) { showToast('Error guardant: ' + e.message); }
     finally { setSaving(false); }
@@ -935,6 +1127,9 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
       <EditingIntensivaView
         docents={docents.filter(d => editingMap[d.id] !== undefined)}
         editingMap={editingMap}
+        normalFranjes={franjes}
+        canvisAnteriors={canvisAnteriors}
+        tornsPati={tornsPati}
         tpPendents={tpPendents}
         resumGeneracio={resumGeneracio}
         franjes={editFranjes}
@@ -943,8 +1138,10 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
           [id]: { ...prev[id], [dia]: { ...(prev[id][dia] || {}), [fid]: val } },
         }))}
         onConfirm={confirmarIGuardar}
-        onDiscard={() => { setEditingMap(null); setTpPendents([]); setResumGeneracio(''); }}
+        onDiscard={() => { setEditingMap(null); setTpPendents([]); setResumGeneracio(''); setCanvisAnteriors({}); setTornsPati(null); }}
         saving={saving}
+        escola={escola}
+        configIntensiva={configIntensiva}
       />
     );
   }
@@ -993,32 +1190,167 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
         )}
       </div>
 
-      {/* Generació amb IA */}
+      {/* Regles de generació — checklist */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head">
-          <h3>🤖 Generar horaris intensius amb IA</h3>
+          <h3>🤖 Generar horaris intensius amb HorarIA</h3>
         </div>
-        <div style={{ padding: '14px 16px' }}>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 10 }}>
-            Explica a la IA com vols adaptar els horaris per a la jornada intensiva. La IA llegirà tots els horaris actuals i aplicarà els teus canvis. Les tardes quedaran buides per defecte.
+        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Regla 1: eliminar tardes (sempre actiu) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, opacity: 0.65 }}>
+            <span style={{ fontSize: 16 }}>☑</span>
+            <div>
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Eliminar totes les franges de tarda</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Les hores de f5a, f5b, f5c queden buides per a tothom</div>
+            </div>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic', flexShrink: 0 }}>sempre actiu</span>
           </div>
-          <textarea
-            className="f-ctrl"
-            rows={4}
-            placeholder={'Exemple: "Els docents que tenien TP a la tarda, que passi al pati del dijous. L\'EF de divendres tarda la suprimim. Les tutories de tarda es fan el dimecres a la 3a hora."'}
-            value={instruccions}
-            onChange={e => setInstruccions(e.target.value)}
-            style={{ width: '100%', resize: 'vertical', marginBottom: 10 }}
-          />
-          <button
-            className="btn btn-primary"
-            onClick={generar}
-            disabled={generating || docents.filter(d => d.horari).length === 0}
-          >
-            {generating ? '⏳ Generant...' : '✨ Generar horaris intensius'}
-          </button>
+
+          {/* Regla 2: TP de tarda — targetes de decisió */}
+          <div style={{ padding: '12px 14px', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 4 }}>
+              🕐 Treball Personal (TP) a la tarda — Què fem?
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 10 }}>
+              Alguns docents tenen TP assignat a les tardes. Cal decidir on es col·loca en jornada intensiva.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                { val: 'pati',    icon: '🕐', label: 'Mou al pati del mateix dia',        desc: 'El TP passa al torn de pati si hi ha lloc' },
+                { val: 'mati',    icon: '☀️', label: 'Mou a la primera hora lliure del matí', desc: 'Es busca el primer slot buit del matí' },
+                { val: 'eliminar',icon: '🗑️', label: 'Elimina (sense reubicació)',          desc: 'El TP s\'esborra i apareix a la llista de pendents' },
+                { val: 'altra',   icon: '✍️', label: 'Altra opció (instrucció pròpia)',     desc: 'Escriu com vols que HorarIA gestioni el TP de tarda' },
+              ].map(({ val, icon, label, desc }) => (
+                <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', borderRadius: 7, cursor: 'pointer', border: `1.5px solid ${regleTpTarda === val ? 'var(--blue)' : 'var(--border)'}`, background: regleTpTarda === val ? 'var(--blue-bg)' : 'var(--bg)', transition: 'all .1s' }}>
+                  <input type="radio" name="tpTarda" value={val} checked={regleTpTarda === val} onChange={() => setRegleTpTarda(val)} style={{ marginTop: 2, accentColor: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: regleTpTarda === val ? 'var(--blue)' : 'var(--ink-2)' }}>{icon} {label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>{desc}</div>
+                    {val === 'altra' && regleTpTarda === 'altra' && (
+                      <textarea
+                        className="f-ctrl"
+                        rows={2}
+                        placeholder={'Exemple: "El TP de tarda passa al dimecres a la 3a hora, distribuït equitativament"'}
+                        value={regleTpAltraText}
+                        onChange={e => { e.stopPropagation(); setRegleTpAltraText(e.target.value); }}
+                        onClick={e => e.stopPropagation()}
+                        style={{ width: '100%', resize: 'vertical', marginTop: 8, fontSize: 11 }}
+                      />
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Regla 3: torns de pati */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)' }}>
+            <input type="checkbox" checked={reglesGenPati} onChange={e => setReglesGenPati(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Generar torns de pati automàticament</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>HorarIA assigna els torns de vigilància de pati</div>
+            </div>
+          </label>
+
+          {/* Regla 4: especialistes */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)' }}>
+            <input type="checkbox" checked={reglesEspecialistes} onChange={e => setReglesEspec(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Especialistes: reducció proporcional de sessions</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>EF, Anglès, Música, etc. redueixen sessions proporcionalment</div>
+            </div>
+          </label>
+
+          {/* Regla 5: equilibrar especialistes entre grups */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesEquilibraEsp ? 'var(--blue)' : 'var(--border)'}` }}>
+            <input type="checkbox" checked={reglesEquilibraEsp} onChange={e => setReglesEquilibraEsp(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 13, color: reglesEquilibraEsp ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>⚖️ Equilibrar sessions d'especialistes entre grups</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>HorarIA analitza EF, Música, Anglès... i redistribueix perquè tots els grups tinguin les mateixes sessions en intensiva</div>
+            </div>
+          </label>
+
+          {/* Instruccions lliures */}
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', display: 'block', marginBottom: 6 }}>
+              💬 Instruccions addicionals per a HorarIA <span style={{ fontWeight: 400, fontStyle: 'italic' }}>(opcional)</span>
+            </label>
+            <textarea
+              className="f-ctrl"
+              rows={3}
+              placeholder={'Exemple: "No hi ha Tallers ni Racons amb jornada intensiva. Les tutories de tarda passen al dimecres a la 3a hora."'}
+              value={instruccionsLliures}
+              onChange={e => setInstruccionsLliures(e.target.value)}
+              style={{ width: '100%', resize: 'vertical' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              className="btn btn-primary"
+              onClick={generar}
+              disabled={generating || docents.filter(d => d.horari).length === 0}
+              style={{ minWidth: 220, transition: 'all .2s' }}
+            >
+              {generating
+                ? <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,.4)', borderTopColor: '#fff', animation: 'spin .8s linear infinite' }} />
+                    {generatingMsg || '✨ Generant horaris...'}
+                  </span>
+                : '✨ Generar amb HorarIA'}
+            </button>
+            <button
+              className="btn btn-sm"
+              style={{ fontSize: 12, background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)' }}
+              disabled={plantillaSaving}
+              onClick={guardarPlantilla}
+            >
+              {plantillaSaving ? 'Guardant...' : '💾 Guardar com a plantilla'}
+            </button>
+          </div>
           {docents.filter(d => d.horari).length === 0 && (
-            <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 6 }}>Primer puja els horaris normals des de la vista Personal.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>Primer puja els horaris normals des de la vista Personal.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Importar horari de l'any passat */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head"><h3>📂 Importar horari de l'any passat</h3></div>
+        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>
+            Puja el PDF o una imatge de l'horari intensiu de l'any passat. La IA detectarà automàticament les regles que s'aplicaven.
+          </div>
+          <input ref={importFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={handleImportFile} />
+          <div
+            style={{ border: `2px dashed ${dragImport ? 'var(--blue)' : importBase64 ? 'var(--green)' : 'var(--border-2)'}`, borderRadius: 8, padding: '20px 16px', textAlign: 'center', cursor: 'pointer', background: dragImport ? 'var(--blue-bg)' : importBase64 ? 'var(--green-bg)' : 'var(--bg)', transition: 'all .15s' }}
+            onClick={() => importFileRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragImport(true); }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragImport(false); }}
+            onDrop={e => {
+              e.preventDefault(); setDragImport(false);
+              const file = e.dataTransfer.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = ev => { setImportBase64(ev.target.result.split(',')[1]); setImportMime(file.type || 'application/pdf'); };
+              reader.readAsDataURL(file);
+            }}
+          >
+            {dragImport
+              ? <><div style={{ fontSize: 22, marginBottom: 4 }}>📂</div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--blue)' }}>Deixa anar el fitxer</div></>
+              : <><div style={{ fontSize: 22, marginBottom: 4 }}>{importBase64 ? '✅' : '📄'}</div><div style={{ fontSize: 13, color: 'var(--ink-3)' }}>{importBase64 ? 'Fitxer carregat — prem "Detectar regles"' : 'Clica o arrossega el PDF o imatge'}</div></>
+            }
+          </div>
+          {importBase64 && (
+            <button
+              className="btn btn-sm"
+              style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontWeight: 600 }}
+              disabled={detectant}
+              onClick={detectarRegles}
+            >
+              {detectant ? '⏳ Analitzant...' : '🤖 Detectar regles automàticament'}
+            </button>
           )}
         </div>
       </div>
@@ -1052,27 +1384,329 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   );
 }
 
-function EditingIntensivaView({ docents, editingMap, tpPendents, resumGeneracio, franjes, onCellEdit, onConfirm, onDiscard, saving }) {
+function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteriors, tornsPati, tpPendents, resumGeneracio, franjes, onCellEdit, onConfirm, onDiscard, saving, escola, configIntensiva }) {
   const DIE_LBL = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
-  const tpNoms = new Set(tpPendents.map(t => t.nom));
+  const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+  const tpNoms = new Set((tpPendents || []).map(t => t.nom));
+  // compareMode=false → vista Intensiva (editable, diff groc); compareMode=true → vista Normal (lectura, sense tarda)
+  const [compareMode, setCompareMode] = useState(false);
+  // mainView: 'professionals' → docent per docent | 'grups' → grup per grup (vista alumnat)
+  const [mainView, setMainView] = useState('professionals');
+
+  // Construeix l'horari intensiu d'un grup invertint l'editingMap dels docents
+  function buildGroupHorariIntensiu(grupNom) {
+    const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grupNom));
+    const result = {};
+    for (const dia of DIES_ALL) {
+      result[dia] = {};
+      for (const f of franjes) {
+        // 1. Contingut del tutor per a aquest slot
+        const tutorVal = tutor ? ((editingMap[tutor.id] || {})[dia]?.[f.id] || '') : '';
+        if (tutorVal && !/^lliure$/i.test(tutorVal.trim())) {
+          result[dia][f.id] = tutorVal;
+          continue;
+        }
+        // 2. Cerca especialista que visiti aquest grup en aquest slot
+        let found = '';
+        for (const d of docents) {
+          if (tutor && d.id === tutor.id) continue;
+          const v = ((editingMap[d.id] || {})[dia]?.[f.id] || '').trim();
+          if (v && normGrup(v) === normGrup(grupNom)) {
+            found = d.nom.split(' ')[0]; // primer nom de l'especialista
+            break;
+          }
+        }
+        result[dia][f.id] = found || tutorVal || '';
+      }
+    }
+    return result;
+  }
+
+  // Construeix l'horari normal d'un grup des de grups_curriculum (format 30-min)
+  function buildGroupHorariNormal(grupNom) {
+    const gc = configIntensiva?.grups_curriculum || {};
+    // Cercar per nom normalitzat
+    const key = Object.keys(gc).find(k => normGrup(k) === normGrup(grupNom));
+    if (!key) return null;
+    const raw = gc[key];
+    // Pot ser string o objecte (JSONB)
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch { return null; }
+    }
+    return raw || null;
+  }
+
+  // Llista de grups (union de grup_principal dels docents + claus grups_curriculum)
+  const grupsLlista = useMemo(() => {
+    const fromDocents = docents.map(d => d.grup_principal).filter(Boolean);
+    const fromCurriculum = Object.keys(configIntensiva?.grups_curriculum || {});
+    const all = [...new Set([...fromDocents, ...fromCurriculum])];
+    return all.sort((a, b) => a.localeCompare(b, 'ca'));
+  }, [docents, configIntensiva]);
+
+  // Comprova si una cel·la ha estat modificada per mostrar diff visual
+  function isModified(nomDocent, dia, fid) {
+    return !!(canvisAnteriors?.[nomDocent]?.[dia]?.[fid] !== undefined);
+  }
+
+  async function imprimirHorariIntensiu() {
+    const nomEscola = escola?.nom || configIntensiva?.nom_escola || 'Centre educatiu';
+    const dates = configIntensiva
+      ? (() => {
+          const fmt = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+          return `${fmt(configIntensiva.data_inici)} – ${fmt(configIntensiva.data_fi)}`;
+        })()
+      : '';
+
+    // Detectar logo per escola
+    const nomLower = nomEscola.toLowerCase();
+    const logoFile = nomLower.includes('rivo') ? 'logo_rivo.png'
+      : (nomLower.includes('oriol') || nomLower.includes("ca n'")) ? 'logo_canoriol.png'
+      : null;
+
+    // Carregar logo com a base64 per incrustar al HTML (funciona off-line i en finestra nova)
+    let logoB64 = null;
+    if (logoFile) {
+      try {
+        const resp = await fetch(`${window.location.origin}/${logoFile}`);
+        const blob = await resp.blob();
+        logoB64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+      } catch { /* sense logo */ }
+    }
+
+    // Color d'acent per l'escola (portada)
+    const isRivo  = nomLower.includes('rivo');
+    const isOriol = nomLower.includes('oriol') || nomLower.includes("ca n'");
+    const accentColor = isRivo ? '#E05A22' : isOriol ? '#1E6BA0' : '#4A5568';
+    const accentLight = isRivo ? '#FFF3EE' : isOriol ? '#EEF4FA' : '#F7F8FA';
+
+    // Funció per pintar cel·la
+    function cellStyle(val) {
+      const v = (val || '').trim().toLowerCase();
+      if (!v || v === '—') return 'background:#fafafa;color:#ccc;';
+      if (/^lliure$/.test(v)) return 'background:#E6F4EA;color:#3A7D52;font-weight:600;';
+      if (/^tp$/.test(v))     return 'background:#FEF3E2;color:#B06020;font-weight:600;';
+      if (/^pati$/.test(v))   return 'background:#F0E6F9;color:#7B52A0;font-weight:600;';
+      if (/coordinaci|càrrec|equip direct/i.test(v)) return 'background:#EAE4F5;color:#5C4A8A;';
+      return 'background:#E8F1FB;color:#3A5F8A;';
+    }
+
+    // Funció per pintar capçalera de hora (pastel amb text fosc)
+    function horaHeaderStyle(hora) {
+      if (hora === 'Pati')  return `background:#EFE0F8;color:#6B3FA0;font-weight:700;`;
+      if (hora === 'Dinar') return `background:#E8EDF0;color:#4A5E6A;font-weight:700;`;
+      if (hora === 'Tarda') return `background:#FDE8E4;color:#A04030;font-weight:700;`;
+      // Matí: color d'accent molt clar
+      const matiLight = isRivo ? '#FDEEE6' : '#E6EFF8';
+      const matiText  = isRivo ? '#A04010' : '#2A5080';
+      return `background:${matiLight};color:${matiText};font-weight:700;`;
+    }
+
+    // Agrupar franges per hora
+    const horaGroups = {};
+    franjes.forEach(f => { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
+
+    // Generar taula d'un horari (docent o grup)
+    function buildTable(h, accentLeft = null) {
+      const thBase = `padding:4px 6px;font-size:9.5px;border:1px solid #ddd;text-align:center;font-weight:700;`;
+      let files = '';
+      Object.entries(horaGroups).forEach(([hora, fs]) => {
+        // Fila de capçalera de hora
+        files += `<tr><td colspan="${DIES_ALL.length + 1}" style="${horaHeaderStyle(hora)}padding:3px 8px;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;">${hora}</td></tr>`;
+        fs.forEach(f => {
+          const cels = DIES_ALL.map(dia => {
+            const val = (h[dia]?.[f.id] || '').trim();
+            return `<td style="${thBase}${cellStyle(val)}">${val || '—'}</td>`;
+          }).join('');
+          files += `<tr>
+            <td style="${thBase}background:#FAFAFA;color:#666;font-size:8.5px;white-space:nowrap;">${f.sub || f.id}</td>
+            ${cels}
+          </tr>`;
+        });
+      });
+      const borderLeft = accentLeft ? `border-left:4px solid ${accentLeft};` : '';
+      return `<table style="border-collapse:collapse;width:100%;margin-bottom:16px;${borderLeft}page-break-inside:avoid;">
+        <thead>
+          <tr>
+            <th style="${thBase}background:#F4F5F6;color:#7A8A90;min-width:52px;"></th>
+            ${DIES_ALL.map(dia => { const dBg = isRivo ? '#FCEADF' : '#DDE9F6'; const dCol = isRivo ? '#A04010' : '#2A5080'; return `<th style="${thBase}background:${dBg};color:${dCol};">${DIE_LBL[dia]}</th>`; }).join('')}
+          </tr>
+        </thead>
+        <tbody>${files}</tbody>
+      </table>`;
+    }
+
+    // Colors per docent (barra lateral)
+    const AVATAR_COLORS = ['#E53935','#D81B60','#8E24AA','#3949AB','#1E88E5','#00897B','#43A047','#FB8C00','#6D4C41','#546E7A'];
+    function strColor(nom) {
+      let h = 0; for (let i = 0; i < nom.length; i++) h = nom.charCodeAt(i) + ((h << 5) - h);
+      return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+    }
+
+    // ── Secció professionals ──
+    const seccions = docents.map(d => {
+      const h = editingMap[d.id];
+      if (!h) return '';
+      const color = strColor(d.nom);
+      const inicials = d.nom.split(' ').map(p => p[0]).join('').substring(0, 2).toUpperCase();
+      return `
+        <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;">${inicials}</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1a1a1a;">${d.nom}</div>
+            <div style="font-size:10px;color:#666;">${rolLabel(d.rol)}${d.grup_principal ? ' · ' + d.grup_principal : ''}</div>
+          </div>
+        </div>
+        ${buildTable(h, color)}`;
+    }).join('<div style="margin:4px 0;border-top:1px dashed #e0e0e0;"></div>');
+
+    // ── Secció grups / alumnat ──
+    const seccionsGrups = grupsLlista.map(grup => {
+      const hGrup = buildGroupHorariIntensiu(grup);
+      if (!hGrup) return '';
+      const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
+      const grupColor = strColor(grup);
+      const grupInicials = grup.substring(0, 2).toUpperCase();
+      return `
+        <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;border-radius:7px;background:${grupColor};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;">${grupInicials}</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1a1a1a;">${grup}</div>
+            <div style="font-size:10px;color:#666;">${tutor ? 'Tutor/a: ' + tutor.nom : 'Sense tutor assignat'}</div>
+          </div>
+        </div>
+        ${buildTable(hGrup, grupColor)}`;
+    }).filter(Boolean).join('<div style="margin:4px 0;border-top:1px dashed #e0e0e0;"></div>');
+
+    const logoHtml = `<div style="text-align:right;">
+      ${logoB64
+        ? `<img src="${logoB64}" alt="${nomEscola}" style="height:64px;width:auto;max-width:180px;object-fit:contain;display:block;margin-left:auto;" />`
+        : `<div style="font-size:13px;font-weight:800;color:${accentColor};max-width:160px;text-align:right;line-height:1.3;">${nomEscola}</div>`}
+      <div style="font-size:7.5px;color:#aaa;margin-top:4px;letter-spacing:.03em;">Generat per <strong>HorariaPro</strong></div>
+    </div>`;
+
+    const css = `<style>
+      *{box-sizing:border-box;}
+      body{font-family:'Arial',sans-serif;color:#1a1a1a;margin:0;padding:0;font-size:11px;background:#fff;}
+      @media print{body{margin:0;padding:0;}.no-print{display:none!important;}}
+    </style>`;
+
+    const html = `<!DOCTYPE html><html lang="ca"><head><meta charset="utf-8"><title>Horari Intensiu — ${nomEscola}</title>${css}</head>
+    <body>
+      <!-- PORTADA / CAPÇALERA -->
+      <div style="background:${accentLight};border-bottom:4px solid ${accentColor};padding:18px 24px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+        <div>
+          <div style="font-size:9px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">Departament d'Educació · Generalitat de Catalunya</div>
+          <div style="font-size:22px;font-weight:900;color:${accentColor};line-height:1.1;margin-bottom:4px;">Horari Jornada Intensiva</div>
+          <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:3px;">${nomEscola}</div>
+          ${dates ? `<div style="font-size:11px;color:#888;">Període: ${dates}</div>` : ''}
+        </div>
+        <div style="text-align:right;">
+          ${logoHtml}
+        </div>
+      </div>
+
+      <!-- LLEGENDA -->
+      <div style="display:flex;gap:14px;flex-wrap:wrap;padding:0 24px 14px;font-size:9px;">
+        ${[['#E6F4EA','#3A7D52','Lliure'],['#FEF3E2','#B06020','TP'],['#F0E6F9','#7B52A0','Pati'],['#EAE4F5','#5C4A8A','Coord/Càrrec'],['#E8F1FB','#3A5F8A','Classe']].map(([bg,c,lbl])=>
+          `<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${bg};border:1px solid ${c};display:inline-block;"></span><span style="color:#666;">${lbl}</span></span>`
+        ).join('')}
+      </div>
+
+      <!-- HORARIS PROFESSIONALS -->
+      <div style="padding:0 24px 8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${accentColor};">
+          <div style="width:28px;height:28px;border-radius:50%;background:${accentColor};display:flex;align-items:center;justify-content:center;font-size:14px;">👩‍🏫</div>
+          <div>
+            <div style="font-size:14px;font-weight:800;color:${accentColor};">Horaris dels Professionals</div>
+            <div style="font-size:10px;color:#888;">${docents.filter(d => editingMap[d.id]).length} docents</div>
+          </div>
+        </div>
+        ${seccions}
+      </div>
+
+      <!-- SALT DE PÀGINA -->
+      <div style="page-break-before:always;"></div>
+
+      <!-- HORARIS GRUPS / ALUMNAT -->
+      ${seccionsGrups ? `
+      <div style="padding:24px 24px 8px;">
+        <!-- Capçalera repetida per la nova pàgina -->
+        <div style="background:${accentLight};border-bottom:4px solid ${accentColor};padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;border-radius:6px;">
+          <div>
+            <div style="font-size:14px;font-weight:900;color:${accentColor};">Horari Jornada Intensiva — Alumnat</div>
+            <div style="font-size:12px;font-weight:600;color:#333;">${nomEscola}</div>
+            ${dates ? `<div style="font-size:10px;color:#888;">Període: ${dates}</div>` : ''}
+          </div>
+          <div>${logoHtml}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #43A047;">
+          <div style="width:28px;height:28px;border-radius:50%;background:#43A047;display:flex;align-items:center;justify-content:center;font-size:14px;">🧒</div>
+          <div>
+            <div style="font-size:14px;font-weight:800;color:#43A047;">Horaris dels Grups (Alumnat)</div>
+            <div style="font-size:10px;color:#888;">${grupsLlista.length} grups · Jornada intensiva</div>
+          </div>
+        </div>
+        ${seccionsGrups}
+      </div>` : ''}
+
+
+      <!-- FOOTER -->
+      <div style="border-top:1px solid #eee;padding:10px 24px;display:flex;justify-content:space-between;font-size:8.5px;color:#aaa;margin-top:10px;">
+        <span>Generat per <strong>HorariaPRO</strong> · horariapro.cat</span>
+        <span>${nomEscola}</span>
+      </div>
+    </body></html>`;
+
+    const w = window.open('', '_blank', 'width=960,height=750');
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 800); }
+  }
 
   return (
     <>
       {/* Capçalera enganxosa */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>🌅 Horaris d'intensiva</div>
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>{docents.length} docents · Edita les cel·les i confirma quan estigui llest</div>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '10px 16px', marginBottom: 12 }}>
+        {/* Fila 1: toggle gran PROFESSIONALS / GRUPS */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flex: '0 0 auto' }}>
+            <button
+              style={{ padding: '7px 18px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: mainView === 'professionals' ? 'var(--blue)' : 'transparent', color: mainView === 'professionals' ? '#fff' : 'var(--ink-3)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={() => setMainView('professionals')}
+            >👩‍🏫 Professionals</button>
+            <button
+              style={{ padding: '7px 18px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: mainView === 'grups' ? 'var(--green)' : 'transparent', color: mainView === 'grups' ? '#fff' : 'var(--ink-3)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={() => setMainView('grups')}
+            >🧒 Grups (alumnat)</button>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 500 }}>
+              {mainView === 'professionals'
+                ? `${docents.length} docents · Edita les cel·les i confirma quan estigui llest`
+                : `${grupsLlista.length} grups · Vista de l'alumnat en jornada intensiva`}
+            </div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onDiscard} style={{ fontSize: 11 }}>✕ Descartar</button>
+          <button
+            className="btn btn-sm"
+            style={{ background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600 }}
+            onClick={onConfirm}
+            disabled={saving}
+          >{saving ? 'Guardant...' : `💾 Guardar (${docents.length})`}</button>
         </div>
-        <button className="btn btn-sm btn-ghost" onClick={onDiscard}>✕ Descartar</button>
-        <button
-          className="btn btn-sm"
-          style={{ background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600 }}
-          onClick={onConfirm}
-          disabled={saving}
-        >
-          {saving ? 'Guardant...' : `💾 Guardar tots (${docents.length})`}
-        </button>
+        {/* Fila 2: toggle Intensiva / Normal + imprimir */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            <button
+              style={{ padding: '4px 10px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: !compareMode ? 'var(--amber)' : 'transparent', color: !compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+              onClick={() => setCompareMode(false)}
+            >🌅 Intensiva</button>
+            <button
+              style={{ padding: '4px 10px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: compareMode ? 'var(--ink)' : 'transparent', color: compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+              onClick={() => setCompareMode(true)}
+            >📅 Normal</button>
+          </div>
+          <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={imprimirHorariIntensiu}>🖨️ Imprimir</button>
+        </div>
       </div>
 
       {resumGeneracio && (
@@ -1081,10 +1715,10 @@ function EditingIntensivaView({ docents, editingMap, tpPendents, resumGeneracio,
         </div>
       )}
 
-      {tpPendents.length > 0 && (
+      {tpPendents && tpPendents.length > 0 && (
         <div style={{ padding: '10px 14px', background: 'var(--amber-bg)', border: '1px solid var(--amber)', borderRadius: 8, marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', marginBottom: 6 }}>
-            ⚠️ TP de tarda a reubicar manualment ({tpPendents.length} docents)
+            ⚠️ TP de tarda eliminat ({tpPendents.length} docents)
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {tpPendents.map(t => (
@@ -1096,7 +1730,83 @@ function EditingIntensivaView({ docents, editingMap, tpPendents, resumGeneracio,
         </div>
       )}
 
-      {docents.map(d => (
+      {!compareMode && Object.keys(canvisAnteriors || {}).length > 0 && mainView === 'professionals' && (
+        <div style={{ padding: '8px 12px', background: '#FFF9C4', border: '1px solid #F0D020', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#6B5900' }}>
+          👁 Les cel·les en <strong>groc</strong> han canviat respecte l'horari normal. Usa "📅 Normal" per veure l'original.
+        </div>
+      )}
+      {compareMode && mainView === 'professionals' && (
+        <div style={{ padding: '8px 12px', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: 'var(--ink-3)' }}>
+          📅 Mostrant l'horari <strong>normal</strong> (amb tarda). Torna a "🌅 Intensiva" per editar.
+        </div>
+      )}
+      {compareMode && mainView === 'grups' && (
+        <div style={{ padding: '8px 12px', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: 'var(--ink-3)' }}>
+          📅 Mostrant l'horari <strong>normal</strong> de l'alumnat. Torna a "🌅 Intensiva" per veure la versió intensiva.
+        </div>
+      )}
+
+      {/* ── VISTA GRUPS ── */}
+      {mainView === 'grups' && (
+        <>
+          {grupsLlista.length === 0 && (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+              No s'han trobat grups. Assigna un grup principal als docents o carrega els horaris d'alumnat.
+            </div>
+          )}
+          {grupsLlista.map(grup => {
+            const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grup));
+            let horariGrup;
+            if (compareMode) {
+              horariGrup = buildGroupHorariNormal(grup);
+              if (!horariGrup && tutor) horariGrup = tutor.horari || {};
+            } else {
+              horariGrup = buildGroupHorariIntensiu(grup);
+            }
+            const grupFranjes = compareMode ? (normalFranjes || franjes) : franjes;
+            return (
+              <div key={grup} className="card" style={{ marginBottom: 10 }}>
+                <div className="card-head">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: avatarColor(grup), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                      {grup.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{grup}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+                        {tutor ? `Tutor/a: ${tutor.nom}` : 'Sense tutor assignat'}
+                        {!compareMode && ' · Horari intensiu'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                    <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !compareMode ? 'var(--amber)' : 'transparent', color: !compareMode ? '#fff' : 'var(--ink-3)' }} onClick={() => setCompareMode(false)}>🌅 Int</button>
+                    <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: compareMode ? 'var(--ink)' : 'transparent', color: compareMode ? '#fff' : 'var(--ink-3)' }} onClick={() => setCompareMode(true)}>📅 Norm</button>
+                  </div>
+                </div>
+                {horariGrup ? (
+                  <HorariInlineIntensiu
+                    horari={horariGrup}
+                    horariAnterior={{}}
+                    tpFranges={[]}
+                    franjes={grupFranjes}
+                    onCellSave={null}
+                    showDiff={false}
+                    nomDocent={grup}
+                  />
+                ) : (
+                  <div style={{ padding: '12px 16px', color: 'var(--ink-4)', fontSize: 12 }}>
+                    Sense dades d'horari per a aquest grup.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {/* ── VISTA PROFESSIONALS ── */}
+      {mainView === 'professionals' && docents.map(d => (
         <div key={d.id} className="card" style={{ marginBottom: 10, border: tpNoms.has(d.nom) ? '1.5px solid var(--amber)' : undefined }}>
           <div className="card-head">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1108,16 +1818,69 @@ function EditingIntensivaView({ docents, editingMap, tpPendents, resumGeneracio,
                 <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}</div>
               </div>
             </div>
-            {tpNoms.has(d.nom) && <span className="sp sp-amber" style={{ fontSize: 10 }}>⚠️ TP a reubicar</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {tpNoms.has(d.nom) && <span className="sp sp-amber" style={{ fontSize: 10 }}>⚠️ TP eliminat</span>}
+              {/* Toggle per targeta — canvia el mode global */}
+              <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                <button
+                  style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !compareMode ? 'var(--amber)' : 'transparent', color: !compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+                  onClick={() => setCompareMode(false)}
+                >🌅 Int</button>
+                <button
+                  style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: compareMode ? 'var(--ink)' : 'transparent', color: compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+                  onClick={() => setCompareMode(true)}
+                >📅 Norm</button>
+              </div>
+            </div>
           </div>
-          <HorariInline
-            horari={editingMap[d.id]}
+          <HorariInlineIntensiu
+            horari={compareMode ? (d.horari || {}) : editingMap[d.id]}
+            horariAnterior={canvisAnteriors[d.nom] || {}}
             tpFranges={d.tp_franges}
-            franjes={franjes}
-            onCellSave={(dia, fid, val) => onCellEdit(d.id, dia, fid, val)}
+            franjes={compareMode ? (normalFranjes || franjes) : franjes}
+            onCellSave={compareMode ? null : (dia, fid, val) => onCellEdit(d.id, dia, fid, val)}
+            showDiff={!compareMode}
+            nomDocent={d.nom}
           />
         </div>
       ))}
+
+      {/* Torns de pati generats */}
+      {tornsPati && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head"><h3>🕐 Torns de Pati (generats per IA)</h3></div>
+          <div style={{ overflowX: 'auto', padding: '10px 16px' }}>
+            <table style={{ borderCollapse: 'collapse', minWidth: 400 }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '5px 10px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)' }}>Torn / Dia</th>
+                  {DIES_ALL.map(dia => (
+                    <th key={dia} style={{ padding: '5px 10px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 700, color: 'var(--ink-2)', textAlign: 'center' }}>{DIE_LBL[dia]}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.keys(tornsPati[DIES_ALL[0]] || {}).map(pid => (
+                  <tr key={pid}>
+                    <td style={{ padding: '5px 10px', border: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', background: 'var(--bg-2)' }}>{pid}</td>
+                    {DIES_ALL.map(dia => {
+                      const noms = tornsPati[dia]?.[pid] || [];
+                      return (
+                        <td key={dia} style={{ padding: '4px 8px', border: '1px solid var(--border)', fontSize: 10, textAlign: 'center', background: noms.length ? 'var(--green-bg)' : 'var(--bg)' }}>
+                          {noms.length
+                            ? <span style={{ color: 'var(--green)', fontWeight: 600 }}>{noms.map(n => n.split(' ')[0]).join(', ')}</span>
+                            : <span style={{ color: 'var(--ink-4)' }}>—</span>
+                          }
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '8px 0 24px' }}>
         <button className="btn btn-ghost" onClick={onDiscard}>✕ Descartar canvis</button>
@@ -1129,6 +1892,478 @@ function EditingIntensivaView({ docents, editingMap, tpPendents, resumGeneracio,
         >
           {saving ? 'Guardant...' : '💾 Confirmar i guardar tots els horaris intensius'}
         </button>
+      </div>
+    </>
+  );
+}
+
+// Versió de HorariInline amb diff visual per a la vista d'intensiva
+function HorariInlineIntensiu({ horari, horariAnterior, tpFranges = [], franjes, onCellSave, showDiff, nomDocent }) {
+  const [editing, setEditing] = useState(null);
+  const [editVal, setEditVal] = useState('');
+  const tpSet = new Set(Array.isArray(tpFranges) ? tpFranges : []);
+  const horaGroups = {};
+  franjes.forEach(f => { if (!horaGroups[f.hora]) horaGroups[f.hora] = []; horaGroups[f.hora].push(f); });
+  const thS = { padding: '4px 4px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 9, fontWeight: 600, color: 'var(--ink-3)', textAlign: 'center', whiteSpace: 'nowrap' };
+  const tdS = { padding: '4px 5px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 9, color: 'var(--ink-3)', whiteSpace: 'nowrap' };
+
+  function startEdit(dia, fid, currentVal) { setEditing({ dia, fid }); setEditVal(currentVal); }
+  function commitEdit(dia, fid, original) {
+    if (onCellSave && editVal !== original) onCellSave(dia, fid, editVal);
+    setEditing(null);
+  }
+
+  return (
+    <div style={{ padding: '0 12px 12px', background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati']].map(([bg,bc,lbl]) => (
+          <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, color: 'var(--ink-3)' }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />{lbl}
+          </span>
+        ))}
+        {showDiff && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, color: '#6B5900' }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: '#FFF9C4', border: '1px solid #F0D020', display: 'inline-block' }} />Modificat
+          </span>
+        )}
+        {onCellSave && <span style={{ fontSize: 9, color: 'var(--ink-4)', marginLeft: 4 }}>· Clic a una cel·la per editar</span>}
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 440 }}>
+          <thead>
+            <tr>
+              <th style={{ ...thS, width: 56, textAlign: 'left' }}>Hora</th>
+              <th style={{ ...thS, width: 64, textAlign: 'left' }}>Tram</th>
+              {DIES.map(d => <th key={d} style={thS}>{DIE_ABBR[d]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {franjes.map(f => {
+              const grp = horaGroups[f.hora] || [];
+              const isFirst = grp[0]?.id === f.id;
+              const rowH = f.lliure ? 18 : f.patio ? 22 : (f.min || 15) * 2;
+              const pad  = (f.lliure || f.patio || (f.min || 15) <= 15) ? '1px 3px' : '4px 3px';
+              return (
+                <tr key={f.id} style={{ height: rowH }}>
+                  {isFirst && (
+                    <td rowSpan={grp.length} style={{ ...tdS, fontWeight: 700, verticalAlign: 'middle', color: 'var(--ink-2)' }}>{f.label}</td>
+                  )}
+                  <td style={{ ...tdS, fontSize: 8 }}>{f.sub}</td>
+                  {DIES.map(dia => {
+                    const raw = horari?.[dia]?.[f.id] || '';
+                    const val = raw || (tpSet.has(`${dia}-${f.id}`) ? 'TP' : '');
+                    const hasChanged = showDiff && horariAnterior?.[dia]?.[f.id] !== undefined;
+                    const isEdit = editing?.dia === dia && editing?.fid === f.id;
+                    const cellStyle = hasChanged
+                      ? { padding: 0, border: '2px solid #F0D020', background: '#FFF9C4', textAlign: 'center', minWidth: 60 }
+                      : { padding: 0, border: '1px solid var(--border)', background: isEdit ? 'var(--surface)' : cellBg(val), textAlign: 'center', minWidth: 60 };
+                    return (
+                      <td key={dia} style={cellStyle}>
+                        {isEdit ? (
+                          <input
+                            autoFocus
+                            value={editVal}
+                            onChange={e => setEditVal(e.target.value)}
+                            onBlur={() => commitEdit(dia, f.id, val)}
+                            onKeyDown={e => { if (e.key === 'Enter') commitEdit(dia, f.id, val); if (e.key === 'Escape') setEditing(null); }}
+                            style={{ width: '100%', border: 'none', outline: '2px solid var(--blue)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '4px 2px', color: 'var(--ink)' }}
+                          />
+                        ) : (
+                          <span
+                            onClick={() => onCellSave && startEdit(dia, f.id, val)}
+                            style={{ fontSize: 9, color: hasChanged ? '#6B5900' : cellColor(val), fontWeight: val ? 500 : 400, display: 'block', padding: pad, cursor: onCellSave ? 'text' : 'default' }}
+                          >
+                            {val || ''}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Mostra (i opcionalment edita) l'horari de l'alumnat com a taula dia × franja
+// onCellSave(dia, fid, nouVal) → activa mode edició cel·la a cel·la
+function HorariAlumnatTable({ data, franjes, onCellSave }) {
+  const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+  const DIE_LBL = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
+  const files = franjes.filter(f => !f.lliure);
+  const [editing, setEditing] = useState(null); // { dia, fid }
+  const [editVal, setEditVal] = useState('');
+
+  const th = { padding: '5px 8px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', textAlign: 'center' };
+  const tdLbl = { padding: '5px 10px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 600, color: 'var(--ink-2)', whiteSpace: 'nowrap', verticalAlign: 'top' };
+
+  function startEdit(dia, fid, val) { setEditing({ dia, fid }); setEditVal(val); }
+  function commitEdit(dia, fid) { if (onCellSave) onCellSave(dia, fid, editVal); setEditing(null); }
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      {onCellSave && <div style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 6, padding: '0 2px' }}>· Fes clic a qualsevol cel·la per editar-la</div>}
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+        <thead>
+          <tr>
+            <th style={{ ...th, textAlign: 'left', minWidth: 90 }}>Franja</th>
+            {DIES.map(d => <th key={d} style={{ ...th, minWidth: 100 }}>{DIE_LBL[d]}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {files.map(f => (
+            <tr key={f.id}>
+              <td style={tdLbl}>
+                <div>{f.label}</div>
+                <div style={{ fontSize: 9, color: 'var(--ink-4)', fontWeight: 400 }}>{f.sub}</div>
+              </td>
+              {DIES.map(d => {
+                const val = data?.[d]?.[f.id] || '';
+                const isEditing = editing?.dia === d && editing?.fid === f.id;
+                const bg = isEditing ? 'var(--surface)' : val ? (val.toLowerCase().includes('pati') ? 'var(--green-bg)' : 'var(--bg)') : 'var(--bg-2)';
+                return (
+                  <td key={d} style={{ padding: 0, border: '1px solid var(--border)', background: bg, minWidth: 100, textAlign: 'center', verticalAlign: 'middle' }}>
+                    {isEditing ? (
+                      <input
+                        autoFocus
+                        value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => commitEdit(d, f.id)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(d, f.id); if (e.key === 'Escape') setEditing(null); }}
+                        style={{ width: '100%', border: 'none', outline: '2px solid var(--blue)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 11, textAlign: 'center', padding: '4px 2px', color: 'var(--ink)' }}
+                      />
+                    ) : (
+                      <span
+                        onClick={() => onCellSave && startEdit(d, f.id, val)}
+                        style={{ fontSize: 11, display: 'block', padding: '5px 8px', color: val ? 'var(--ink)' : 'var(--ink-4)', cursor: onCellSave ? 'text' : 'default' }}
+                      >
+                        {val || '—'}
+                      </span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Intenta parsejar el contingut com a JSON d'horari (retorna objecte o null)
+function parseHorariAlumnat(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = typeof raw === 'object' ? raw : JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const dies = ['dilluns','dimarts','dimecres','dijous','divendres'];
+      if (dies.some(d => d in parsed)) return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+function PatiView({ docents, franjes, configIntensiva, api, showToast, isOriol, baixes, escola }) {
+  const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+  const DIE_LBL  = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
+  const patioFranjes = franjes.filter(f => f.patio);
+
+  // Baixes actives: mapa absent (lowercase) → substitut
+  const baixesActives = (baixes || []).filter(b => b.estat === 'activa');
+  const absentSet = new Set(baixesActives.map(b => b.absent.toLowerCase().trim()));
+  const substitutMap = Object.fromEntries(baixesActives.map(b => [b.absent.toLowerCase().trim(), b.substitut]));
+  // Docents disponibles al selector (excloem els de baixa)
+  const docentsDisponibles = docents.filter(d => !absentSet.has(d.nom.toLowerCase().trim()));
+
+  // Rivo Rubeo: Torn B es duplica en Infantil i Primària (patis separats)
+  const TORN_B_RIVO = [
+    { id: 'patiB_inf', label: 'Torn B · Infantil', sub: "11:00–11:30 · Pati d'Infantil (I3/I4/I5)" },
+    { id: 'patiB_pri', label: 'Torn B · Primària', sub: '11:00–11:30 · Pati de Primària (4t/5è/6è)' },
+  ];
+  // filesTorns: files a mostrar a la taula (Rivo: patiB → patiB_inf + patiB_pri)
+  const filesTorns = !isOriol
+    ? patioFranjes.flatMap(f => f.id === 'patiB' ? TORN_B_RIVO : [f])
+    : patioFranjes;
+
+  const [torns, setTorns] = useState(null); // { dia: { patioId: [nom, ...] } }
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Inicialitza torns buits
+  const initTorns = () => {
+    const t = {};
+    DIES_ALL.forEach(dia => {
+      t[dia] = {};
+      filesTorns.forEach(f => { t[dia][f.id] = []; });
+    });
+    return t;
+  };
+
+  useEffect(() => {
+    if (!api) return;
+    api.getPatiTorns().then(res => {
+      const saved = res?.[0]?.config_pati?.torns;
+      setTorns(saved || initTorns());
+    }).catch(() => setTorns(initTorns()))
+    .finally(() => setLoading(false));
+  }, [api]);
+
+  function setTornDocent(dia, pid, idx, nom) {
+    setTorns(prev => {
+      const nou = JSON.parse(JSON.stringify(prev));
+      if (!nou[dia]) nou[dia] = {};
+      if (!nou[dia][pid]) nou[dia][pid] = [];
+      nou[dia][pid][idx] = nom;
+      return nou;
+    });
+  }
+
+  function afegirSlot(dia, pid) {
+    setTorns(prev => {
+      const nou = JSON.parse(JSON.stringify(prev));
+      if (!nou[dia]) nou[dia] = {};
+      if (!nou[dia][pid]) nou[dia][pid] = [];
+      nou[dia][pid].push('');
+      return nou;
+    });
+  }
+
+  function eliminarSlot(dia, pid, idx) {
+    setTorns(prev => {
+      const nou = JSON.parse(JSON.stringify(prev));
+      nou[dia][pid].splice(idx, 1);
+      return nou;
+    });
+  }
+
+  async function suggerirAutomaticament(usaIntensiu = false) {
+    const nousTorns = initTorns();
+    for (const d of docents) {
+      const h = usaIntensiu ? d.horari_intensiu : d.horari;
+      if (!h) continue;
+      for (const dia of DIES_ALL) {
+        for (const f of patioFranjes) {
+          const val = (h[dia]?.[f.id] || '').toLowerCase().trim();
+          if (val === 'pati' || val.startsWith('pati')) {
+            if (!isOriol && f.id === 'patiB') {
+              // Rivo: enrutar al pati d'Infantil o de Primària segons grup_principal
+              const gp = (d.grup_principal || '').trim();
+              const dest = /^[iI]/.test(gp) ? 'patiB_inf'
+                         : /^[456]/.test(gp) ? 'patiB_pri'
+                         : 'patiB_inf'; // per defecte → Infantil
+              if (!nousTorns[dia][dest]) nousTorns[dia][dest] = [];
+              nousTorns[dia][dest].push(d.nom);
+            } else {
+              if (!nousTorns[dia][f.id]) nousTorns[dia][f.id] = [];
+              nousTorns[dia][f.id].push(d.nom);
+            }
+          }
+        }
+      }
+    }
+    setTorns(nousTorns);
+    showToast('✓ Torns suggerits automàticament');
+  }
+
+  function actualitzarBaixes() {
+    if (baixesActives.length === 0) return showToast('Cap baixa activa registrada');
+    let canvis = 0;
+    setTorns(prev => {
+      const nou = JSON.parse(JSON.stringify(prev));
+      for (const dia of DIES_ALL) {
+        for (const fila of filesTorns) {
+          const llista = nou[dia]?.[fila.id];
+          if (!llista) continue;
+          nou[dia][fila.id] = llista.map(nom => {
+            const clau = (nom || '').toLowerCase().trim();
+            if (substitutMap[clau]) { canvis++; return substitutMap[clau]; }
+            return nom;
+          });
+        }
+      }
+      return nou;
+    });
+    setTimeout(() => showToast(canvis > 0 ? `✓ ${canvis} torn${canvis > 1 ? 's' : ''} actualitzat${canvis > 1 ? 's' : ''} amb els substituts` : 'Cap torn afectat per baixes'), 50);
+  }
+
+  async function guardar() {
+    setSaving(true);
+    try {
+      await api.savePatiTorns({ torns, generat: new Date().toISOString().split('T')[0] });
+      showToast('✓ Torns de pati guardats');
+    } catch (e) { showToast('Error: ' + e.message); }
+    finally { setSaving(false); }
+  }
+
+  function imprimirTornsPati() {
+    if (!torns) return showToast('Primer guarda els torns de pati');
+    const nomEscola = escola?.nom || 'Centre Educatiu';
+    const _nomLow   = nomEscola.toLowerCase();
+    const logoUrl   = _nomLow.includes('rivo')  ? `${window.location.origin}/logo_rivo.png`
+                    : _nomLow.includes('oriol') ? `${window.location.origin}/logo_canoriol.png`
+                    : null;
+    const ara = new Date();
+    const curs = ara.getMonth() >= 8
+      ? `${ara.getFullYear()}–${ara.getFullYear() + 1}`
+      : `${ara.getFullYear() - 1}–${ara.getFullYear()}`;
+
+    const PDF_INFO = {
+      patiA:     { label: 'Primària · 1r, 2n i 3r',  time: '10:30–11:00', color: '#16a34a' },
+      patiB_inf: { label: 'Infantil · I3, I4 i I5',  time: '11:00–11:30', color: '#2563eb' },
+      patiB_pri: { label: 'Primària · 4t, 5è i 6è',  time: '11:00–11:30', color: '#7c3aed' },
+      opatiA:    { label: 'Infantil / Primària',       time: '11:00–11:30', color: '#16a34a' },
+      opatiB:    { label: 'Secundària',                time: '11:30–12:00', color: '#2563eb' },
+    };
+    const DIES_ALL  = ['dilluns','dimarts','dimecres','dijous','divendres'];
+    const DIES_FULL = { dilluns:'Dilluns', dimarts:'Dimarts', dimecres:'Dimecres', dijous:'Dijous', divendres:'Divendres' };
+
+    const pagesHtml = filesTorns.map(f => {
+      const info   = PDF_INFO[f.id] || { label: f.label, time: f.sub || '', color: '#374151' };
+      const colsHtml = DIES_ALL.map(dia => {
+        const noms  = (torns[dia]?.[f.id] || []).filter(Boolean);
+        const chips = noms.length > 0
+          ? noms.map(n => `<div class="chip">${n}</div>`).join('')
+          : `<div class="empty">—</div>`;
+        return `<div class="col"><div class="col-hdr">${DIES_FULL[dia]}</div><div class="col-body">${chips}</div></div>`;
+      }).join('');
+
+      const logoTag = logoUrl
+        ? `<img src="${logoUrl}" class="logo" alt="" />`
+        : '';
+
+      return `
+<div class="pg">
+  <div class="hdr" style="border-top:5px solid ${info.color}">
+    <div class="school-wrap">${logoTag}<span class="school-name">${nomEscola}</span></div>
+    <div class="turn-wrap">
+      <span class="turn-label" style="color:${info.color}">${info.label}</span>
+      <span class="hora">🕐 ${info.time}</span>
+    </div>
+  </div>
+  <div class="grid">${colsHtml}</div>
+  <div class="ftr">
+    <span>Curs ${curs} · Torns de vigilància de pati</span>
+    <span class="brand">Gestionat per HorariaPro</span>
+  </div>
+</div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html lang="ca"><head><meta charset="UTF-8">
+<title>Torns de Pati – ${nomEscola}</title><style>
+@page{size:A4 landscape;margin:14mm 18mm}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#111}
+.pg{display:flex;flex-direction:column;height:calc(210mm - 28mm);page-break-after:always;break-after:page}
+.pg:last-child{page-break-after:avoid;break-after:avoid}
+.hdr{padding:12px 0 10px;border-bottom:2px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.school-wrap{display:flex;align-items:center;gap:10px}
+.logo{height:32px;width:auto;object-fit:contain}
+.school-name{font-size:14px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.07em}
+.turn-wrap{display:flex;align-items:center;gap:14px}
+.turn-label{font-size:18px;font-weight:800;letter-spacing:.02em}
+.hora{font-size:12px;color:#6b7280;white-space:nowrap}
+.grid{flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;min-height:0}
+.col{display:flex;flex-direction:column;border:2px solid #e5e7eb;border-radius:12px;overflow:hidden}
+.col-hdr{background:#f3f4f6;padding:10px 8px;font-size:12px;font-weight:800;color:#374151;text-align:center;text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid #e5e7eb}
+.col-body{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:7px;background:#fff}
+.chip{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 10px;font-size:14px;font-weight:600;color:#1e293b;text-align:center;letter-spacing:.01em}
+.empty{color:#cbd5e1;font-size:26px;text-align:center;padding:20px 0;line-height:1}
+.ftr{padding:9px 0 0;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#9ca3af;margin-top:12px}
+.brand{font-weight:700;color:#6366f1;letter-spacing:.02em}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>${pagesHtml}</body></html>`;
+
+    const w = window.open('', '_blank', 'width=1000,height=750');
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 600); }
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}><Spinner /></div>;
+
+  const hasIntensiu = docents.some(d => d.horari_intensiu);
+
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head">
+          <h3>🕐 Torns de vigilància de pati</h3>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 11 }} onClick={() => suggerirAutomaticament(false)}>
+              🔄 Suggerir (horari normal)
+            </button>
+            {hasIntensiu && configIntensiva?.actiu && (
+              <button className="btn btn-sm" style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderColor: 'var(--amber)', fontSize: 11 }} onClick={() => suggerirAutomaticament(true)}>
+                🌅 Regenerar per intensiva
+              </button>
+            )}
+            {baixesActives.length > 0 && (
+              <button className="btn btn-sm" style={{ background: 'var(--red-bg,#fff0f0)', color: 'var(--red)', borderColor: 'var(--red)', fontSize: 11 }} onClick={actualitzarBaixes} title="Substitueix als torns els docents de baixa pel seu substitut">
+                🩹 Actualitzar baixes ({baixesActives.length})
+              </button>
+            )}
+            <button className="btn btn-sm" style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 11, fontWeight: 600 }} onClick={guardar} disabled={saving}>
+              {saving ? 'Guardant...' : '💾 Guardar torns'}
+            </button>
+            <button className="btn btn-sm" style={{ background: 'var(--purple-bg,#f5f3ff)', color: 'var(--purple,#7c3aed)', borderColor: 'var(--purple,#7c3aed)', fontSize: 11, fontWeight: 600 }} onClick={imprimirTornsPati}>
+              🖨️ Imprimir PDF
+            </button>
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto', padding: '10px 16px' }}>
+          {filesTorns.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', padding: '16px 0' }}>No hi ha franges de pati definides per a aquesta escola.</div>
+          ) : (
+            <table style={{ borderCollapse: 'collapse', minWidth: 480 }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '6px 12px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', textAlign: 'left', minWidth: 120 }}>Torn</th>
+                  {DIES_ALL.map(dia => (
+                    <th key={dia} style={{ padding: '6px 10px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 700, color: 'var(--ink-2)', textAlign: 'center', minWidth: 100 }}>{DIE_LBL[dia]}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filesTorns.map(f => (
+                  <tr key={f.id}>
+                    <td style={{ padding: '6px 12px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', verticalAlign: 'top' }}>
+                      <div>{f.label}</div>
+                      <div style={{ fontSize: 9, color: 'var(--ink-4)' }}>{f.sub}</div>
+                    </td>
+                    {DIES_ALL.map(dia => {
+                      const noms = torns?.[dia]?.[f.id] || [];
+                      return (
+                        <td key={dia} style={{ padding: '6px 8px', border: '1px solid var(--border)', verticalAlign: 'top', background: noms.filter(Boolean).length ? 'var(--green-bg)' : 'var(--bg)', minWidth: 100 }}>
+                          {noms.map((nom, idx) => (
+                            <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 3, alignItems: 'center' }}>
+                              <select
+                                className="f-ctrl"
+                                value={nom || ''}
+                                onChange={e => setTornDocent(dia, f.id, idx, e.target.value)}
+                                style={{ flex: 1, fontSize: 10, padding: '2px 4px', height: 26 }}
+                              >
+                                <option value="">Selecciona...</option>
+                                {docentsDisponibles.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
+                              </select>
+                              <button onClick={() => eliminarSlot(dia, f.id, idx)} style={{ fontSize: 10, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--red)', padding: '0 2px', lineHeight: 1 }}>✕</button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => afegirSlot(dia, f.id)}
+                            style={{ fontSize: 10, color: 'var(--green)', border: 'none', background: 'none', cursor: 'pointer', padding: '2px 0', lineHeight: 1, fontWeight: 700 }}
+                          >+ Afegir</button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </>
   );
@@ -2007,12 +3242,21 @@ function matchesGrup(val, grup) {
   return new RegExp('\\b' + escaped + '\\b').test(v);
 }
 
-function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave }) {
+function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, configIntensiva, onConfigChange, api, showToast }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editing, setEditing] = useState(null); // { nom, dia, fid, currentVal }
   const [editVal, setEditVal] = useState('');
   const [addingEntry, setAddingEntry] = useState(null); // { dia, fid }
   const [addVal, setAddVal] = useState('');
+  // Currículum del grup
+  const [curriculumEdit, setCurriculumEdit] = useState(false);
+  const [curriculumText, setCurriculumText] = useState('');
+  const [editDraft, setEditDraft] = useState(null); // objecte editable (còpia del JSON)
+  const [curriculumSaving, setCurriculumSaving] = useState(false);
+  const currFileRef = useRef(null);
+  const [loadingCurriculum, setLoadingCurriculum] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [showAlumnatIntensiva, setShowAlumnatIntensiva] = useState(false); // vista intensiva alumnat
 
   const grups = useMemo(() => {
     const tutorGroups = docents
@@ -2028,6 +3272,65 @@ function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSav
   useEffect(() => {
     if (grups.length && !grups.includes(selectedGrup)) onSelectGrup(grups[0]);
   }, [grups]);
+
+  // Carregar horari alumnat quan canvia el grup
+  useEffect(() => {
+    const raw = configIntensiva?.grups_curriculum?.[activeGrup];
+    const parsed = parseHorariAlumnat(raw);
+    setCurriculumText(parsed ? JSON.stringify(parsed, null, 2) : (raw || ''));
+    setCurriculumEdit(false);
+    setShowAlumnatIntensiva(false);
+  }, [activeGrup, configIntensiva]);
+
+  async function guardarCurriculum() {
+    setCurriculumSaving(true);
+    try {
+      const toSave = editDraft || (() => { try { const p = JSON.parse(curriculumText); return (p && typeof p === 'object') ? p : curriculumText; } catch { return curriculumText; } })();
+      const nova_cfg = { ...(configIntensiva || {}), grups_curriculum: { ...(configIntensiva?.grups_curriculum || {}), [activeGrup]: toSave } };
+      await api.saveConfigIntensiva(nova_cfg);
+      onConfigChange?.(nova_cfg); // actualitza el pare perquè els canvis persisteixin entre grups
+      if (editDraft) setCurriculumText(JSON.stringify(editDraft, null, 2));
+      setEditDraft(null);
+      showToast(`✓ Horari de l'alumnat de ${activeGrup} guardat`);
+      setCurriculumEdit(false);
+    } catch (e) { showToast('Error: ' + e.message); }
+    finally { setCurriculumSaving(false); }
+  }
+
+  async function pujarCurriculumPDF(file) {
+    setLoadingCurriculum(true);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = ev => res(ev.target.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const mime = file.type || 'application/pdf';
+      const isImage = mime.startsWith('image/');
+      const fileBlock = isImage
+        ? { type: 'image',    source: { type: 'base64', media_type: mime, data: base64 } }
+        : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } };
+      const schoolFranjes = franjes.filter(f => !f.lliure);
+      const franjDesc = schoolFranjes.map(f => `${f.id}=${f.sub}`).join(', ');
+      const diaTemplate = JSON.stringify(schoolFranjes.reduce((acc, f) => ({ ...acc, [f.id]: '' }), {}));
+      const prompt = `Extreu l'horari setmanal de l'alumnat del grup ${activeGrup} d'aquest document.
+Franges: ${franjDesc}
+Cada cel·la ha de contenir el nom curt de la matèria o activitat (ex: "Matemàtiques","Llengua","Música","Ed.Física","Pati","Psicomotricitat","Anglès","Tutoria","Plàstica","Racons","Religió","Valors"). Si no consta o és lliure, posa "".
+Retorna ÚNICAMENT JSON sense cap altre text:
+{"dilluns":${diaTemplate},"dimarts":${diaTemplate},"dimecres":${diaTemplate},"dijous":${diaTemplate},"divendres":${diaTemplate}}`;
+      const result = await callClaude([{ role: 'user', content: [fileBlock, { type: 'text', text: prompt }] }], 2500);
+      const novaText = JSON.stringify(result, null, 2);
+      setCurriculumText(novaText);
+      // Auto-desa immediatament sense necessitat de prémer Editar+Guardar
+      const nova_cfg = { ...(configIntensiva || {}), grups_curriculum: { ...(configIntensiva?.grups_curriculum || {}), [activeGrup]: result } };
+      await api.saveConfigIntensiva(nova_cfg);
+      onConfigChange?.(nova_cfg);
+      setCurriculumEdit(false);
+      showToast('✓ Horari extret i guardat. Prem ✏️ per corregir si cal.');
+    } catch (e) { showToast('Error extraient horari: ' + e.message); }
+    finally { setLoadingCurriculum(false); }
+  }
 
   function startGroupEdit(nom, dia, fid, currentVal) {
     setAddingEntry(null);
@@ -2258,16 +3561,92 @@ function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSav
           </div>
         </div>
       )}
+
+      {/* Horari de l'alumnat (Rivo) */}
+      {activeGrup && (
+        <div
+          className="card"
+          style={{ marginTop: 14, transition: 'outline 0.1s', outline: dragOver ? '2px dashed var(--blue)' : '2px solid transparent', background: dragOver ? 'var(--blue-bg)' : undefined }}
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }}
+          onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) pujarCurriculumPDF(f); }}
+        >
+          <div className="card-head">
+            <h3>📅 Horari de l'alumnat · {activeGrup}</h3>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* Toggle Normal / Intensiva per a l'horari de l'alumnat */}
+              {(() => { const hd = parseHorariAlumnat(curriculumText); return hd && !curriculumEdit ? (
+                <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                  <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !showAlumnatIntensiva ? 'var(--ink)' : 'transparent', color: !showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(false)}>📅 Normal</button>
+                  <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: showAlumnatIntensiva ? 'var(--amber)' : 'transparent', color: showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(true)}>🌅 Intensiva</button>
+                </div>
+              ) : null; })()}
+              <input ref={currFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) pujarCurriculumPDF(f); e.target.value = ''; }} />
+              <button className="btn btn-sm" style={{ fontSize: 11, background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)' }} onClick={() => currFileRef.current?.click()} disabled={loadingCurriculum}>
+                {loadingCurriculum ? '⏳ Extraient...' : '📎 Pujar PDF/Word'}
+              </button>
+              {!curriculumEdit && <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={() => { const d = parseHorariAlumnat(curriculumText); setEditDraft(d ? JSON.parse(JSON.stringify(d)) : {}); setCurriculumEdit(true); }}>✏️ Editar</button>}
+            </div>
+          </div>
+          <div style={{ padding: '12px 16px' }}>
+            {dragOver ? (
+              <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--blue)', fontWeight: 600 }}>📂 Deixa anar el fitxer per pujar-lo</div>
+            ) : curriculumEdit ? (
+              <>
+                <HorariAlumnatTable
+                  data={editDraft || {}}
+                  franjes={franjes}
+                  onCellSave={(dia, fid, val) => setEditDraft(prev => ({ ...prev, [dia]: { ...(prev?.[dia] || {}), [fid]: val } }))}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button className="btn btn-sm" style={{ background: 'var(--green)', color: '#fff', border: 'none' }} onClick={guardarCurriculum} disabled={curriculumSaving}>{curriculumSaving ? 'Guardant...' : '💾 Guardar'}</button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => { setEditDraft(null); setCurriculumEdit(false); }}>Cancel·lar</button>
+                </div>
+              </>
+            ) : (() => {
+              const horariData = parseHorariAlumnat(curriculumText);
+              if (!horariData) return curriculumText
+                ? <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{curriculumText}</div>
+                : <div style={{ fontSize: 12.5, color: 'var(--ink-4)', fontStyle: 'italic', textAlign: 'center', padding: '16px 0' }}>
+                    Cap horari de l'alumnat pujat per a {activeGrup}.<br />
+                    <span style={{ fontSize: 11 }}>Puja el PDF o Word de l'horari dels nens, o arrossega'l aquí.</span>
+                  </div>;
+              const franjesAlumnat = showAlumnatIntensiva
+                ? franjes.filter(f => !f.lliure && f.hora !== 'Tarda')
+                : franjes;
+              return (
+                <>
+                  {showAlumnatIntensiva && (
+                    <div style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600, marginBottom: 8, padding: '4px 8px', background: 'var(--amber-bg)', borderRadius: 5, display: 'inline-block' }}>
+                      🌅 Jornada intensiva — sense tarda
+                    </div>
+                  )}
+                  <HorariAlumnatTable data={horariData} franjes={franjesAlumnat} />
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
-function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave }) {
+function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, configIntensiva, onConfigChange, api, showToast }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editing, setEditing] = useState(null); // { nom, dia, fid, currentVal }
   const [editVal, setEditVal] = useState('');
+  // Currículum del grup
+  const [curriculumEdit, setCurriculumEdit] = useState(false);
+  const [curriculumText, setCurriculumText] = useState('');
+  const [editDraft, setEditDraft] = useState(null);
+  const [curriculumSaving, setCurriculumSaving] = useState(false);
+  const currFileRef = useRef(null);
+  const [loadingCurriculum, setLoadingCurriculum] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [addingEntry, setAddingEntry] = useState(null); // { dia, fid }
   const [addVal, setAddVal] = useState('');
+  const [showAlumnatIntensiva, setShowAlumnatIntensiva] = useState(false); // vista intensiva alumnat
 
   function startGroupEdit(nom, dia, fid, currentVal) {
     setAddingEntry(null);
@@ -2294,6 +3673,64 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave })
     if (target) onCellSave(target, addingEntry.dia, addingEntry.fid, selectedGrup);
     setAddingEntry(null);
     setAddVal('');
+  }
+
+  // Carregar horari alumnat quan canvia el grup seleccionat
+  useEffect(() => {
+    const raw = configIntensiva?.grups_curriculum?.[selectedGrup];
+    const parsed = parseHorariAlumnat(raw);
+    setCurriculumText(parsed ? JSON.stringify(parsed, null, 2) : (raw || ''));
+    setCurriculumEdit(false);
+    setShowAlumnatIntensiva(false);
+  }, [selectedGrup, configIntensiva]);
+
+  async function guardarCurriculum() {
+    setCurriculumSaving(true);
+    try {
+      const toSave = editDraft || (() => { try { const p = JSON.parse(curriculumText); return (p && typeof p === 'object') ? p : curriculumText; } catch { return curriculumText; } })();
+      const nova_cfg = { ...(configIntensiva || {}), grups_curriculum: { ...(configIntensiva?.grups_curriculum || {}), [selectedGrup]: toSave } };
+      await api.saveConfigIntensiva(nova_cfg);
+      onConfigChange?.(nova_cfg);
+      if (editDraft) setCurriculumText(JSON.stringify(editDraft, null, 2));
+      setEditDraft(null);
+      showToast(`✓ Horari de l'alumnat de ${selectedGrup} guardat`);
+      setCurriculumEdit(false);
+    } catch (e) { showToast('Error: ' + e.message); }
+    finally { setCurriculumSaving(false); }
+  }
+
+  async function pujarCurriculumPDF(file) {
+    setLoadingCurriculum(true);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = ev => res(ev.target.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const mime = file.type || 'application/pdf';
+      const isImage = mime.startsWith('image/');
+      const fileBlock = isImage
+        ? { type: 'image',    source: { type: 'base64', media_type: mime, data: base64 } }
+        : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } };
+      const schoolFranjes = franjes.filter(f => !f.lliure);
+      const franjDesc = schoolFranjes.map(f => `${f.id}=${f.sub}`).join(', ');
+      const diaTemplate = JSON.stringify(schoolFranjes.reduce((acc, f) => ({ ...acc, [f.id]: '' }), {}));
+      const prompt = `Extreu l'horari setmanal de l'alumnat del grup ${selectedGrup} d'aquest document.
+Franges: ${franjDesc}
+Cada cel·la ha de contenir el nom curt de la matèria o activitat (ex: "Matemàtiques","Llengua","Música","Ed.Física","Pati","Psicomotricitat","Anglès","Tutoria","Plàstica","Racons","Religió","Valors"). Si no consta o és lliure, posa "".
+Retorna ÚNICAMENT JSON sense cap altre text:
+{"dilluns":${diaTemplate},"dimarts":${diaTemplate},"dimecres":${diaTemplate},"dijous":${diaTemplate},"divendres":${diaTemplate}}`;
+      const result = await callClaude([{ role: 'user', content: [fileBlock, { type: 'text', text: prompt }] }], 2500);
+      const novaText = JSON.stringify(result, null, 2);
+      setCurriculumText(novaText);
+      const nova_cfg = { ...(configIntensiva || {}), grups_curriculum: { ...(configIntensiva?.grups_curriculum || {}), [selectedGrup]: result } };
+      await api.saveConfigIntensiva(nova_cfg);
+      onConfigChange?.(nova_cfg);
+      setCurriculumEdit(false);
+      showToast('✓ Horari extret i guardat. Prem ✏️ per corregir si cal.');
+    } catch (e) { showToast('Error extraient horari: ' + e.message); }
+    finally { setLoadingCurriculum(false); }
   }
 
   const grupHorari = useMemo(() => {
@@ -2351,6 +3788,7 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave })
         <div className="card-head">
           <h3>Horari del {selectedGrup}</h3>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {tutor && <span className="sp sp-blue">Tutor/a: {tutor.nom.split(' ')[0]}</span>}
             {onCellSave && (
               <button
                 className="btn btn-sm"
@@ -2489,6 +3927,71 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave })
             </table>
           </div>
         )}
+      </div>
+
+      {/* Horari de l'alumnat */}
+      <div
+        className="card"
+        style={{ marginTop: 14, transition: 'outline 0.1s', outline: dragOver ? '2px dashed var(--blue)' : '2px solid transparent', background: dragOver ? 'var(--blue-bg)' : undefined }}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }}
+        onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) pujarCurriculumPDF(f); }}
+      >
+        <div className="card-head">
+          <h3>📅 Horari de l'alumnat · {selectedGrup}</h3>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Toggle Normal / Intensiva per a l'horari de l'alumnat */}
+            {(() => { const hd = parseHorariAlumnat(curriculumText); return hd && !curriculumEdit ? (
+              <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !showAlumnatIntensiva ? 'var(--ink)' : 'transparent', color: !showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(false)}>📅 Normal</button>
+                <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: showAlumnatIntensiva ? 'var(--amber)' : 'transparent', color: showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(true)}>🌅 Intensiva</button>
+              </div>
+            ) : null; })()}
+            <input ref={currFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) pujarCurriculumPDF(f); e.target.value = ''; }} />
+            <button className="btn btn-sm" style={{ fontSize: 11, background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)' }} onClick={() => currFileRef.current?.click()} disabled={loadingCurriculum}>
+              {loadingCurriculum ? '⏳ Extraient...' : '📎 Pujar PDF/Word'}
+            </button>
+            {!curriculumEdit && <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={() => { const d = parseHorariAlumnat(curriculumText); setEditDraft(d ? JSON.parse(JSON.stringify(d)) : {}); setCurriculumEdit(true); }}>✏️ Editar</button>}
+          </div>
+        </div>
+        <div style={{ padding: '12px 16px' }}>
+          {dragOver ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--blue)', fontWeight: 600 }}>📂 Deixa anar el fitxer per pujar-lo</div>
+          ) : curriculumEdit ? (
+            <>
+              <HorariAlumnatTable
+                data={editDraft || {}}
+                franjes={franjes}
+                onCellSave={(dia, fid, val) => setEditDraft(prev => ({ ...prev, [dia]: { ...(prev?.[dia] || {}), [fid]: val } }))}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button className="btn btn-sm" style={{ background: 'var(--green)', color: '#fff', border: 'none' }} onClick={guardarCurriculum} disabled={curriculumSaving}>{curriculumSaving ? 'Guardant...' : '💾 Guardar'}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => { setEditDraft(null); setCurriculumEdit(false); }}>Cancel·lar</button>
+              </div>
+            </>
+          ) : (() => {
+            const horariData = parseHorariAlumnat(curriculumText);
+            if (!horariData) return curriculumText
+              ? <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{curriculumText}</div>
+              : <div style={{ fontSize: 12.5, color: 'var(--ink-4)', fontStyle: 'italic', textAlign: 'center', padding: '16px 0' }}>
+                  Cap horari de l'alumnat pujat per a {selectedGrup}.<br />
+                  <span style={{ fontSize: 11 }}>Puja el PDF o Word de l'horari dels nens, o arrossega'l aquí.</span>
+                </div>;
+            const franjesAlumnat = showAlumnatIntensiva
+              ? franjes.filter(f => !f.lliure && f.hora !== 'Tarda')
+              : franjes;
+            return (
+              <>
+                {showAlumnatIntensiva && (
+                  <div style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600, marginBottom: 8, padding: '4px 8px', background: 'var(--amber-bg)', borderRadius: 5, display: 'inline-block' }}>
+                    🌅 Jornada intensiva — sense tarda
+                  </div>
+                )}
+                <HorariAlumnatTable data={horariData} franjes={franjesAlumnat} />
+              </>
+            );
+          })()}
+        </div>
       </div>
     </>
   );

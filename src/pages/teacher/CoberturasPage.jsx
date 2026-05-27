@@ -11,6 +11,17 @@ function nextWeekday(dateObj, dir) {
   return d;
 }
 
+const TORN_LABELS = {
+  patiA:     { label: 'Torn A',             sub: '10:30–11:00', color: 'var(--green)' },
+  patiB:     { label: 'Torn B',             sub: '11:00–11:30', color: 'var(--blue)'  },
+  patiB_inf: { label: 'Torn B · Infantil',  sub: '11:00–11:30', color: 'var(--blue)'  },
+  patiB_pri: { label: 'Torn B · Primària',  sub: '11:00–11:30', color: 'var(--purple)'},
+  opatiA:    { label: 'Pati A',             sub: '11:00–11:30', color: 'var(--green)' },
+  opatiB:    { label: 'Pati B',             sub: '11:30–12:00', color: 'var(--blue)'  },
+};
+const DIES_SETMANA = ['dilluns','dimarts','dimecres','dijous','divendres'];
+const DIES_LBL_LG  = { dilluns:'Dilluns', dimarts:'Dimarts', dimecres:'Dimecres', dijous:'Dijous', divendres:'Divendres' };
+
 export default function CoberturasPage() {
   const { api, perfil, escola } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
@@ -24,6 +35,8 @@ export default function CoberturasPage() {
   });
   const [cobertures, setCobertures] = useState(null);
   const [me,         setMe]         = useState(null);
+  const [configIntensiva, setConfigIntensiva] = useState(null);
+  const [patiTorns,  setPatiTorns]  = useState(null); // { dia: { patioId: [nom,...] } }
   const [notesFn, setNotesFn] = useState(null);
   const [notes,   setNotes]   = useState(null);
   const [fitxers, setFitxers] = useState([]);
@@ -38,10 +51,23 @@ export default function CoberturasPage() {
 
   async function loadDocent() {
     try {
-      const docents = await api.getDocents();
+      const [docents, cfgRes, patiRes] = await Promise.all([
+        api.getDocents(),
+        api.getConfigIntensiva().catch(() => null),
+        api.getPatiTorns().catch(() => null),
+      ]);
       setMe(docents?.find(d => d.nom === perfil.nom) || null);
+      setConfigIntensiva(cfgRes?.[0]?.config_intensiva || null);
+      setPatiTorns(patiRes?.[0]?.config_pati?.torns || null);
     } catch { setMe(null); }
   }
+
+  // Detectar si selectedDate és dins del rang de jornada intensiva activa
+  const esPeriodeIntensiu = configIntensiva?.actiu
+    && configIntensiva?.data_inici
+    && configIntensiva?.data_fi
+    && selectedDate >= configIntensiva.data_inici
+    && selectedDate <= configIntensiva.data_fi;
 
   async function loadCobertures() {
     try {
@@ -97,11 +123,20 @@ export default function CoberturasPage() {
     );
   }
 
-  const myHorari = me?.horari?.[diaCat] || {};
+  // Usar horari intensiu si estem en període intensiu i el docent el té
+  const horariActiu = (esPeriodeIntensiu && me?.horari_intensiu) ? me.horari_intensiu : me?.horari;
+  const myHorari = horariActiu?.[diaCat] || {};
 
   return (
     <>
       <div className="page-hdr"><h1>Les meves cobertures</h1></div>
+
+      {/* Banner jornada intensiva */}
+      {esPeriodeIntensiu && me?.horari_intensiu && (
+        <div style={{ padding: '8px 12px', background: '#FFF3E0', border: '1px solid #FFB74D', borderRadius: 8, marginBottom: 12, fontSize: 12.5, color: '#E65100', fontWeight: 600 }}>
+          🌅 Jornada intensiva activa — mostrant l'horari d'intensiva
+        </div>
+      )}
 
       {/* Notes modal */}
       {notesFn && (
@@ -176,6 +211,47 @@ export default function CoberturasPage() {
           >›</button>
         </div>
       </div>
+
+      {/* Torns de pati setmanals */}
+      {patiTorns && (() => {
+        const nomNorm = (perfil.nom || '').toLowerCase().trim();
+        const meusPatins = DIES_SETMANA.flatMap(dia => {
+          const torn = patiTorns[dia] || {};
+          return Object.entries(torn)
+            .filter(([, noms]) => (noms || []).some(n => n.toLowerCase().trim() === nomNorm))
+            .map(([pid]) => ({ dia, pid }));
+        });
+        if (!meusPatins.length) return null;
+        const avuiPati = meusPatins.filter(p => p.dia === diaCat);
+        return (
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="card-head">
+              <h3>🕐 Els meus torns de pati</h3>
+              <span className="sp sp-green">{meusPatins.length} torns/setmana</span>
+            </div>
+            {/* Banner avui si toca pati */}
+            {avuiPati.length > 0 && (
+              <div style={{ padding: '8px 16px', background: '#FFF3E0', borderBottom: '1px solid #FFB74D', fontSize: 12.5, fontWeight: 700, color: '#E65100' }}>
+                🔔 Avui tens torn de pati: {avuiPati.map(p => (TORN_LABELS[p.pid]?.label || p.pid)).join(' i ')}
+              </div>
+            )}
+            <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {meusPatins.map(({ dia, pid }) => {
+                const t = TORN_LABELS[pid] || { label: pid, sub: '', color: 'var(--ink-3)' };
+                const esDia = dia === diaCat;
+                return (
+                  <div key={`${dia}-${pid}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', background: esDia ? '#FFF3E0' : 'var(--bg-2)', borderRadius: 8, border: esDia ? '1.5px solid #FFB74D' : '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: esDia ? '#E65100' : 'var(--ink-2)', minWidth: 72 }}>{DIES_LBL_LG[dia]}</span>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: t.color }}>{t.label}</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>🕐 {t.sub}</span>
+                    {esDia && <span style={{ fontSize: 10, fontWeight: 700, color: '#E65100', background: 'rgba(255,183,77,.25)', borderRadius: 4, padding: '2px 7px' }}>Avui</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {cobertures === null
         ? <div style={{ padding: 40, textAlign: 'center' }}><Spinner /></div>

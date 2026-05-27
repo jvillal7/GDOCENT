@@ -23,6 +23,7 @@ export default function AvisarPage() {
   const dateRef    = useRef(null);
   const fileRef    = useRef(null);
   const fitxerRef  = useRef(null);
+  const [dragFitxers, setDragFitxers] = useState(false);
   const touchRef = useRef({ y: 0, x: 0, moved: false });
 
   const today = new Date();
@@ -377,8 +378,15 @@ async function loadMeusAvisos() {
         <div>
           <label className="f-label" style={{ marginBottom: 8 }}>Fitxers per al substitut (opcional)</label>
           <div
-            style={{ border: '1.5px dashed var(--border-2)', borderRadius: 'var(--r-sm)', padding: 14, textAlign: 'center', cursor: 'pointer', background: 'var(--bg)' }}
+            style={{ border: `1.5px dashed ${dragFitxers ? 'var(--blue)' : 'var(--border-2)'}`, borderRadius: 'var(--r-sm)', padding: 14, textAlign: 'center', cursor: 'pointer', background: dragFitxers ? 'var(--blue-bg)' : 'var(--bg)', transition: 'all .15s' }}
             onClick={() => fitxerRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragFitxers(true); }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragFitxers(false); }}
+            onDrop={e => {
+              e.preventDefault(); setDragFitxers(false);
+              const nous = Array.from(e.dataTransfer.files || []);
+              setFitxers(prev => { const noms = new Set(prev.map(f => f.name)); return [...prev, ...nous.filter(f => !noms.has(f.name))]; });
+            }}
           >
             <input
               ref={fitxerRef}
@@ -388,9 +396,10 @@ async function loadMeusAvisos() {
               style={{ display: 'none' }}
               onChange={handleFitxers}
             />
-            <div style={{ fontSize: 24, marginBottom: 6 }}>📎</div>
-            <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 2 }}>Adjunta PDF o Word</div>
-            <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>Programació, fitxes de feina, activitats... (màx. 10 MB per fitxer)</div>
+            {dragFitxers
+              ? <><div style={{ fontSize: 24, marginBottom: 6 }}>📂</div><div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--blue)' }}>Deixa anar el fitxer</div></>
+              : <><div style={{ fontSize: 24, marginBottom: 6 }}>📎</div><div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 2 }}>Adjunta PDF o Word</div><div style={{ fontSize: 12, color: 'var(--ink-3)' }}>Programació, fitxes de feina, activitats... · o arrossega aquí</div></>
+            }
           </div>
           {fitxers.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>

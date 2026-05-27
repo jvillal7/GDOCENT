@@ -23,6 +23,7 @@ export default function AvisosPage() {
   const [showInfoPanel,    setShowInfoPanel]    = useState(false);
   const [infoNotes,        setInfoNotes]        = useState('');
   const [infoFitxer,       setInfoFitxer]       = useState(null);
+  const [dragOrg,          setDragOrg]          = useState(false);
   const [infoLoading,      setInfoLoading]      = useState(false);
   const [infoExtra,        setInfoExtra]        = useState([]); // [{resum, docentsBlocats, context, data_inici, data_fi}]
   const [expandedInfoIdxs, setExpandedInfoIdxs] = useState(new Set());
@@ -686,16 +687,21 @@ export default function AvisosPage() {
               <div>
                 <label className="f-label" style={{ marginBottom: 6 }}>Document d'organització (PDF, opcional)</label>
                 <div
-                  style={{ border: '1.5px dashed var(--border-2)', borderRadius: 'var(--r-sm)', padding: 12, textAlign: 'center', cursor: 'pointer', background: 'var(--bg)' }}
+                  style={{ border: `1.5px dashed ${dragOrg ? 'var(--blue)' : 'var(--border-2)'}`, borderRadius: 'var(--r-sm)', padding: 12, textAlign: 'center', cursor: 'pointer', background: dragOrg ? 'var(--blue-bg)' : 'var(--bg)', transition: 'all .15s' }}
                   onClick={() => infoFileRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setDragOrg(true); }}
+                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOrg(false); }}
+                  onDrop={e => { e.preventDefault(); setDragOrg(false); const f = e.dataTransfer.files?.[0]; if (f) setInfoFitxer(f); }}
                 >
                   <input ref={infoFileRef} type="file" accept=".pdf,application/pdf" style={{ display: 'none' }} onChange={e => setInfoFitxer(e.target.files?.[0] || null)} />
-                  {infoFitxer
-                    ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}>
-                        <span>📄</span><span style={{ fontWeight: 600 }}>{infoFitxer.name}</span>
-                        <span style={{ color: 'var(--ink-3)', cursor: 'pointer', fontWeight: 700 }} onClick={e => { e.stopPropagation(); setInfoFitxer(null); }}>×</span>
-                      </div>
-                    : <><div style={{ fontSize: 20, marginBottom: 4 }}>📄</div><div style={{ fontSize: 13, fontWeight: 500 }}>Adjunta el document d'organització</div><div style={{ fontSize: 11, color: 'var(--ink-3)' }}>PDF (organització sortida, jornada, colònies...)</div></>
+                  {dragOrg
+                    ? <><div style={{ fontSize: 20, marginBottom: 4 }}>📂</div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--blue)' }}>Deixa anar el PDF</div></>
+                    : infoFitxer
+                      ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}>
+                          <span>📄</span><span style={{ fontWeight: 600 }}>{infoFitxer.name}</span>
+                          <span style={{ color: 'var(--ink-3)', cursor: 'pointer', fontWeight: 700 }} onClick={e => { e.stopPropagation(); setInfoFitxer(null); }}>×</span>
+                        </div>
+                      : <><div style={{ fontSize: 20, marginBottom: 4 }}>📄</div><div style={{ fontSize: 13, fontWeight: 500 }}>Adjunta el document d'organització</div><div style={{ fontSize: 11, color: 'var(--ink-3)' }}>PDF · o arrossega aquí</div></>
                   }
                 </div>
               </div>

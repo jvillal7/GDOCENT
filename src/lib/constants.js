@@ -89,9 +89,10 @@ export const NAV_CFG = {
   ],
   teacher: [
     { sec: 'El meu espai', items: [
-      { id: 'ta', icon: '🏥', label: 'Avisar absència',       anim: 'pulse' },
-      { id: 'tc', icon: '🔄', label: 'Les meves cobertures',  anim: 'spin' },
-      { id: 'tt', icon: '🕐', label: 'El meu TP',             anim: 'clock' },
+      { id: 'ta',    icon: '🏥', label: 'Avisar absència',       anim: 'pulse' },
+      { id: 'tc',    icon: '🔄', label: 'Les meves cobertures',  anim: 'spin'  },
+      { id: 'tt',    icon: '🕐', label: 'El meu TP',             anim: 'clock' },
+      { id: 'tpati', icon: '☀️', label: 'Torns de pati',         anim: 'bob'   },
     ]},
   ],
   educador: [
@@ -113,7 +114,7 @@ export const NAV_CFG = {
 
 export const BNAV = {
   jefa:      [{ id: 'jd', icon: '📊', label: 'Avui', anim: 'bars' }, { id: 'javis', icon: '🔔', label: 'Avisos', anim: 'bell' }, { id: 'jtp', icon: '🕐', label: 'TP', anim: 'clock' }, { id: 'jhoraris', icon: '👥', label: 'Gestions', anim: 'walk' }, { id: 'jh', icon: '📋', label: 'Historial', anim: 'flip' }],
-  teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar', anim: 'pulse' }, { id: 'tc', icon: '🔄', label: 'Cobertures', anim: 'spin' }, { id: 'tt', icon: '🕐', label: 'TP', anim: 'clock' }],
+  teacher:   [{ id: 'ta', icon: '🏥', label: 'Avisar', anim: 'pulse' }, { id: 'tc', icon: '🔄', label: 'Cobertures', anim: 'spin' }, { id: 'tt', icon: '🕐', label: 'TP', anim: 'clock' }, { id: 'tpati', icon: '☀️', label: 'Pati', anim: 'bob' }],
   educador:  [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   vetllador: [{ id: 'ta', icon: '🏥', label: 'Avisar' }, { id: 'tc', icon: '🔄', label: 'Cobertures' }],
   director:  [{ id: 'di', icon: '📋', label: 'Historial' }],
@@ -126,7 +127,7 @@ export const DEFAULT_PAGE = { jefa: 'jd', teacher: 'ta', educador: 'ta', vetllad
 export const PAGE_TITLES = {
   jd: 'Avui', javis: 'Avisos rebuts', jtp: 'Treball Personal',
   jh: 'Historial', jhoraris: 'Gestions del centre',
-  ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP',
+  ta: 'Avisar absència', tc: 'Les meves cobertures', tt: 'El meu TP', tpati: 'Torns de pati',
   di: 'Historial', df: 'Informes', dv: 'Normes IA', dv_context: 'Context IA', dv_logs: 'Logs xat IA',
   oj_abs: "Persones que s'absenten", oj_reu: 'Reunions i organització',
   oj_cee: 'Actuacions CEEPSIR',

@@ -2,4 +2,4 @@
 export { proposarCobertura }                                    from './claude-rivo';
 export { construirContextXat, xatIA, aplicarPropostaChat } from './claude-chat';
 export { logChat } from './claude-api';
-export { proposarCoberturaCella, analitzarInfoExtra, classificarDiariOriol, extractHorariFromPDF, generarHorarisIntensius } from './claude-tools';
+export { proposarCoberturaCella, analitzarInfoExtra, classificarDiariOriol, extractHorariFromPDF, generarHorarisIntensius, extractarReglesIntensiuPDF } from './claude-tools';
