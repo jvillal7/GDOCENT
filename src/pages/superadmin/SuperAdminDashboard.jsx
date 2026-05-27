@@ -438,6 +438,331 @@ function ActivityChart({ absencies, cobertures, days = 14 }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Visor de conversa completa (per a Logs Xat)
+// ═══════════════════════════════════════════════════════════════════════════════
+function ChatViewer({ log, schoolName, schoolColor: sc, onClose }) {
+  const missatges = log.missatges || [];
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)' }} onClick={onClose} />
+      <div style={{
+        position: 'relative', zIndex: 1,
+        width: '100%', maxWidth: 560, height: '94vh',
+        background: '#fff', borderRadius: '16px 0 0 0',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '-4px 0 40px rgba(0,0,0,.25)', overflow: 'hidden',
+      }}>
+        {/* Cap */}
+        <div style={{ background: sc || '#4285F4', padding: '14px 18px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 800, fontSize: 15 }}>
+                {log.docent_absent ? `Conversa — ${log.docent_absent}` : 'Consulta general'}
+              </div>
+              <div style={{ color: 'rgba(255,255,255,.8)', fontSize: 11, marginTop: 3, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <span>{schoolName}</span>
+                <span>{fmtDate(log.creat_el)}</span>
+                {log.data_absencia && <span>Absència: {log.data_absencia}</span>}
+                <span>{missatges.length} missatges</span>
+              </div>
+            </div>
+            <button onClick={onClose} style={{
+              background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: '50%',
+              width: 30, height: 30, color: '#fff', cursor: 'pointer', fontSize: 15, flexShrink: 0,
+            }}>✕</button>
+          </div>
+          {/* Badge resultat */}
+          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+            <span style={{
+              fontSize: 11, padding: '3px 10px', borderRadius: 12, fontWeight: 700,
+              background: log.resultat === 'aprovada' ? '#dcfce7' : '#f3f4f6',
+              color: log.resultat === 'aprovada' ? '#166534' : '#6b7280',
+            }}>{log.resultat === 'aprovada' ? '✅ Aprovada' : '💬 ' + (log.resultat || 'Pendent')}</span>
+            {log.error_msg && (
+              <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, fontWeight: 700,
+                background: '#fee2e2', color: '#dc2626' }}>⚠ Error</span>
+            )}
+          </div>
+        </div>
+
+        {/* Missatges */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {missatges.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px 0', fontSize: 13 }}>
+              Sense missatges registrats
+            </div>
+          )}
+          {missatges.map((m, i) => {
+            const isUser = m.role === 'user';
+            const cleanContent = (m.content || '').replace(/<proposta>[\s\S]*?<\/proposta>/gi, '').trim();
+            if (!cleanContent) return null;
+            return (
+              <div key={i} style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+                <div style={{
+                  maxWidth: '88%', padding: '9px 13px',
+                  borderRadius: isUser ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                  background: isUser ? '#1e293b' : '#f1f5f9',
+                  color: isUser ? '#fff' : '#1e293b',
+                  fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {!isUser && <div style={{ fontSize: 10, fontWeight: 700, color: sc || '#4285F4',
+                    marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.05em' }}>Horaria IA</div>}
+                  {cleanContent}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Proposta aprovada */}
+          {log.proposta_aprovada?.length > 0 && (
+            <div style={{ marginTop: 8, padding: '12px 14px', background: '#f0fdf4',
+              border: '1px solid #86efac', borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#166534', marginBottom: 8,
+                textTransform: 'uppercase', letterSpacing: '.05em' }}>✅ Proposta aprovada i aplicada</div>
+              {log.proposta_aprovada.map((p, i) => (
+                <div key={i} style={{ fontSize: 13, color: '#1e293b', lineHeight: 1.7 }}>
+                  <strong>{p.docent}</strong>
+                  {p.hores ? ` · ${p.hores}` : ''}
+                  {p.grup_origen ? ` · ${p.grup_origen}` : ''}
+                  {p.tp_afectat ? <span style={{ color: '#f59e0b', fontWeight: 700 }}> ⚠TP</span> : ''}
+                  {p.motiu ? <span style={{ color: '#6b7280', fontSize: 12 }}> — {p.motiu}</span> : ''}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Error */}
+          {log.error_msg && (
+            <div style={{ padding: '10px 14px', background: '#fef2f2',
+              border: '1px solid #fca5a5', borderRadius: 10, fontSize: 12, color: '#dc2626' }}>
+              ⚠ Error: {log.error_msg}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Pestanya: Logs Xat (tots els xats de totes les escoles)
+// ═══════════════════════════════════════════════════════════════════════════════
+function LogsTab({ schools }) {
+  const [logs,        setLogs]        = useState(null);   // null = no carregat
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState(null);
+  const [filtrEscola, setFiltrEscola] = useState('tots');
+  const [filtrResult, setFiltrResult] = useState('tots');
+  const [cerca,       setCerca]       = useState('');
+  const [selected,    setSelected]    = useState(null);
+  const [limit,       setLimit]       = useState(150);
+
+  // Mapa escolaId → {nom, color}
+  const schoolMap = Object.fromEntries(schools.map(e => [e.id, e]));
+
+  async function loadLogs(lim = limit) {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await supa(
+        `chat_logs?select=id,escola_id,creat_el,docent_absent,data_absencia,resultat,num_missatges,error_msg,proposta_aprovada,missatges&order=creat_el.desc&limit=${lim}`
+      );
+      setLogs(data || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadLogs(); }, []);
+
+  const filtered = (logs || []).filter(l => {
+    if (filtrEscola !== 'tots' && l.escola_id !== filtrEscola) return false;
+    if (filtrResult !== 'tots' && l.resultat !== filtrResult) return false;
+    if (cerca && !(l.docent_absent || '').toLowerCase().includes(cerca.toLowerCase())) return false;
+    return true;
+  });
+
+  // Comptadors per filtre
+  const countByResult = { tots: (logs || []).length };
+  (logs || []).forEach(l => { countByResult[l.resultat || 'altres'] = (countByResult[l.resultat || 'altres'] || 0) + 1; });
+  const countByEscola = {};
+  (logs || []).forEach(l => { countByEscola[l.escola_id] = (countByEscola[l.escola_id] || 0) + 1; });
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 24px 48px' }}>
+
+      {/* Capçalera */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>💬 Historial de converses IA</h2>
+          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+            {logs === null ? 'Carregant…' : `${(logs).length} converses totals · ${filtered.length} visibles`}
+          </p>
+        </div>
+        <button
+          onClick={() => loadLogs(limit)}
+          disabled={loading}
+          style={{
+            padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            background: '#1e293b', color: '#fff', border: 'none', cursor: 'pointer',
+          }}
+        >{loading ? '⟳ Carregant…' : '⟳ Actualitzar'}</button>
+      </div>
+
+      {error && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', background: '#fef2f2',
+          border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, color: '#dc2626' }}>
+          Error: {error}
+        </div>
+      )}
+
+      {/* Filtres escola */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setFiltrEscola('tots')}
+          style={filterBtnStyle(filtrEscola === 'tots', '#1e293b')}
+        >Totes ({(logs || []).length})</button>
+        {schools.map(e => (
+          <button key={e.id}
+            onClick={() => setFiltrEscola(filtrEscola === e.id ? 'tots' : e.id)}
+            style={filterBtnStyle(filtrEscola === e.id, e._color)}
+          >
+            {e.nom.replace('CEIP ', '').replace('CEE ', '').replace(' - HorariaPro', '')}
+            {' '}({countByEscola[e.id] || 0})
+          </button>
+        ))}
+      </div>
+
+      {/* Filtres resultat + cerca */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[
+          { key: 'tots',      label: 'Totes' },
+          { key: 'aprovada',  label: '✅ Aprovades' },
+          { key: 'abandonada',label: '💬 Abandonades' },
+        ].map(f => (
+          <button key={f.key}
+            onClick={() => setFiltrResult(f.key)}
+            style={filterBtnStyle(filtrResult === f.key, '#7c3aed', true)}
+          >
+            {f.label} ({f.key === 'tots' ? (logs || []).length : (countByResult[f.key] || 0)})
+          </button>
+        ))}
+        <input
+          type="text"
+          placeholder="🔍 Cerca per docent absent..."
+          value={cerca}
+          onChange={e => setCerca(e.target.value)}
+          style={{
+            marginLeft: 'auto', padding: '7px 12px', borderRadius: 8,
+            border: '1px solid #e5e7eb', fontSize: 13, background: '#fff',
+            outline: 'none', minWidth: 200,
+          }}
+        />
+      </div>
+
+      {/* Llista de logs */}
+      {loading && logs === null ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af', fontSize: 14 }}>Carregant converses…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af', fontSize: 14 }}>Cap conversa trobada</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {filtered.map(log => {
+            const escola = schoolMap[log.escola_id];
+            const sc = escola?._color || '#6b7280';
+            return (
+              <div
+                key={log.id}
+                onClick={() => setSelected(log)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 16px', borderRadius: 12,
+                  background: '#fff', border: '1px solid #e5e7eb',
+                  cursor: 'pointer', transition: 'box-shadow .15s, transform .1s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 2px 12px ${sc}33`; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.transform = ''; }}
+              >
+                {/* Icona resultat */}
+                <span style={{ fontSize: 20, flexShrink: 0 }}>
+                  {log.resultat === 'aprovada' ? '✅' : log.error_msg ? '⚠️' : '💬'}
+                </span>
+
+                {/* Info principal */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>
+                      {log.docent_absent || 'Consulta general'}
+                    </span>
+                    {log.data_absencia && (
+                      <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                        {new Date(log.data_absencia + 'T12:00:00').toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit' })}
+                      </span>
+                    )}
+                    {/* Badge escola */}
+                    <span style={{
+                      fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 700,
+                      background: sc + '22', color: sc, border: `1px solid ${sc}44`,
+                    }}>
+                      {escola?.codi?.toUpperCase() || '?'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                    {fmtDate(log.creat_el)} · {log.num_missatges || 0} missatges
+                    {log.error_msg && <span style={{ color: '#ef4444', fontWeight: 600 }}> · ⚠ error</span>}
+                  </div>
+                </div>
+
+                {/* Badge resultat */}
+                <span style={{
+                  fontSize: 11, padding: '3px 10px', borderRadius: 12, fontWeight: 700, flexShrink: 0,
+                  background: log.resultat === 'aprovada' ? '#dcfce7' : '#f3f4f6',
+                  color: log.resultat === 'aprovada' ? '#166534' : '#6b7280',
+                }}>{log.resultat || '—'}</span>
+              </div>
+            );
+          })}
+
+          {/* Botó carregar més */}
+          {(logs || []).length >= limit && (
+            <button
+              onClick={() => { const newLim = limit + 150; setLimit(newLim); loadLogs(newLim); }}
+              style={{
+                marginTop: 8, padding: '12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                background: '#f1f5f9', border: '1px solid #e5e7eb', cursor: 'pointer', color: '#475569',
+              }}
+            >Carregar-ne més (+150)</button>
+          )}
+        </div>
+      )}
+
+      {/* Visor conversa */}
+      {selected && (
+        <ChatViewer
+          log={selected}
+          schoolName={schoolMap[selected.escola_id]?.nom || '?'}
+          schoolColor={schoolMap[selected.escola_id]?._color}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function filterBtnStyle(active, color, small = false) {
+  return {
+    padding: small ? '5px 12px' : '6px 14px',
+    borderRadius: 20, fontSize: small ? 12 : 12.5, fontWeight: 600,
+    border: active ? `2px solid ${color}` : '2px solid #e5e7eb',
+    background: active ? color + '18' : '#fff',
+    color: active ? color : '#6b7280',
+    cursor: 'pointer', transition: 'all .15s',
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Dashboard principal
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SuperAdminDashboard() {
@@ -454,6 +779,7 @@ export default function SuperAdminDashboard() {
   const [allAbsencies,  setAllAbsencies]  = useState([]);
   const [allCobertures, setAllCobertures] = useState([]);
   const [lastRefresh,   setLastRefresh]   = useState(null);
+  const [tab,           setTab]           = useState('resum'); // 'resum' | 'logs'
 
   // ── Auth ────────────────────────────────────────────────────────────────────
   function handlePinSubmit(e) {
@@ -627,36 +953,45 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {lastRefresh && (
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>
-              actualitzat {lastRefresh.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          {/* Selector de període */}
+          {/* Pestanyes */}
           <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,.08)', borderRadius: 8, padding: 2 }}>
-            {[7, 30, 90].map(d => (
-              <button
-                key={d}
-                onClick={() => setPeriod(d)}
-                style={{
-                  padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  border: 'none', cursor: 'pointer',
-                  background: period === d ? '#4285F4' : 'transparent',
-                  color: period === d ? '#fff' : 'rgba(255,255,255,.5)',
-                  transition: 'all .15s',
-                }}
-              >{d}d</button>
+            {[
+              { id: 'resum', label: '📊 Resum' },
+              { id: 'logs',  label: '💬 Logs Xat' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{
+                padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                border: 'none', cursor: 'pointer',
+                background: tab === t.id ? '#4285F4' : 'transparent',
+                color: tab === t.id ? '#fff' : 'rgba(255,255,255,.5)',
+                transition: 'all .15s', whiteSpace: 'nowrap',
+              }}>{t.label}</button>
             ))}
           </div>
-          <button
-            onClick={loadAll}
-            disabled={globalLoading}
-            style={{
+
+          {tab === 'resum' && (<>
+            {lastRefresh && (
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>
+                {lastRefresh.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,.08)', borderRadius: 8, padding: 2 }}>
+              {[7, 30, 90].map(d => (
+                <button key={d} onClick={() => setPeriod(d)} style={{
+                  padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: 'none', cursor: 'pointer',
+                  background: period === d ? '#7c3aed' : 'transparent',
+                  color: period === d ? '#fff' : 'rgba(255,255,255,.5)',
+                  transition: 'all .15s',
+                }}>{d}d</button>
+              ))}
+            </div>
+            <button onClick={loadAll} disabled={globalLoading} style={{
               padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
               background: 'rgba(66,133,244,.2)', border: '1px solid rgba(66,133,244,.4)',
               color: '#93c5fd', cursor: 'pointer',
-            }}
-          >{globalLoading ? '⟳ Carregant…' : '⟳ Actualitzar'}</button>
+            }}>{globalLoading ? '⟳ Carregant…' : '⟳ Actualitzar'}</button>
+          </>)}
           <button
             onClick={() => { sessionStorage.removeItem(AUTH_KEY); window.location.href = '/'; }}
             style={{
@@ -668,7 +1003,11 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 48px' }}>
+      {/* Pestanya Logs Xat */}
+      {tab === 'logs' && <LogsTab schools={schools} />}
+
+      {/* Pestanya Resum */}
+      {tab === 'resum' && <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 48px' }}>
 
         {globalError && (
           <div style={{
@@ -800,10 +1139,10 @@ export default function SuperAdminDashboard() {
           HorariaPro SuperAdmin · Ús exclusiu Jorge Villalba (jvillal7@xtec.cat)
           {' · '}Cost IA estimat basat en Claude Sonnet 4.6 (€0.020/proposta, €0.015/missatge xat)
         </div>
-      </div>
+      </div>}
 
       {/* Panell de detall */}
-      {selected && (
+      {tab === 'resum' && selected && (
         <SchoolDetail
           escola={selected}
           stats={statsMap[selected.id] || {}}
