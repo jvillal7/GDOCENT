@@ -482,6 +482,23 @@ export default function LoginFlow() {
             </div>
           </div>
         )}
+        {/* Accés superadmin — discret */}
+        <div style={{ textAlign: 'center', padding: '18px 0 4px' }}>
+          <button
+            onClick={() => window.location.href = '/?superadmin=1'}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 11, color: 'var(--ink-4,#d1d5db)', opacity: 0.4,
+              fontFamily: 'inherit', letterSpacing: '.04em',
+              transition: 'opacity .2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '0.4'}
+            title="Administrador"
+          >
+            ⚙
+          </button>
+        </div>
       </div>
     </div>
   );
