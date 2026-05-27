@@ -366,6 +366,9 @@ export default function LoginFlow() {
                 );
               })}
             </div>
+
+            {/* Accés administrador per correu */}
+            <AdminEmailAccess />
           </div>
         )}
 
@@ -482,24 +485,73 @@ export default function LoginFlow() {
             </div>
           </div>
         )}
-        {/* Accés superadmin — discret */}
-        <div style={{ textAlign: 'center', padding: '18px 0 4px' }}>
-          <button
-            onClick={() => window.location.href = '/?superadmin=1'}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 11, color: 'var(--ink-4,#d1d5db)', opacity: 0.4,
-              fontFamily: 'inherit', letterSpacing: '.04em',
-              transition: 'opacity .2s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '0.4'}
-            title="Administrador"
-          >
-            ⚙
-          </button>
-        </div>
       </div>
+    </div>
+  );
+}
+
+const ADMIN_EMAIL = 'horaria.admin@gmail.com';
+
+function AdminEmailAccess() {
+  const [email, setEmail] = useState('');
+  const [shake, setShake] = useState(false);
+
+  function handleKey(e) {
+    if (e.key === 'Enter') tryAccess();
+  }
+
+  function tryAccess() {
+    if (email.trim().toLowerCase() === ADMIN_EMAIL) {
+      window.location.href = window.location.pathname + '?superadmin=1';
+    } else if (email.trim()) {
+      setShake(true);
+      setTimeout(() => setShake(false), 600);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+      <p style={{ fontSize: 11.5, color: 'var(--ink-4)', textAlign: 'center', marginBottom: 10 }}>
+        Accés administrador
+      </p>
+      <div style={{
+        display: 'flex', gap: 8,
+        animation: shake ? 'sa-shake .4s ease' : 'none',
+      }}>
+        <input
+          type="email"
+          placeholder="correu@exemple.com"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={handleKey}
+          style={{
+            flex: 1, padding: '10px 14px', borderRadius: 10,
+            border: '1px solid var(--border)', fontSize: 13,
+            background: 'var(--bg-2)', color: 'var(--ink)',
+            outline: 'none', fontFamily: 'inherit',
+          }}
+        />
+        <button
+          onClick={tryAccess}
+          style={{
+            padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+            background: 'var(--ink)', color: 'var(--surface)',
+            border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          →
+        </button>
+      </div>
+      <style>{`
+        @keyframes sa-shake {
+          0%,100% { transform: translateX(0); }
+          20%      { transform: translateX(-6px); }
+          40%      { transform: translateX(6px); }
+          60%      { transform: translateX(-4px); }
+          80%      { transform: translateX(4px); }
+        }
+      `}</style>
     </div>
   );
 }
