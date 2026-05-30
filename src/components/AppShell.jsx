@@ -136,11 +136,8 @@ export default function AppShell() {
                 )}
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.3 }}>{escola?.nom}</div>
               </div>
-              {/* HorariaPro — powered by */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontSize: 9, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.06em' }}>powered by</span>
-                <img src={darkMode ? '/logo.svg' : '/logo-dark.svg'} alt="HorariaPro" style={{ height: 18, width: 'auto', display: 'block' }} />
-              </div>
+              {/* HorariaPro */}
+              <img src={darkMode ? '/logo.svg' : '/logo-dark.svg'} alt="HorariaPro" style={{ height: 20, width: 'auto', display: 'block' }} />
             </div>
           </div>
           <nav className="sd-nav"><SidebarNav /></nav>

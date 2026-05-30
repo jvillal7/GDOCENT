@@ -275,24 +275,21 @@ export default function LoginFlow() {
         <div className="hero-text">
           {school ? (
             <>
-              {/* Logo + nom escola — igual que la sidebar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              {/* Logo + nom escola */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
                 {(school.nom?.toLowerCase().includes('rivo') || school.nom?.toLowerCase().includes('oriol')) && (
-                  <div style={{ background: 'rgba(255,255,255,.15)', borderRadius: 10, padding: 6, flexShrink: 0 }}>
+                  <div style={{ background: 'rgba(255,255,255,.15)', borderRadius: 12, padding: 8, flexShrink: 0 }}>
                     <img
                       src={school.nom.toLowerCase().includes('rivo') ? '/logo_rivo.png' : '/logo_canoriol.png'}
                       alt={school.nom}
-                      style={{ height: 38, width: 38, objectFit: 'contain', display: 'block' }}
+                      style={{ height: 52, width: 52, objectFit: 'contain', display: 'block' }}
                     />
                   </div>
                 )}
-                <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>{school.nom}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>{school.nom}</div>
               </div>
-              {/* Powered by HorariaPro */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.06em' }}>powered by</span>
-                <img src="/logo.svg" alt="HorariaPro" style={{ height: 20, width: 'auto', display: 'block' }} />
-              </div>
+              {/* HorariaPro */}
+              <img src="/logo.svg" alt="HorariaPro" style={{ height: 28, width: 'auto', display: 'block' }} />
             </>
           ) : (
             <>
