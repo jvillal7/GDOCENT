@@ -273,8 +273,33 @@ export default function LoginFlow() {
         style={isOriol ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'center' } : {}}
       >
         <div className="hero-text">
-          <img src="/logo.svg" alt="HorariaPro" style={{ height: 68, width: 'auto' }} />
-          <p>{school ? school.nom : 'Selecciona la teva escola per accedir'}</p>
+          {school ? (
+            <>
+              {/* Logo + nom escola — igual que la sidebar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                {(school.nom?.toLowerCase().includes('rivo') || school.nom?.toLowerCase().includes('oriol')) && (
+                  <div style={{ background: 'rgba(255,255,255,.15)', borderRadius: 10, padding: 6, flexShrink: 0 }}>
+                    <img
+                      src={school.nom.toLowerCase().includes('rivo') ? '/logo_rivo.png' : '/logo_canoriol.png'}
+                      alt={school.nom}
+                      style={{ height: 38, width: 38, objectFit: 'contain', display: 'block' }}
+                    />
+                  </div>
+                )}
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>{school.nom}</div>
+              </div>
+              {/* Powered by HorariaPro */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.06em' }}>powered by</span>
+                <img src="/logo.svg" alt="HorariaPro" style={{ height: 20, width: 'auto', display: 'block' }} />
+              </div>
+            </>
+          ) : (
+            <>
+              <img src="/logo.svg" alt="HorariaPro" style={{ height: 68, width: 'auto' }} />
+              <p>Selecciona la teva escola per accedir</p>
+            </>
+          )}
         </div>
         {isOriol && (
           <>
