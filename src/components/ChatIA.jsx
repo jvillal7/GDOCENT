@@ -120,7 +120,7 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
     ];
     setMessages(initMsgs);
     setLoading(true);
-    xatIA(systemContext, [{ role: 'user', content: initialMessage }], 1500, (partial) => {
+    xatIA(systemContext, [{ role: 'user', content: initialMessage }], 3000, (partial) => {
       setLoading(false);
       setMessages(prev => {
         const next = [...prev];
@@ -177,7 +177,7 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
       .filter(m => !m._local)
       .map(m => ({ role: m.role, content: m.content }));
     try {
-      const response = await xatIA(systemContext, apiMessages, 1500, (partial) => {
+      const response = await xatIA(systemContext, apiMessages, 3000, (partial) => {
         setLoading(false);
         setMessages(prev => {
           const next = [...prev];

@@ -57,10 +57,13 @@ La cap d'estudis ${jefaNom} et fa consultes sobre cobertures, disponibilitat de 
 Respon sempre en català. Respostes CURTES i DIRECTES, sense introduccions ni explicacions llargues.
 
 FORMAT DE RESPOSTA OBLIGATORI quan proposes cobertura:
-⛔ PROHIBIT escriure el procés de raonament franja per franja. NO expliquis com has pensat. LA GRAELLA ÉS LA RESPOSTA.
-Si cal aclarir un cas especial (tallers, racons, SIEI...), MÀXIM 1 línia breu JUST ABANS de la graella.
-Vés DIRECTAMENT a la graella. COHERÈNCIA OBLIGATÒRIA: el docent que apareix a la graella ha de coincidir exactament amb el de la <proposta>. Mai contradiguis la graella.
-L'últim element ha de ser SEMPRE <proposta>. Res després.
+⚠️ ORDRE ESTRICTE DE SORTIDA — segueix exactament aquest ordre, sense excepcions:
+  1. [Opcional] 1 sola línia si cal aclarir un cas especial (tallers/racons/SIEI/ESTIM/MxI). Si no cal, omet-la.
+  2. La GRAELLA completa.
+  3. La línia <proposta>...</proposta> immediatament després de la graella.
+  4. [Opcional] Notes breus al final, si sobra espai.
+⛔ MAI escriguis raonament franja per franja ABANS de la graella. Raona internament, però la primera cosa visible ha de ser la graella (o l'1 línia opcional). Si escrius l'anàlisi primer, la proposta pot quedar tallada i la cap d'estudis no podrà confirmar res.
+COHERÈNCIA OBLIGATÒRIA: el docent a la graella = el docent a <proposta>. Mai es contradiuen.
 
 📋 COBERTURA [ABSENT] — [DIA] [DATA]
 ══════════════════════════════════════
@@ -98,6 +101,8 @@ Exemples OBLIGATORIS d'aplicació:
 
 SUPORT (docent sense grup propi):
 Si falta el docent de suport: el tutor de l'aula assumeix sol. NO cal cobrir.
+Això s'aplica a QUALSEVOL docent (tutor, especialista, equip directiu) quan en aquella franja tenia assignat "Suport", "SUP", "suport X" o similar — independentment del seu rol.
+El "/" en un valor de suport (ex: "SUP 3A / B") significa que feia suport a dos grups alhora, NO és un desdoblament. La regla de mig grup NO s'aplica a valors que comencen per "SUP" o "Suport".
 
 GRUP FORA DEL CENTRE (sortida, colònies):
 Si el grup és fora del centre: no cal cobrir les franges d'aquell grup.
@@ -154,7 +159,7 @@ export async function proposarCoberturaViaChat(absent, frangesIds, docents, norm
   );
   const userMsg = `Proposa una cobertura per a ${absent}, ${frangesStr}${dia ? ` del ${dia}` : ''}${dataStr ? ` ${dataStr}` : ''}.`;
 
-  const raw = await xatIA(systemCtx, [{ role: 'user', content: userMsg }], 1500);
+  const raw = await xatIA(systemCtx, [{ role: 'user', content: userMsg }], 3000);
 
   const m = /<proposta>([\s\S]*?)<\/proposta>/i.exec(raw);
   if (!m) throw new Error('La IA no ha retornat una proposta. Torna-ho a intentar o usa Horaria 💬.');
