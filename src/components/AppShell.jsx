@@ -124,9 +124,23 @@ export default function AppShell() {
       <div className="shell-desk">
         <aside className="sd">
           <div className="sd-top">
-            <div className="sd-logo" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-              <img src={darkMode ? '/logo.svg' : '/logo-dark.svg'} alt="HorariaPro" style={{ height: 44, width: 'auto', display: 'block' }} />
-              <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{escola?.nom}</div>
+            <div className="sd-logo" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+              {/* Logo + nom de l'escola */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {(escola?.nom?.toLowerCase().includes('rivo') || escola?.nom?.toLowerCase().includes('oriol')) && (
+                  <img
+                    src={escola.nom.toLowerCase().includes('rivo') ? '/logo_rivo.png' : '/logo_canoriol.png'}
+                    alt={escola.nom}
+                    style={{ height: 36, width: 36, objectFit: 'contain', flexShrink: 0 }}
+                  />
+                )}
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.3 }}>{escola?.nom}</div>
+              </div>
+              {/* HorariaPro — powered by */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 9, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.06em' }}>powered by</span>
+                <img src={darkMode ? '/logo.svg' : '/logo-dark.svg'} alt="HorariaPro" style={{ height: 18, width: 'auto', display: 'block' }} />
+              </div>
             </div>
           </div>
           <nav className="sd-nav"><SidebarNav /></nav>
@@ -220,7 +234,7 @@ export default function AppShell() {
     <div id="app">
       <header className="app-header">
         <div className="ah-title">
-          <img src={darkMode ? '/logo.svg' : '/logo-dark.svg'} alt="HorariaPro" style={{ height: 34, width: 'auto', display: 'block' }} />
+          <img src={darkMode ? '/logo.svg' : '/logo-dark.svg'} alt="HorariaPro" style={{ height: 26, width: 'auto', display: 'block' }} />
           <span>{title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
