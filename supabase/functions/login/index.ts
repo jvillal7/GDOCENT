@@ -14,7 +14,7 @@ function corsHeaders(origin: string) {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin':  allowed,
-    'Access-Control-Allow-Headers': 'content-type',
+    'Access-Control-Allow-Headers': 'content-type, apikey, authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 }

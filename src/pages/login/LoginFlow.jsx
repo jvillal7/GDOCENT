@@ -56,7 +56,7 @@ export default function LoginFlow() {
   const pinRef = useRef(null);
 
   useEffect(() => {
-    supaFetch('escoles', { bypassSchoolId: true }).then(data => {
+    supaFetch('escoles?select=id,nom,codi', { bypassSchoolId: true }).then(data => {
       if (!data) return;
       setSchools(data);
       const lastKey = localStorage.getItem('gd_last_escola_key');
@@ -134,8 +134,9 @@ export default function LoginFlow() {
         const fromDb = await supaFetch(`directius?select=id,nom,rol,grup_principal,escola_id,actiu,posicio&actiu=eq.true&escola_id=eq.${school.id}&order=posicio`, { bypassSchoolId: true });
         setUsers((fromDb || []).map(u => ({ ...u, escola_id: school.id })));
       }
-    } catch {
-      setError('Error carregant usuaris.');
+    } catch (err) {
+      console.error('[selectRoleGroup] Error:', err?.message || err);
+      setError(`Error carregant usuaris: ${err?.message || 'desconegut'}`);
     } finally {
       setLoading(false);
     }
@@ -173,8 +174,9 @@ export default function LoginFlow() {
                  : roleGroup === 'vetllador' ? 'vetllador'
                  : data.perfil.rol;
       login(data.perfil, school, role, data.jwt);
-    } catch {
-      setError('Error de connexió. Comprova la xarxa.');
+    } catch (err) {
+      console.error('[doLogin] Error:', err?.message || err);
+      setError(`Error de connexió: ${err?.message || 'desconegut'}`);
     } finally {
       setLoading(false);
     }
