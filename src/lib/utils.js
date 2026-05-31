@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, FRANJES, FRANJES_ORIOL, MANAGEMENT_USERS, APP_URL } from './constants';
+import { AVATAR_COLORS, FRANJES, FRANJES_ORIOL, APP_URL } from './constants';
 
 export const initials = nom =>
   (nom || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
@@ -90,8 +90,7 @@ export function frangesHorari(ids, isOriol) {
 
 export function emailAbsencia({ nom, dates, franges, motiu, isOriol, escola }) {
   const escolaKey = escola?.nom?.toLowerCase().includes('oriol') ? 'oriol' : 'rivo';
-  const jefaUser = MANAGEMENT_USERS[escolaKey]?.find(u => u.rol === 'jefa');
-  const deepLink = `${APP_URL}?escola=${escolaKey}&u=${encodeURIComponent(jefaUser?.nom || 'Veronica')}&p=${jefaUser?.pin || '1234'}`;
+  const deepLink = `${APP_URL}?escola=${escolaKey}`;
 
   const datesHtml = dates.map(d =>
     `<li style="margin-bottom:2px">${new Date(d + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</li>`

@@ -1,10 +1,16 @@
 ﻿import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { Resend } from 'npm:resend';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = ['https://app.horariapro.com', 'http://localhost:5173', 'http://localhost:8080'];
+
+function corsHeaders(origin: string) {
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+    'Vary': 'Origin',
+  };
+}
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 const SUPA_URL = Deno.env.get('SUPABASE_URL')!;
@@ -153,13 +159,14 @@ function emailCoordinador(opts: { coord: string; cobrint: string; absent: string
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const origin = req.headers.get('origin') ?? '';
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(origin) });
 
   try {
     const { escola_id, absent_nom, absent_notes, cobridors, data, is_futura } = await req.json();
 
     if (!escola_id || !absent_nom || !cobridors?.length || !data) {
-      return new Response('missing params', { status: 200, headers: corsHeaders });
+      return new Response('missing params', { status: 400, headers: corsHeaders(origin) });
     }
 
     const supabase = createClient(SUPA_URL, SERVICE_KEY);
@@ -290,10 +297,10 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ sent: sends.length }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
     });
   } catch (e: any) {
     console.error('coverage-notifier error:', e.message);
-    return new Response(e.message, { status: 500, headers: corsHeaders });
+    return new Response(e.message, { status: 500, headers: corsHeaders(origin) });
   }
 });

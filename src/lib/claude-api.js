@@ -1,4 +1,9 @@
-import { WORKER_URL, WORKER_AUTH_TOKEN, SUPA_URL, SUPA_KEY } from './constants';
+import { WORKER_URL, SUPA_URL, SUPA_KEY } from './constants';
+
+function getJwt() {
+  try { return sessionStorage.getItem('gd_jwt') || null; }
+  catch { return null; }
+}
 
 export const MODEL = 'claude-sonnet-4-6';
 
@@ -43,7 +48,7 @@ export async function callClaude(messages, maxTokens = 1000, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Auth-Token': WORKER_AUTH_TOKEN },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getJwt() || ''}` },
       body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
     });
     if (!res.ok) throw new Error('Error al Worker: ' + res.status);
@@ -72,7 +77,7 @@ export async function callClaudeRaw(messages, maxTokens = 1500, onChunk = null, 
   if (system) payload.system = system;
   const res = await fetch(WORKER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Auth-Token': WORKER_AUTH_TOKEN },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getJwt() || ''}` },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error('Error al Worker: ' + res.status);
@@ -120,7 +125,7 @@ export async function logIA(entry) {
       headers: {
         'Content-Type': 'application/json',
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Authorization': `Bearer ${getJwt() || SUPA_KEY}`,
         'Prefer': 'return=minimal',
       },
       body: JSON.stringify(entry),
@@ -136,7 +141,7 @@ export async function logChat(entry) {
       headers: {
         'Content-Type': 'application/json',
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Authorization': `Bearer ${getJwt() || SUPA_KEY}`,
         'Prefer': 'return=minimal',
       },
       body: JSON.stringify(entry),

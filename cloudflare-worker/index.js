@@ -1,21 +1,71 @@
 // Cloudflare Worker — proxy per a l'API de Claude
-// Suporta respostes normals i streaming (SSE)
-// Desplegat a: orange-bar-54f5gceip-claude-proxy.jvillal7.workers.dev
+// Autenticació: valida el JWT de Supabase (no cal token separat al bundle)
+// SUPABASE_JWT_SECRET: afegir com a secret a Cloudflare Dashboard
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+const ALLOWED_ORIGINS = [
+  'https://app.horariapro.com',
+  'http://localhost:5173',
+  'http://localhost:8080',
+];
+
+function corsHeaders(origin) {
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
+
+// Valida JWT HS256 contra el secret de Supabase
+async function verifySupabaseJwt(token, secret) {
+  if (!token || !secret) return false;
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+
+  const [headerB64, payloadB64, sigB64] = parts;
+  const sigData = `${headerB64}.${payloadB64}`;
+
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    );
+    const sigBytes = Uint8Array.from(atob(sigB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(sigData));
+    if (!valid) return false;
+
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return false;
+    if (payload.role !== 'authenticated') return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default {
   async fetch(request, env) {
+    const origin = request.headers.get('Origin') || '';
+
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: CORS });
+      return new Response(null, { headers: corsHeaders(origin) });
     }
 
-    const authToken = request.headers.get('X-Auth-Token');
-    if (authToken !== env.AUTH_TOKEN) {
+    if (!ALLOWED_ORIGINS.includes(origin)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+
+    // Validar JWT de Supabase
+    const auth  = request.headers.get('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    const valid = await verifySupabaseJwt(token, env.SUPABASE_JWT_SECRET);
+    if (!valid) {
       return new Response('Unauthorized', { status: 401 });
     }
 
@@ -40,27 +90,21 @@ export default {
       const err = await upstream.text();
       return new Response(err, {
         status: upstream.status,
-        headers: { 'Content-Type': 'application/json', ...CORS },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
-    // Streaming: passa el cos SSE directament al client
     if (body.stream) {
       return new Response(upstream.body, {
         status: upstream.status,
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          ...CORS,
-        },
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', ...corsHeaders(origin) },
       });
     }
 
-    // No-streaming: retorna el JSON complet (comportament anterior)
     const data = await upstream.text();
     return new Response(data, {
       status: upstream.status,
-      headers: { 'Content-Type': 'application/json', ...CORS },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   },
 };

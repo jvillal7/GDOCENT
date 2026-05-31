@@ -6,8 +6,14 @@ const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
 
 function readSession() {
-  try { return JSON.parse(localStorage.getItem('gd_session')) || null; }
-  catch { return null; }
+  try {
+    // Sessió en sessionStorage (expira en tancar el navegador)
+    const s = JSON.parse(sessionStorage.getItem('gd_session')) || null;
+    if (s) return s;
+    // Migració: si hi havia sessió a localStorage (versió antiga), esborra-la
+    localStorage.removeItem('gd_session');
+    return null;
+  } catch { return null; }
 }
 
 // Si ?escola= no coincideix amb la sessió guardada, esborra la sessió per forçar nou login.
@@ -15,9 +21,10 @@ function readSession() {
   try {
     const escolaParam = new URLSearchParams(window.location.search).get('escola');
     if (!escolaParam) return;
-    const saved = JSON.parse(localStorage.getItem('gd_session') || 'null');
+    const saved = JSON.parse(sessionStorage.getItem('gd_session') || 'null');
     if (saved?.escola && !saved.escola.nom.toLowerCase().includes(escolaParam.toLowerCase())) {
-      localStorage.removeItem('gd_session');
+      sessionStorage.removeItem('gd_session');
+      sessionStorage.removeItem('gd_jwt');
     }
   } catch {}
 })();
@@ -67,7 +74,7 @@ export function AppProvider({ children }) {
     a.getFrangesIA().then(data => { if (data?.[0]?.franges_ia) setFrangesIA(data[0].franges_ia); });
   }, [escola?.id]);
 
-  const login = useCallback((p, e, r) => {
+  const login = useCallback((p, e, r, jwt) => {
     const redirect = sessionStorage.getItem('gd_redirect_page');
     sessionStorage.removeItem('gd_redirect_page');
     setPerfil(p);
@@ -75,10 +82,13 @@ export function AppProvider({ children }) {
     setRole(r);
     setPage(redirect || DEFAULT_PAGE[r] || 'ta');
     document.title = `HORARIA — ${e.nom}`;
-    localStorage.setItem('gd_session', JSON.stringify({ perfil: p, escola: e, role: r }));
+    sessionStorage.setItem('gd_session', JSON.stringify({ perfil: p, escola: e, role: r }));
+    if (jwt) sessionStorage.setItem('gd_jwt', jwt);
   }, []);
 
   const logout = useCallback(() => {
+    sessionStorage.removeItem('gd_session');
+    sessionStorage.removeItem('gd_jwt');
     localStorage.removeItem('gd_session');
     window.location.reload();
   }, []);

@@ -1,18 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { supaFetch } from '../../lib/api';
-import { MANAGEMENT_USERS, AVATAR_COLORS, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
+import { SUPA_URL, SUPA_KEY, AVATAR_COLORS, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { initials, mangementColor } from '../../lib/utils';
 
-const MAX_PIN_FAILS = 5;
-const LOCKOUT_MS    = 30_000;
-
-function getRl(key) {
-  try { return JSON.parse(sessionStorage.getItem(`gd_rl_${key}`) || '{}'); } catch { return {}; }
-}
-function setRl(key, state) {
-  sessionStorage.setItem(`gd_rl_${key}`, JSON.stringify(state));
-}
 
 const _urlEscola = (() => {
   try {
@@ -76,13 +67,11 @@ export default function LoginFlow() {
     });
   }, []);
 
-  // Deep links: ?escola=rivo (docent) o ?escola=rivo&u=Veronica&p=1234 (equip directiu)
+  // Deep link: ?escola=rivo → pre-seleccionar escola (sense auto-login per PIN)
   useEffect(() => {
     if (!schools.length) return;
     const params = new URLSearchParams(window.location.search);
     const escolaParam = params.get('escola');
-    const userParam   = params.get('u');
-    const pinParam    = params.get('p');
     if (!escolaParam) return;
 
     const matched = schools.find(e => e.nom.toLowerCase().includes(escolaParam.toLowerCase()));
@@ -92,33 +81,8 @@ export default function LoginFlow() {
     localStorage.setItem('gd_last_escola_key', escolaParam.toLowerCase());
     window.history.replaceState({}, '', window.location.pathname);
     setEscolaFixa(true);
-
-    // Sense u= → correu de docent: pre-seleccionar escola i mostrar selecció de rol
-    if (!userParam) {
-      setSchool(matched);
-      setStep('role');
-      return;
-    }
-
-    // Amb u= → deep link de l'equip directiu
-    const key = matched.nom.toLowerCase().includes('rivo') ? 'rivo'
-              : matched.nom.toLowerCase().includes('oriol') ? 'oriol'
-              : 'demo';
-    const mgmtUsers = (MANAGEMENT_USERS[key] || []).map(u => ({ ...u, escola_id: matched.id }));
-    const targetUser = mgmtUsers.find(u => u.nom === userParam);
-
-    // Si PIN correcte → auto-login directe
-    if (targetUser && pinParam && pinParam === targetUser.pin) {
-      login(targetUser, matched, targetUser.rol);
-      return;
-    }
-
-    // Sense PIN → mostrar pantalla de PIN amb l'usuari preseleccionat
     setSchool(matched);
-    setUsers(mgmtUsers);
-    setRoleGroup('directiu');
-    if (targetUser) setSelected(targetUser);
-    setStep('details');
+    setStep('role');
   }, [schools]);
 
   function selectSchool(key) {
@@ -158,27 +122,17 @@ export default function LoginFlow() {
     setSearch('');
     try {
       if (group === 'teacher') {
-        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=not.in.(educador,vetllador,tei)`);
+        const data = await supaFetch(`docents?select=id,nom,rol,grup_principal,escola_id,actiu&actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=not.in.(educador,vetllador,tei)`);
         setUsers(data || []);
       } else if (group === 'pae') {
-        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=in.(educador,tei)`);
+        const data = await supaFetch(`docents?select=id,nom,rol,grup_principal,escola_id,actiu&actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=in.(educador,tei)`);
         setUsers(data || []);
       } else if (group === 'vetllador') {
-        const data = await supaFetch(`docents?actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=eq.vetllador`);
+        const data = await supaFetch(`docents?select=id,nom,rol,grup_principal,escola_id,actiu&actiu=eq.true&order=nom&escola_id=eq.${school.id}&rol=eq.vetllador`);
         setUsers(data || []);
       } else {
-        // Intentar carregar des de la taula `directius` a Supabase (si existeix).
-        // SQL per crear-la: CREATE TABLE directius (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        // escola_id uuid REFERENCES escoles(id), nom text, rol text, grup_principal text, pin text, actiu boolean DEFAULT true);
-        const key = school.nom.toLowerCase().includes('rivo') ? 'rivo'
-                  : school.nom.toLowerCase().includes('oriol') ? 'oriol'
-                  : 'demo';
-        let mgmt = null;
-        try {
-          const fromDb = await supaFetch(`directius?actiu=eq.true&escola_id=eq.${school.id}&order=posicio`, { bypassSchoolId: true });
-          if (fromDb?.length) mgmt = fromDb.map(u => ({ ...u, escola_id: school.id }));
-        } catch { /* taula no existeix encara, usar hardcoded */ }
-        setUsers(mgmt || (MANAGEMENT_USERS[key] || []).map(u => ({ ...u, escola_id: school.id })));
+        const fromDb = await supaFetch(`directius?select=id,nom,rol,grup_principal,escola_id,actiu,posicio&actiu=eq.true&escola_id=eq.${school.id}&order=posicio`, { bypassSchoolId: true });
+        setUsers((fromDb || []).map(u => ({ ...u, escola_id: school.id })));
       }
     } catch {
       setError('Error carregant usuaris.');
@@ -194,33 +148,36 @@ export default function LoginFlow() {
     setTimeout(() => pinRef.current?.focus(), 50);
   }
 
-  function doLogin() {
+  async function doLogin() {
     if (!selected) return setError('Selecciona el teu nom a la llista.');
-    const rlKey = String(selected.id || selected.nom);
-    const rl    = getRl(rlKey);
-    const now   = Date.now();
-    if (rl.fails >= MAX_PIN_FAILS && (now - rl.since) < LOCKOUT_MS) {
-      const secs = Math.ceil((LOCKOUT_MS - (now - rl.since)) / 1000);
-      return setError(`Massa intents fallits. Espera ${secs}s abans de tornar-ho a provar.`);
+    if (!pin) return setError('Introdueix el teu PIN.');
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${SUPA_URL}/functions/v1/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY },
+        body: JSON.stringify({
+          escola_id: school.id,
+          user_id:   String(selected.id),
+          pin,
+          grup: roleGroup,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return setError(data.error || 'PIN incorrecte. Torna-ho a provar.');
+      }
+      const role = roleGroup === 'teacher' ? 'teacher'
+                 : roleGroup === 'pae'     ? (selected.rol || 'educador')
+                 : roleGroup === 'vetllador' ? 'vetllador'
+                 : data.perfil.rol;
+      login(data.perfil, school, role, data.jwt);
+    } catch {
+      setError('Error de connexió. Comprova la xarxa.');
+    } finally {
+      setLoading(false);
     }
-    if (pin !== selected.pin) {
-      const isNew = !rl.since || (now - rl.since) >= LOCKOUT_MS;
-      setRl(rlKey, { fails: isNew ? 1 : (rl.fails || 0) + 1, since: isNew ? now : rl.since });
-      return setError('PIN incorrecte. Torna-ho a provar.');
-    }
-    setRl(rlKey, {});
-    let perfil, role;
-    if (roleGroup === 'teacher') {
-      perfil = { id: selected.id, escola_id: school.id, nom: selected.nom, rol: selected.rol };
-      role = 'teacher';
-    } else if (roleGroup === 'pae' || roleGroup === 'vetllador') {
-      perfil = { id: selected.id, escola_id: school.id, nom: selected.nom, rol: selected.rol };
-      role = selected.rol;
-    } else {
-      perfil = selected;
-      role = perfil.rol;
-    }
-    login(perfil, school, role);
   }
 
   async function openDiari(type) {

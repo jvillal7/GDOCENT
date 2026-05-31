@@ -1,8 +1,7 @@
-export const SUPA_URL          = import.meta.env.VITE_SUPA_URL;
-export const SUPA_KEY          = import.meta.env.VITE_SUPA_KEY;
-export const WORKER_URL        = import.meta.env.VITE_WORKER_URL;
-export const WORKER_AUTH_TOKEN = import.meta.env.VITE_WORKER_AUTH_TOKEN;
-export const APP_URL           = import.meta.env.VITE_APP_URL;
+export const SUPA_URL  = import.meta.env.VITE_SUPA_URL;
+export const SUPA_KEY  = import.meta.env.VITE_SUPA_KEY;
+export const WORKER_URL = import.meta.env.VITE_WORKER_URL;
+export const APP_URL   = import.meta.env.VITE_APP_URL;
 
 export const FRANJES = [
   { id: 'f1a',   label: '1a hora', sub: '9:00–9:30',   hora: '1a hora', min: 30 },
@@ -136,26 +135,6 @@ export const PAGE_TITLES = {
 
 export const AVATAR_COLORS = ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#A142F4', '#24C1E0'];
 
-export const MANAGEMENT_USERS = {
-  rivo: [
-    { id: 'm_dir',  nom: 'Cristina',     rol: 'director',   grup_principal: 'Directora',            pin: '1234' },
-    { id: 'm_jefa', nom: 'Veronica',     rol: 'jefa',       grup_principal: "Cap d'Estudis",        pin: '1234' },
-    { id: 'm_sec',  nom: 'Patricia',     rol: 'secretaria', grup_principal: 'Secretaria',           pin: '1234' },
-    { id: 'm_dev',  nom: 'Administrador',rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
-  ],
-  oriol: [
-    { id: 'm_dir_oriol',  nom: 'Yolanda',        rol: 'director',   grup_principal: 'Directora',            pin: '1234' },
-    { id: 'm_jefa_oriol', nom: 'Mireia',          rol: 'jefa',       grup_principal: "Cap d'Estudis",        pin: '1234' },
-    { id: 'm_sec_oriol',  nom: 'Agnès',           rol: 'secretaria', grup_principal: 'Secretaria',           pin: '1234' },
-    { id: 'm_dev_oriol',  nom: 'Administrador',   rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
-  ],
-  demo: [
-    { id: 'm_dir_demo',  nom: 'Xavier Tort',     rol: 'director',   grup_principal: 'Director',             pin: '1234' },
-    { id: 'm_jefa_demo', nom: 'Laura Mas',        rol: 'jefa',       grup_principal: "Cap d'Estudis",        pin: '1234' },
-    { id: 'm_sec_demo',  nom: 'Montse Bosch',     rol: 'secretaria', grup_principal: 'Secretaria',           pin: '1234' },
-    { id: 'm_dev_demo',  nom: 'Administrador',    rol: 'dev',        grup_principal: 'Accés tècnic total',   pin: '1234' },
-  ],
-};
 
 export const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
 

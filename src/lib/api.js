@@ -1,5 +1,10 @@
 import { SUPA_URL, SUPA_KEY } from './constants';
 
+function getJwt() {
+  try { return sessionStorage.getItem('gd_jwt') || null; }
+  catch { return null; }
+}
+
 const _cache = new Map();
 const CACHE_TTL = 120_000;
 function cacheGet(key) {
@@ -16,7 +21,7 @@ async function _sendOne(to, subject, html) {
     headers: {
       'Content-Type': 'application/json',
       'apikey': SUPA_KEY,
-      'Authorization': `Bearer ${SUPA_KEY}`,
+      'Authorization': `Bearer ${getJwt() || SUPA_KEY}`,
     },
     body: JSON.stringify({ to, subject, html }),
   });
@@ -51,7 +56,7 @@ export async function supaFetch(path, opts = {}, escolaId = null) {
       headers: {
         'Content-Type': 'application/json',
         apikey: SUPA_KEY,
-        Authorization: `Bearer ${SUPA_KEY}`,
+        Authorization: `Bearer ${getJwt() || SUPA_KEY}`,
         Prefer: opts.prefer || 'return=representation',
         ...opts.headers,
       },
@@ -79,7 +84,7 @@ export async function uploadFitxer(file, absenciaId) {
     method: 'POST',
     headers: {
       apikey: SUPA_KEY,
-      Authorization: `Bearer ${SUPA_KEY}`,
+      Authorization: `Bearer ${getJwt() || SUPA_KEY}`,
       'Content-Type': file.type || 'application/octet-stream',
       'x-upsert': 'true',
     },
@@ -98,7 +103,7 @@ export async function notifyCobertura({ escola_id, absent_nom, absent_notes, cob
   try {
     const res = await fetch(`${SUPA_URL}/functions/v1/coverage-notifier`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY, 'Authorization': `Bearer ${getJwt() || SUPA_KEY}` },
       body: JSON.stringify({ escola_id, absent_nom, absent_notes, cobridors, data, is_futura }),
     });
     if (!res.ok) console.error('[notifyCobertura]', await res.text().catch(() => res.status));
@@ -114,7 +119,7 @@ export function makeApi(escolaId) {
       const k = `doc_${escolaId}`;
       const cached = cacheGet(k);
       if (cached) return Promise.resolve(cached);
-      return f('docents?select=*&actiu=eq.true&order=nom').then(d => { cacheSet(k, d); return d; });
+      return f('docents?select=id,nom,rol,grup_principal,actiu,escola_id,email,horari,tp_franges,cobertures_mes,coordinador_cicle,horari_intensiu&actiu=eq.true&order=nom').then(d => { cacheSet(k, d); return d; });
     },
     saveDocent: d => {
       cacheDel(`doc_${escolaId}`);

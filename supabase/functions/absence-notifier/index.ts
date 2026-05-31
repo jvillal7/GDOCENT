@@ -1,10 +1,16 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { Resend } from 'npm:resend';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = ['https://app.horariapro.com', 'http://localhost:5173', 'http://localhost:8080'];
+
+function corsHeaders(origin: string) {
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+    'Vary': 'Origin',
+  };
+}
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 const SUPA_URL = Deno.env.get('SUPABASE_URL')!;
@@ -48,7 +54,8 @@ function buildHtml(nom: string, dates: string[], franges: string[], motiu: strin
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const origin = req.headers.get('origin') ?? '';
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(origin) });
   try {
     const payload = await req.json();
     const abs = payload.record ?? payload;
@@ -58,14 +65,13 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPA_URL, SERVICE_KEY);
 
-    // Obtenir caps d'estudis i nom de l'escola en paral·lel
     const [capsRes, escolaRes] = await Promise.all([
       supabase.from('docents').select('email').eq('escola_id', escola_id).eq('grup_principal', "Cap d'Estudis").eq('actiu', true),
       supabase.from('escoles').select('nom').eq('id', escola_id).single(),
     ]);
 
     const emails = (capsRes.data || []).map((d: any) => d.email).filter(Boolean);
-    if (!emails.length) return new Response('no caps', { status: 200, headers: corsHeaders });
+    if (!emails.length) return new Response('no caps', { status: 200, headers: corsHeaders(origin) });
 
     const escolaNom = escolaRes.data?.nom || '';
     const escolaKey = escolaNom.toLowerCase().includes('oriol') ? 'oriol' : 'rivo';
@@ -79,9 +85,9 @@ Deno.serve(async (req) => {
       html: buildHtml(docent_nom, dates, franges, motiu || 'No especificat', escolaNom, escolaKey),
     });
 
-    return new Response('sent', { status: 200, headers: corsHeaders });
+    return new Response('sent', { status: 200, headers: corsHeaders(origin) });
   } catch (e: any) {
     console.error('absence-notifier error:', e.message);
-    return new Response(e.message, { status: 500, headers: corsHeaders });
+    return new Response(e.message, { status: 500, headers: corsHeaders(origin) });
   }
 });

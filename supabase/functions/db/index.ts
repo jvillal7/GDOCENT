@@ -2,8 +2,9 @@ const SUPA_URL    = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const AUTH_TOKEN  = Deno.env.get('WORKER_AUTH_TOKEN')!;
 
+// Aquesta funció és server-to-server (Worker → Edge Function), no s'hi accedeix directament des del navegador.
 const CORS = {
-  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Origin':  'https://app.horariapro.com',
   'Access-Control-Allow-Headers': 'content-type, x-auth-token',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
