@@ -469,21 +469,41 @@ export default function LoginFlow() {
   );
 }
 
-const ADMIN_EMAIL = 'jvillal7@xtec.cat';
-
 function AdminEmailAccess() {
-  const [email, setEmail] = useState('');
-  const [shake, setShake] = useState(false);
+  const [email,   setEmail]   = useState('');
+  const [shake,   setShake]   = useState(false);
+  const [loading, setLoading] = useState(false);
 
   function handleKey(e) { if (e.key === 'Enter') tryAccess(); }
 
-  function tryAccess() {
+  async function tryAccess() {
     const val = email.trim().toLowerCase();
-    if (val !== ADMIN_EMAIL) {
-      if (val) { setShake(true); setTimeout(() => setShake(false), 600); }
-      return;
+    if (!val) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${SUPA_URL}/functions/v1/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY },
+        body: JSON.stringify({ grup: 'check_email', email: val }),
+      });
+      const data = await res.json();
+      if (data.type === 'superadmin') {
+        window.location.href = window.location.pathname + '?superadmin=1';
+      } else if (data.type === 'school') {
+        const goSuperAdmin = window.confirm(
+          `Detectat com a usuari de "${data.escola.nom}".\n\nVols accedir al SuperAdmin Dashboard?\n\n• Accepta → SuperAdmin\n• Cancel·la → Login normal de l'escola`
+        );
+        if (goSuperAdmin) window.location.href = window.location.pathname + '?superadmin=1';
+      } else {
+        setShake(true);
+        setTimeout(() => setShake(false), 600);
+      }
+    } catch {
+      setShake(true);
+      setTimeout(() => setShake(false), 600);
+    } finally {
+      setLoading(false);
     }
-    window.location.href = window.location.pathname + '?superadmin=1';
   }
 
   return (

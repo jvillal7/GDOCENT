@@ -105,6 +105,33 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ── Cerca per email (pre-login) ───────────────────────────────────────────
+  if (grup === 'check_email') {
+    const email = (body as any).email?.toLowerCase?.() ?? '';
+    if (!email) {
+      return new Response(JSON.stringify({ type: 'notfound' }), {
+        status: 200, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+      });
+    }
+    const ADMIN_EMAIL = 'horaria.admin@gmail.com';
+    if (email === ADMIN_EMAIL) {
+      return new Response(JSON.stringify({ type: 'superadmin' }), {
+        status: 200, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+      });
+    }
+    const { data: escoles } = await supabase
+      .from('escoles')
+      .select('id, nom, emails_notificacions, email_notificacions');
+    const found = (escoles || []).find((e: any) => {
+      const arr = Array.isArray(e.emails_notificacions) ? e.emails_notificacions : [];
+      const single = (e.email_notificacions || '').toLowerCase();
+      return arr.some((x: string) => x?.toLowerCase() === email) || single === email;
+    });
+    return new Response(JSON.stringify(found ? { type: 'school', escola: { id: found.id, nom: found.nom } } : { type: 'notfound' }), {
+      status: 200, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+    });
+  }
+
   // ── Superadmin: ruta independent (sense escola_id ni user_id) ─────────────
   if (grup === 'superadmin') {
     if (!SA_PIN) {
