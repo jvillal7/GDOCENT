@@ -3,6 +3,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 const SUPA_URL     = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const JWT_SECRET   = Deno.env.get('SUPABASE_JWT_SECRET')!;
+const SA_PIN       = Deno.env.get('SA_PIN') || '';
 
 const ALLOWED_ORIGINS = ['https://app.horariapro.com', 'http://localhost:5173', 'http://localhost:8080'];
 const MAX_FAILS = 5;
@@ -98,13 +99,53 @@ Deno.serve(async (req) => {
 
   const { escola_id, user_id, pin, grup } = body;
 
-  if (!escola_id || !user_id || !pin || !grup) {
+  if (!pin || !grup) {
     return new Response(JSON.stringify({ error: 'Falten camps obligatoris' }), {
       status: 400, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
     });
   }
 
-  // Validació bàsica per evitar injeccions
+  // ── Superadmin: ruta independent (sense escola_id ni user_id) ─────────────
+  if (grup === 'superadmin') {
+    if (!SA_PIN) {
+      return new Response(JSON.stringify({ error: 'Superadmin no configurat' }), {
+        status: 503, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+      });
+    }
+    const saKey = 'superadmin';
+    const { blocked } = await checkRateLimit(supabase, ip, saKey);
+    if (blocked) {
+      return new Response(JSON.stringify({ error: 'Massa intents. Espera 5 minuts.' }), {
+        status: 429, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+      });
+    }
+    if (pin !== SA_PIN) {
+      await recordAttempt(supabase, ip, saKey, false);
+      return new Response(JSON.stringify({ error: 'PIN incorrecte' }), {
+        status: 401, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+      });
+    }
+    await recordAttempt(supabase, ip, saKey, true);
+    const now = Math.floor(Date.now() / 1000);
+    const jwt = await signJwt({
+      aud: 'authenticated', iss: `${SUPA_URL}/auth/v1`,
+      sub: 'superadmin', exp: now + JWT_TTL, iat: now,
+      role: 'authenticated', email: '',
+      user_metadata: { rol: 'superadmin', user_id: 'superadmin' },
+      app_metadata: { provider: 'superadmin_pin' },
+    }, JWT_SECRET);
+    return new Response(JSON.stringify({ jwt, perfil: { id: 'superadmin', nom: 'SuperAdmin', rol: 'superadmin' } }), {
+      status: 200, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!escola_id || !user_id) {
+    return new Response(JSON.stringify({ error: 'Falten escola_id o user_id' }), {
+      status: 400, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Validació bàsica per evitar injeccions (PINs numèrics per a docents/directius)
   if (typeof pin !== 'string' || pin.length > 8 || !/^\d+$/.test(pin)) {
     return new Response(JSON.stringify({ error: 'PIN invàlid' }), {
       status: 400, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },

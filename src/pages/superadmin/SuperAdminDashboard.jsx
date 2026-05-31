@@ -10,20 +10,24 @@ import { useState, useEffect, useCallback } from 'react';
 import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
 
 // ── Configuració ──────────────────────────────────────────────────────────────
-const SUPER_PIN         = 'jv2025sa';
-const AUTH_KEY          = 'gdocent_sa_v1';
+const AUTH_KEY = 'gdocent_sa_v1';
 const PRICE_PER_SCHOOL  = 79;       // €/mes per escola
 // Estimació cost Claude Sonnet 4.6 per crida
 const COST_PER_PROPOSAL = 0.020;    // ~4000 tok input + 500 tok output ≈ €0.020
 const COST_PER_CHAT_MSG = 0.015;    // ~2000 tok input + 500 tok output ≈ €0.015
 
-// ── Supabase helper (sense filtre escola) ─────────────────────────────────────
+// ── Supabase helper (usa JWT de superadmin per bypass RLS) ───────────────────
+function getSaJwt() {
+  try { return sessionStorage.getItem('gd_sa_jwt') || null; } catch { return null; }
+}
+
 async function supa(path) {
+  const jwt = getSaJwt();
   const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
     headers: {
       'Content-Type': 'application/json',
       apikey: SUPA_KEY,
-      Authorization: `Bearer ${SUPA_KEY}`,
+      Authorization: `Bearer ${jwt || SUPA_KEY}`,
     },
   });
   if (!res.ok) {
@@ -782,13 +786,25 @@ export default function SuperAdminDashboard() {
   const [tab,           setTab]           = useState('resum'); // 'resum' | 'logs'
 
   // ── Auth ────────────────────────────────────────────────────────────────────
-  function handlePinSubmit(e) {
+  async function handlePinSubmit(e) {
     e.preventDefault();
-    if (pin === SUPER_PIN) {
+    try {
+      const res = await fetch(`${SUPA_URL}/functions/v1/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY },
+        body: JSON.stringify({ grup: 'superadmin', pin }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPinError(true);
+        setPin('');
+        return;
+      }
+      sessionStorage.setItem('gd_sa_jwt', data.jwt);
       sessionStorage.setItem(AUTH_KEY, '1');
       setAuth(true);
       setPinError(false);
-    } else {
+    } catch {
       setPinError(true);
       setPin('');
     }
