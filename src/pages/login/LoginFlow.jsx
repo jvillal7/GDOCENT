@@ -469,67 +469,21 @@ export default function LoginFlow() {
   );
 }
 
-const ADMIN_EMAIL = 'horaria.admin@gmail.com';
-
-// Comprova si el correu admin existeix com a docent a alguna escola
-async function checkAdminIsDocent(email) {
-  try {
-    const { SUPA_URL, SUPA_KEY } = await import('../../lib/constants');
-    const res = await fetch(
-      `${SUPA_URL}/rest/v1/docents?select=id,nom,escola_id&actiu=eq.true&limit=1`,
-      { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
-    );
-    // Consultem per correu si hi ha camp email, sinó mirem el nom (fallback)
-    // La taula docents no té camp email → comprovem via escoles.emails_notificacions
-    const escRes = await fetch(
-      `${SUPA_URL}/rest/v1/escoles?select=id,nom,emails_notificacions,email_notificacions`,
-      { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
-    );
-    if (!escRes.ok) return null;
-    const escoles = await escRes.json();
-    // Retorna l'escola si el correu admin hi és registrat com a notificació
-    const found = (escoles || []).find(e => {
-      const arr = Array.isArray(e.emails_notificacions) ? e.emails_notificacions : [];
-      const single = e.email_notificacions || '';
-      return arr.some(x => x?.toLowerCase() === email) || single.toLowerCase() === email;
-    });
-    return found || null;
-  } catch { return null; }
-}
+const ADMIN_EMAIL = 'jvillal7@xtec.cat';
 
 function AdminEmailAccess() {
-  const [email,   setEmail]   = useState('');
-  const [shake,   setShake]   = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [shake, setShake] = useState(false);
 
-  function handleKey(e) {
-    if (e.key === 'Enter') tryAccess();
-  }
+  function handleKey(e) { if (e.key === 'Enter') tryAccess(); }
 
-  async function tryAccess() {
+  function tryAccess() {
     const val = email.trim().toLowerCase();
     if (val !== ADMIN_EMAIL) {
       if (val) { setShake(true); setTimeout(() => setShake(false), 600); }
       return;
     }
-    // És el correu admin: comprova si també existeix a alguna escola
-    setLoading(true);
-    const escola = await checkAdminIsDocent(val);
-    setLoading(false);
-
-    if (escola) {
-      // Existeix a una escola → mostra les dues opcions
-      const goSuperAdmin = window.confirm(
-        `Detectat com a usuari de "${escola.nom}".\n\nVols accedir al SuperAdmin Dashboard?\n\n• Accepta → SuperAdmin\n• Cancel·la → Login normal de l'escola`
-      );
-      if (goSuperAdmin) {
-        window.location.href = window.location.pathname + '?superadmin=1';
-      }
-      // Si cancel·la → no fa res, l'usuari pot fer login normal
-    } else {
-      // No existeix a cap escola → va directament al superadmin
-      window.location.href = window.location.pathname + '?superadmin=1';
-    }
+    window.location.href = window.location.pathname + '?superadmin=1';
   }
 
   return (
@@ -537,37 +491,28 @@ function AdminEmailAccess() {
       <p style={{ fontSize: 11.5, color: 'var(--ink-4)', textAlign: 'center', marginBottom: 10 }}>
         Accés administrador
       </p>
-      <div style={{
-        display: 'flex', gap: 8,
-        animation: shake ? 'sa-shake .4s ease' : 'none',
-      }}>
+      <div style={{ display: 'flex', gap: 8, animation: shake ? 'sa-shake .4s ease' : 'none' }}>
         <input
           type="email"
           placeholder="correu@exemple.com"
           value={email}
           onChange={e => setEmail(e.target.value)}
           onKeyDown={handleKey}
-          disabled={loading}
           style={{
             flex: 1, padding: '10px 14px', borderRadius: 10,
             border: '1px solid var(--border)', fontSize: 13,
             background: 'var(--bg-2)', color: 'var(--ink)',
             outline: 'none', fontFamily: 'inherit',
-            opacity: loading ? .6 : 1,
           }}
         />
         <button
           onClick={tryAccess}
-          disabled={loading}
           style={{
             padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
             background: 'var(--ink)', color: 'var(--surface)',
-            border: 'none', cursor: loading ? 'default' : 'pointer', fontFamily: 'inherit',
-            whiteSpace: 'nowrap', opacity: loading ? .6 : 1,
+            border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
           }}
-        >
-          {loading ? '…' : '→'}
-        </button>
+        >→</button>
       </div>
       <style>{`
         @keyframes sa-shake {
