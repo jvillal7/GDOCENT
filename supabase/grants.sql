@@ -11,7 +11,7 @@ grant select, update on public.escoles to authenticated;
 
 -- ── DOCENTS ── Anon: id/nom/rol (llista login, sense PIN). Auth: tot excepte pin.
 revoke all on public.docents from anon;
-grant select (id, nom, rol, grup_principal, escola_id, actiu) on public.docents to anon;
+grant select (id, nom, rol, grup_principal, escola_id, actiu, email) on public.docents to anon;
 revoke all on public.docents from authenticated;
 grant select (id, nom, rol, grup_principal, escola_id, actiu, email, horari,
               tp_franges, cobertures_mes, coordinador_cicle, horari_intensiu, creat_el)
