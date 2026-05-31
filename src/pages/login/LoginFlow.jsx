@@ -490,10 +490,9 @@ function AdminEmailAccess() {
       if (data.type === 'superadmin') {
         window.location.href = window.location.pathname + '?superadmin=1';
       } else if (data.type === 'school') {
-        const goSuperAdmin = window.confirm(
-          `Detectat com a usuari de "${data.escola.nom}".\n\nVols accedir al SuperAdmin Dashboard?\n\n• Accepta → SuperAdmin\n• Cancel·la → Login normal de l'escola`
-        );
-        if (goSuperAdmin) window.location.href = window.location.pathname + '?superadmin=1';
+        const nom = (data.escola.nom || '').toLowerCase();
+        const key = nom.includes('oriol') ? 'oriol' : nom.includes('demo') ? 'demo' : 'rivo';
+        window.location.href = window.location.pathname + '?escola=' + key;
       } else {
         setShake(true);
         setTimeout(() => setShake(false), 600);
