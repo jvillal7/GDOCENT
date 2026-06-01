@@ -15,7 +15,9 @@ function cacheGet(key) {
 function cacheSet(key, data) { _cache.set(key, { data, ts: Date.now() }); }
 function cacheDel(...keys) { keys.forEach(k => _cache.delete(k)); }
 
-async function _sendOne(to, subject, html) {
+async function _sendOne(to, subject, html, attachments) {
+  const payload = { to, subject, html };
+  if (attachments?.length) payload.attachments = attachments;
   const res = await fetch(`${SUPA_URL}/functions/v1/send-email`, {
     method: 'POST',
     headers: {
@@ -23,7 +25,7 @@ async function _sendOne(to, subject, html) {
       'apikey': SUPA_KEY,
       'Authorization': `Bearer ${getJwt() || SUPA_KEY}`,
     },
-    body: JSON.stringify({ to, subject, html }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const err = await res.text().catch(() => res.status);
@@ -31,13 +33,13 @@ async function _sendOne(to, subject, html) {
   }
 }
 
-export async function sendEmail(to, subject, html) {
+export async function sendEmail(to, subject, html, attachments) {
   try {
     const recipients = Array.isArray(to)
       ? to
       : (typeof to === 'string' ? to.split(',').map(e => e.trim()).filter(Boolean) : []);
     if (!recipients.length) return;
-    await Promise.all(recipients.map(addr => _sendOne(addr, subject, html)));
+    await Promise.all(recipients.map(addr => _sendOne(addr, subject, html, attachments)));
   } catch (e) {
     console.error('[sendEmail] Error de xarxa:', e?.message || e);
   }

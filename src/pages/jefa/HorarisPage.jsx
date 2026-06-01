@@ -5,6 +5,7 @@ import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, FRA
 import { initials, oriolInitials, avatarColor, rolLabel, normGrup } from '../../lib/utils';
 import { extractHorariFromPDF, generarHorarisIntensius, extractarReglesIntensiuPDF } from '../../lib/claude';
 import { callClaudeRaw, callClaude } from '../../lib/claude-api';
+import { uploadFitxer, sendEmail } from '../../lib/api';
 import Spinner from '../../components/Spinner';
 
 const DIE_ABBR = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
@@ -895,9 +896,9 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   // Regles per checklist
   const [regleTpTarda, setRegleTpTarda]       = useState(cfg.regles?.tpTarda || 'pati');
   const [regleTpAltraText, setRegleTpAltraText] = useState(cfg.regles?.tpAltraText || '');
-  const [reglesEspecialistes, setReglesEspec] = useState(cfg.regles?.especialistesReduccio || false);
   const [reglesEquilibraEsp, setReglesEquilibraEsp] = useState(cfg.regles?.equilibrarEspecialistes || false);
-  const [reglesGenPati, setReglesGenPati]     = useState(cfg.regles?.generarTornsPati !== false);
+  const [reglesNoTallers, setReglesNoTallers] = useState(cfg.regles?.noTallers || false);
+  const [reglesCompactar45, setReglesCompactar45] = useState(cfg.regles?.compactar45 || false);
   const [instruccionsLliures, setInstruccionsLliures] = useState(cfg.regles?.instruccionsLliures || '');
   const [plantillaSaving, setPlantillaSaving] = useState(false);
   // Importar horari passat
@@ -916,9 +917,9 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
       if (configIntensiva.regles) {
         setRegleTpTarda(configIntensiva.regles.tpTarda || 'pati');
         setRegleTpAltraText(configIntensiva.regles.tpAltraText || '');
-        setReglesEspec(configIntensiva.regles.especialistesReduccio || false);
         setReglesEquilibraEsp(configIntensiva.regles.equilibrarEspecialistes || false);
-        setReglesGenPati(configIntensiva.regles.generarTornsPati !== false);
+        setReglesNoTallers(configIntensiva.regles.noTallers || false);
+        setReglesCompactar45(configIntensiva.regles.compactar45 || false);
         setInstruccionsLliures(configIntensiva.regles.instruccionsLliures || '');
       }
     }
@@ -938,7 +939,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   async function guardarPlantilla() {
     setPlantillaSaving(true);
     try {
-      const regles = { tpTarda: regleTpTarda, tpAltraText: regleTpAltraText, especialistesReduccio: reglesEspecialistes, equilibrarEspecialistes: reglesEquilibraEsp, generarTornsPati: reglesGenPati, instruccionsLliures };
+      const regles = { tpTarda: regleTpTarda, tpAltraText: regleTpAltraText, equilibrarEspecialistes: reglesEquilibraEsp, noTallers: reglesNoTallers, compactar45: reglesCompactar45, instruccionsLliures };
       const nova = { ...cfg, regles };
       await api.saveConfigIntensiva(nova);
       onConfigChange(nova);
@@ -965,7 +966,6 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     try {
       const result = await extractarReglesIntensiuPDF(importBase64, importMime);
       if (result.tpTarda) setRegleTpTarda(result.tpTarda);
-      if (result.especialistesReduccio !== undefined) setReglesEspec(!!result.especialistesReduccio);
       if (result.instruccionsLliures) setInstruccionsLliures(result.instruccionsLliures);
       showToast(`✓ Regles detectades: ${result.resum || 'OK'}`);
     } catch (e) { showToast('Error detectant regles: ' + e.message); }
@@ -999,36 +999,55 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
         ? `GESTIÓ DEL TP DE TARDA: ${regleTpAltraText.trim()}\n\n${instruccionsLliures}`
         : instruccionsLliures;
 
-      // Anàlisi d'equitat de sessions d'especialistes
+      // Equilibri d'especialistes: instruccions concretes amb slots exactes
       if (reglesEquilibraEsp) {
         const DIES_S = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
-        const espKeywords = /\b(ef|anglès|angles|música|musica|ed\.?\s*física|educació física|educacion fisica)\b/i;
-        // Mapejar sessions per especialista → grup → count
-        const sessionMap = {}; // { nomEsp: { nomGrup: count } }
+        const ESP_KW = ['ef', 'anglès', 'angles', 'música', 'musica', 'ei suport'];
+        const instrLines = [];
+
         for (const d of docents) {
           if (!d.horari) continue;
-          const allVals = DIES_S.flatMap(dia => Object.values(d.horari[dia] || {})).filter(Boolean);
-          const espVals = allVals.filter(v => espKeywords.test(String(v)));
-          if (espVals.length === 0) continue; // no és especialista
-          // Buscar grups en el seu horari (valors amb noms de grup)
-          if (!sessionMap[d.nom]) sessionMap[d.nom] = {};
+          if (!ESP_KW.some(kw => (d.grup_principal || '').toLowerCase().includes(kw))) continue;
+
+          const grupsMap = {}; // grupNom → ['dilluns/f3a', ...]
           for (const dia of DIES_S) {
-            const cells = d.horari[dia] || {};
-            const matiVals = Object.entries(cells).filter(([, v]) => v && v !== 'Lliure' && v !== 'lliure' && !/^tp$/i.test(v));
-            for (const [, grupNom] of matiVals) {
-              sessionMap[d.nom][grupNom] = (sessionMap[d.nom][grupNom] || 0) + 1;
+            for (const [fid, v] of Object.entries(d.horari[dia] || {})) {
+              const val = (v || '').trim();
+              if (!val || /^(tp|lliure|pati|coordinaci|càrrec|ceepsir)/i.test(val)) continue;
+              const gnom = val.split(/\s*[·/]\s*/)[0].trim();
+              if (!gnom) continue;
+              if (!grupsMap[gnom]) grupsMap[gnom] = [];
+              grupsMap[gnom].push(`${dia}/${fid}`);
             }
           }
+
+          const keys = Object.keys(grupsMap);
+          if (keys.length <= 1) continue;
+          const counts = keys.map(g => grupsMap[g].length);
+          if (Math.max(...counts) === Math.min(...counts)) continue;
+
+          const target = Math.round(counts.reduce((a, b) => a + b, 0) / keys.length);
+          instrLines.push(`
+${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
+          for (const g of keys) {
+            const diff = grupsMap[g].length - target;
+            if (diff > 0)      instrLines.push(`  BUIDA ${diff} slot(s) de "${g}" (ara ${grupsMap[g].length}→${target}). Opcions: ${grupsMap[g].join(', ')}`);
+            else if (diff < 0) instrLines.push(`  AFEGEIX ${Math.abs(diff)} slot(s) a "${g}" (ara ${grupsMap[g].length}→${target}). Posa'l a una franja lliure.`);
+          }
         }
-        if (Object.keys(sessionMap).length > 0) {
-          const lines = Object.entries(sessionMap).map(([nom, grups]) =>
-            `${nom}: ${Object.entries(grups).map(([g, c]) => `${g}=${c}sess`).join(', ')}`
-          );
-          instruccionsEfectives = `EQUILIBRAR HORES ESPECIALISTES:\nA continuació es mostren les sessions setmanals per especialista i grup en horari normal. En intensiva, cal redistribuir les sessions perquè tots els grups tinguin sessions equivalents de cada especialitat. Proposa els canvis mínims per equilibrar:\n${lines.join('\n')}\n\n${instruccionsEfectives}`;
+
+        if (instrLines.length > 0) {
+          instruccionsEfectives = [
+            'EQUILIBRAR SESSIONS D\'ESPECIALISTES — CANVIS OBLIGATORIS:',
+            '"BUIDA": retorna "" en el slot indicat. "AFEGEIX": assigna el nom del grup a una franja lliure del docent. No toquis cap altre slot.',
+            instrLines.join('\n'),
+            '',
+            instruccionsEfectives,
+          ].filter(Boolean).join('\n').trim();
         }
       }
 
-      const regles = { tpTarda: tpTardaEfectiu, especialistesReduccio: reglesEspecialistes, generarTornsPati: reglesGenPati, instruccionsLliures: instruccionsEfectives };
+      const regles = { tpTarda: tpTardaEfectiu, instruccionsLliures: instruccionsEfectives };
       const grups_curriculum = cfg.grups_curriculum || null;
       const result = await generarHorarisIntensius(docents, franjes, regles, normes, grups_curriculum);
       const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
@@ -1050,23 +1069,74 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
           });
         }
 
-        // Guardar contingut de tarda DESPRÉS d'aplicar canvisMap
-        // (si la IA o la Part 1 ha buidat un slot, no el posem a i4a/i4b)
+        // Guardar contingut de tarda ORIGINAL (d.horari, abans que Part 1 la buidi)
+        // Excloure TP, Lliure, Tallers i Racons (no passen a i4a/i4b)
         const tardesOriginals = {};
         for (const dia of DIES_ALL) {
           tardesOriginals[dia] = tardesIds
-            .map(f => (base[dia] || {})[f] || '')
-            .filter(v => v && !/^tp$/i.test(v.trim()) && v.toLowerCase() !== 'lliure');
+            .map(f => (d.horari[dia] || {})[f] || '')
+            .filter(v => v && !/^tp$/i.test(v.trim()) && v.toLowerCase() !== 'lliure' && !/^(tallers|racons)/i.test(v.trim()));
         }
         const converted = isOriolFranjesGlobal ? convertOriolTo15Min(base) : convertTo15Min(base);
 
-        // Omplir 4a hora intensiva (i4a, i4b) amb contingut de tarda si estava buida
         if (!isOriolFranjesGlobal) {
+          const isTR = v => /^(tallers|racons)/i.test((v || '').trim());
+          const isSkip = v => !v || /^(lliure|pati|tp)$/i.test((v || '').trim()) || isTR(v);
+          // Tots els slots intensius de matí (pre-pati + post-pati, sense iPA)
+          const MATI_SLOTS = ['i1a', 'i1b', 'i1c', 'i1d', 'i2a', 'i2b', 'i3a', 'i3b', 'i3c', 'i3d'];
+          // Aplicar si checkbox actiu O si instruccions mencionen tallers/racons
+          const aplicarNoTallers = reglesNoTallers || /tallers|racons/i.test(instruccionsLliures || '');
+
+          // Norma 1+3: Eliminar Tallers/Racons del matí i de i4a/i4b, omplir amb activitat anterior
+          if (aplicarNoTallers) {
+            for (const dia of DIES_ALL) {
+              if (!converted[dia]) continue;
+              let lastValid = '';
+              for (const slot of MATI_SLOTS) {
+                const v = converted[dia][slot] || '';
+                if (isTR(v)) {
+                  converted[dia][slot] = lastValid;
+                } else {
+                  if (v && !/^(lliure|pati|tp)$/i.test(v.trim())) lastValid = v;
+                }
+              }
+            }
+          }
+
+          // Norma 2 (sempre): Omplir i4a/i4b — ampliar última classe fins les 13:00
           for (const dia of DIES_ALL) {
+            if (!converted[dia]) continue;
             const vals = tardesOriginals[dia];
-            if (vals.length > 0 && converted[dia]) {
+            if (vals.length > 0) {
               if (!converted[dia]['i4a']) converted[dia]['i4a'] = vals[0];
               if (!converted[dia]['i4b']) converted[dia]['i4b'] = vals[1] || vals[0];
+            } else {
+              const prevVal = converted[dia]['i3d'] || '';
+              if (prevVal && !/^(lliure|pati)$/i.test(prevVal.trim()) && !isTR(prevVal)) {
+                if (!converted[dia]['i4a']) converted[dia]['i4a'] = prevVal;
+                if (!converted[dia]['i4b']) converted[dia]['i4b'] = prevVal;
+              }
+            }
+            // Assegurar que Tallers/Racons no arriben a i4a/i4b en cap cas
+            if (aplicarNoTallers) {
+              if (isTR(converted[dia]['i4a'] || '')) converted[dia]['i4a'] = converted[dia]['i3c'] || converted[dia]['i3b'] || converted[dia]['i3a'] || '';
+              if (isTR(converted[dia]['i4b'] || '')) converted[dia]['i4b'] = converted[dia]['i4a'] || '';
+            }
+          }
+
+          // Norma 4: Compactació 45+45 — 4 slots iguals + 2 slots altra activitat → 3+3
+          if (reglesCompactar45) {
+            for (const dia of DIES_ALL) {
+              if (!converted[dia]) continue;
+              const vA = converted[dia]['i3a'];
+              const vB = converted[dia]['i4a'];
+              if (!isSkip(vA) && !isSkip(vB) && vA !== vB
+                  && converted[dia]['i3b'] === vA
+                  && converted[dia]['i3c'] === vA
+                  && converted[dia]['i3d'] === vA
+                  && converted[dia]['i4b'] === vB) {
+                converted[dia]['i3d'] = vB;
+              }
             }
           }
         }
@@ -1244,30 +1314,40 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
             </div>
           </div>
 
-          {/* Regla 3: torns de pati */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)' }}>
-            <input type="checkbox" checked={reglesGenPati} onChange={e => setReglesGenPati(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
+          {/* Norma 1+3: No Tallers ni Racons */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: reglesNoTallers ? '#FFF0F0' : 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesNoTallers ? '#E05050' : 'var(--border)'}`, transition: 'all .1s' }}>
+            <input type="checkbox" checked={reglesNoTallers} onChange={e => setReglesNoTallers(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#E05050', flexShrink: 0 }} />
             <div>
-              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Generar torns de pati automàticament</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>HorarIA assigna els torns de vigilància de pati</div>
+              <div style={{ fontSize: 13, color: reglesNoTallers ? '#C03030' : 'var(--ink-2)', fontWeight: 600 }}>🚫 No hi ha Tallers ni Racons</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Elimina "Tallers" i "Racons" de totes les franges i amplia l'activitat anterior</div>
             </div>
           </label>
 
-          {/* Regla 4: especialistes */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)' }}>
-            <input type="checkbox" checked={reglesEspecialistes} onChange={e => setReglesEspec(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
+          {/* Norma 4: Compactació 45+45 */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesCompactar45 ? 'var(--blue)' : 'var(--border)'}`, transition: 'all .1s' }}>
+            <input type="checkbox" checked={reglesCompactar45} onChange={e => setReglesCompactar45(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
             <div>
-              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Especialistes: reducció proporcional de sessions</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>EF, Anglès, Música, etc. redueixen sessions proporcionalment</div>
+              <div style={{ fontSize: 13, color: reglesCompactar45 ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>⏱️ Compactació 45+45 post-pati</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Si 1h amb un grup + 30min amb un altre, equilibra a 45min + 45min</div>
             </div>
           </label>
 
-          {/* Regla 5: equilibrar especialistes entre grups */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesEquilibraEsp ? 'var(--blue)' : 'var(--border)'}` }}>
-            <input type="checkbox" checked={reglesEquilibraEsp} onChange={e => setReglesEquilibraEsp(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
+          {/* Norma 2: ampliar fins les 13:00 — sempre actiu */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, opacity: 0.65 }}>
+            <span style={{ fontSize: 16 }}>☑</span>
             <div>
-              <div style={{ fontSize: 13, color: reglesEquilibraEsp ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>⚖️ Equilibrar sessions d'especialistes entre grups</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>HorarIA analitza EF, Música, Anglès... i redistribueix perquè tots els grups tinguin les mateixes sessions en intensiva</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Ampliar última classe fins les 13:00</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Les franges 12:30–13:00 (i4a, i4b) s'omplen amb l'activitat de 12:15–12:30</div>
+            </div>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic', flexShrink: 0 }}>sempre actiu</span>
+          </div>
+
+          {/* Especialistes: equilibrar entre grups */}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesEquilibraEsp ? 'var(--blue)' : 'var(--border)'}`, transition: 'all .1s' }}>
+            <input type="checkbox" checked={reglesEquilibraEsp} onChange={e => setReglesEquilibraEsp(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 13, color: reglesEquilibraEsp ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>↔️ Tots els grups, les mateixes sessions</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>Si 3rA té 3 sessions d'EF i 3rB en té 2, la IA redistribueix fins que cap grup tingui més que un altre</div>
             </div>
           </label>
 
@@ -1393,30 +1473,48 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
   // mainView: 'professionals' → docent per docent | 'grups' → grup per grup (vista alumnat)
   const [mainView, setMainView] = useState('professionals');
 
-  // Construeix l'horari intensiu d'un grup invertint l'editingMap dels docents
+  // Construeix l'horari intensiu d'un grup
   function buildGroupHorariIntensiu(grupNom) {
+    // 1. Font de veritat: grups_curriculum (horari de l'alumnat, format 30-min)
+    const gc = configIntensiva?.grups_curriculum || {};
+    const key = Object.keys(gc).find(k => normGrup(k) === normGrup(grupNom));
+    if (key) {
+      const raw = gc[key];
+      const horariNormal = typeof raw === 'string'
+        ? (() => { try { return JSON.parse(raw); } catch { return null; } })()
+        : raw;
+      if (horariNormal && typeof horariNormal === 'object') {
+        const converted = convertTo15Min(horariNormal);
+        // Norma 2 (sempre): omplir i4a/i4b des de i3d
+        for (const dia of DIES_ALL) {
+          if (!converted[dia]) continue;
+          const prevVal = converted[dia]['i3d'] || '';
+          if (prevVal && !/^(lliure|pati)$/i.test(prevVal.trim()) && !/^(tallers|racons)/i.test(prevVal.trim())) {
+            if (!converted[dia]['i4a']) converted[dia]['i4a'] = prevVal;
+            if (!converted[dia]['i4b']) converted[dia]['i4b'] = prevVal;
+          }
+        }
+        return converted;
+      }
+    }
+
+    // 2. Fallback: invertir editingMap dels docents, filtrant valors docent-específics
     const tutor = docents.find(d => normGrup(d.grup_principal || '') === normGrup(grupNom));
+    const isTeacherOnly = v => !v || /^(tp|lliure|coordinaci|càrrec|ceepsir|piscina)/i.test(v.trim()) || /^pati/i.test(v.trim());
     const result = {};
     for (const dia of DIES_ALL) {
       result[dia] = {};
       for (const f of franjes) {
-        // 1. Contingut del tutor per a aquest slot
         const tutorVal = tutor ? ((editingMap[tutor.id] || {})[dia]?.[f.id] || '') : '';
-        if (tutorVal && !/^lliure$/i.test(tutorVal.trim())) {
-          result[dia][f.id] = tutorVal;
-          continue;
-        }
-        // 2. Cerca especialista que visiti aquest grup en aquest slot
+        const tutorStudent = isTeacherOnly(tutorVal) ? '' : tutorVal;
+        if (tutorStudent) { result[dia][f.id] = tutorStudent; continue; }
         let found = '';
         for (const d of docents) {
           if (tutor && d.id === tutor.id) continue;
           const v = ((editingMap[d.id] || {})[dia]?.[f.id] || '').trim();
-          if (v && normGrup(v) === normGrup(grupNom)) {
-            found = d.nom.split(' ')[0]; // primer nom de l'especialista
-            break;
-          }
+          if (v && normGrup(v) === normGrup(grupNom)) { found = d.nom.split(' ')[0]; break; }
         }
-        result[dia][f.id] = found || tutorVal || '';
+        result[dia][f.id] = found || '';
       }
     }
     return result;
@@ -1664,48 +1762,63 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
 
   return (
     <>
-      {/* Capçalera enganxosa */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '10px 16px', marginBottom: 12 }}>
-        {/* Fila 1: toggle gran PROFESSIONALS / GRUPS */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flex: '0 0 auto' }}>
-            <button
-              style={{ padding: '7px 18px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: mainView === 'professionals' ? 'var(--blue)' : 'transparent', color: mainView === 'professionals' ? '#fff' : 'var(--ink-3)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6 }}
-              onClick={() => setMainView('professionals')}
-            >👩‍🏫 Professionals</button>
-            <button
-              style={{ padding: '7px 18px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: mainView === 'grups' ? 'var(--green)' : 'transparent', color: mainView === 'grups' ? '#fff' : 'var(--ink-3)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6 }}
-              onClick={() => setMainView('grups')}
-            >🧒 Grups (alumnat)</button>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 500 }}>
-              {mainView === 'professionals'
-                ? `${docents.length} docents · Edita les cel·les i confirma quan estigui llest`
-                : `${grupsLlista.length} grups · Vista de l'alumnat en jornada intensiva`}
-            </div>
-          </div>
-          <button className="btn btn-sm btn-ghost" onClick={onDiscard} style={{ fontSize: 11 }}>✕ Descartar</button>
+      {/* Capçalera enganxosa — disseny responsive */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '10px 14px 8px', marginBottom: 12 }}>
+
+        {/* Fila 1: toggle PROFESSIONALS / GRUPS (ample complet) */}
+        <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden', marginBottom: 8 }}>
           <button
-            className="btn btn-sm"
-            style={{ background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600 }}
+            style={{ flex: 1, padding: '9px 10px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: mainView === 'professionals' ? 'var(--blue)' : 'transparent', color: mainView === 'professionals' ? '#fff' : 'var(--ink-3)', transition: 'all .15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+            onClick={() => setMainView('professionals')}
+          >
+            <span>👩‍🏫</span>
+            <span>Professionals</span>
+            {mainView === 'professionals' && <span style={{ background: 'rgba(255,255,255,.25)', borderRadius: 10, padding: '1px 7px', fontSize: 11 }}>{docents.length}</span>}
+          </button>
+          <button
+            style={{ flex: 1, padding: '9px 10px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: mainView === 'grups' ? 'var(--green)' : 'transparent', color: mainView === 'grups' ? '#fff' : 'var(--ink-3)', transition: 'all .15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+            onClick={() => setMainView('grups')}
+          >
+            <span>🧒</span>
+            <span>Grups</span>
+            {mainView === 'grups' && <span style={{ background: 'rgba(255,255,255,.25)', borderRadius: 10, padding: '1px 7px', fontSize: 11 }}>{grupsLlista.length}</span>}
+          </button>
+        </div>
+
+        {/* Fila 2: accions principals (Descartar + Guardar) */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <button
+            onClick={onDiscard}
+            style={{ flex: 1, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, background: 'var(--bg-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+          >
+            <span style={{ fontSize: 15 }}>✕</span> Descartar
+          </button>
+          <button
             onClick={onConfirm}
             disabled={saving}
-          >{saving ? 'Guardant...' : `💾 Guardar (${docents.length})`}</button>
+            style={{ flex: 2, padding: '9px 12px', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: saving ? 'var(--border)' : 'var(--green)', color: saving ? 'var(--ink-3)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background .15s' }}
+          >
+            {saving ? <><span>⏳</span> Guardant...</> : <><span>💾</span> Confirmar i guardar</>}
+          </button>
         </div>
-        {/* Fila 2: toggle Intensiva / Normal + imprimir */}
+
+        {/* Fila 3: vista Intensiva/Normal + imprimir */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', flex: 1 }}>
             <button
-              style={{ padding: '4px 10px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: !compareMode ? 'var(--amber)' : 'transparent', color: !compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+              style={{ flex: 1, padding: '5px 8px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: !compareMode ? 'var(--amber)' : 'transparent', color: !compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
               onClick={() => setCompareMode(false)}
             >🌅 Intensiva</button>
             <button
-              style={{ padding: '4px 10px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: compareMode ? 'var(--ink)' : 'transparent', color: compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+              style={{ flex: 1, padding: '5px 8px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: compareMode ? 'var(--ink)' : 'transparent', color: compareMode ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
               onClick={() => setCompareMode(true)}
             >📅 Normal</button>
           </div>
-          <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={imprimirHorariIntensiu}>🖨️ Imprimir</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{ fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={imprimirHorariIntensiu}
+          >🖨️ Imprimir</button>
         </div>
       </div>
 
@@ -2369,12 +2482,98 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
   );
 }
 
+const RATIOS_SORTIDA = {
+  sortida:  { EI: 10, CI: 15, CM: 15, CS: 20 },
+  colonies: { EI: 8,  CI: 12, CM: 12, CS: 18 },
+};
+const CICLE_LABEL = { EI: 'Ed. Infantil', CI: 'Cicle Inicial', CM: 'Cicle Mitjà', CS: 'Cicle Superior' };
+
+function detectarCiclesGrups(grups) {
+  const cicles = new Set();
+  for (const g of grups) {
+    const gl = (g || '').toLowerCase().trim();
+    if (/^(i[345]|p[345]|ei\b)/.test(gl) || gl.includes('infantil')) cicles.add('EI');
+    else if (/^(1r|2n)/.test(gl)) cicles.add('CI');
+    else if (/^(3r|4t)/.test(gl)) cicles.add('CM');
+    else if (/^(5[eè]|6[eè])/.test(gl)) cicles.add('CS');
+  }
+  return [...cicles];
+}
+
+function calcRecomanacioRatio(numAlumnes, cicles, tipus) {
+  if (!numAlumnes || !cicles.length) return null;
+  const taula = RATIOS_SORTIDA[tipus] || RATIOS_SORTIDA.sortida;
+  const ratios = cicles.map(c => taula[c]).filter(Boolean);
+  if (!ratios.length) return null;
+  const ratioMinim = Math.min(...ratios);
+  const cicleMinim = cicles.find(c => taula[c] === ratioMinim);
+  return { recomanats: Math.ceil(numAlumnes / ratioMinim), ratio: ratioMinim, cicleMinim };
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 8192, bytes.length)));
+  }
+  return btoa(binary);
+}
+
+async function analitzarNombreAlumnes(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  let msgContent;
+  if (ext === 'docx') {
+    const ab = await file.arrayBuffer();
+    const { value } = await mammoth.convertToHtml({ arrayBuffer: ab });
+    msgContent = [{ type: 'text', text: value }];
+  } else if (ext === 'pdf') {
+    const ab = await file.arrayBuffer();
+    msgContent = [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: arrayBufferToBase64(ab) } }];
+  } else if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+    const ab = await file.arrayBuffer();
+    const mt = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : `image/${ext}`;
+    msgContent = [{ type: 'image', source: { type: 'base64', media_type: mt, data: arrayBufferToBase64(ab) } }];
+  } else {
+    return null;
+  }
+  msgContent.push({ type: 'text', text: "Analitza aquest document d'una sortida escolar. Troba el nombre TOTAL d'alumnes. El nombre pot estar com a total explícit, o REPARTIT PER GRUPS/CLASSES (ex: '1rA: 17 alumnes, 1rB: 17 alumnes, 2nA: 23 alumnes, 2nB: 23 alumnes' → has de sumar: 17+17+23+23 = 80). SUMA SEMPRE tots els grups per obtenir el total. Respon ÚNICAMENT amb el número enter resultant, sense cap altre text (ex: \"80\"). Si no pots trobar cap nombre d'alumnes, respon exactament: NO_TROBAT" });
+  const resp = await callClaudeRaw([{ role: 'user', content: msgContent }], 100);
+  const t = resp.trim();
+  if (t === 'NO_TROBAT') return null;
+  const n = parseInt(t.replace(/\D/g, ''), 10);
+  return (!isNaN(n) && n > 0) ? n : null;
+}
+
+function buildSortidaEmailHtml({ title, date, descripcio, llistaPart, docAdjunt, escolaNom }) {
+  const fmtData = iso => new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+    <div style="background:#1d4ed8;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
+      <h1 style="margin:0;font-size:20px">🚌 ${title}</h1>
+      <p style="margin:6px 0 0;opacity:.85;font-size:14px">${fmtData(date)}</p>
+    </div>
+    <div style="padding:20px 24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+      ${descripcio?.trim() ? `<h2 style="font-size:15px;color:#374151;margin:0 0 8px">Sobre l'activitat</h2><p style="color:#4b5563;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:0 0 20px">${descripcio.trim()}</p>` : ''}
+      <h2 style="font-size:15px;color:#374151;margin:0 0 8px">Professionals que assisteixen</h2>
+      <ul style="margin:0 0 20px;padding-left:20px;color:#374151;font-size:14px;line-height:2">${llistaPart}</ul>
+      ${docAdjunt ? `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:12px 14px;margin-top:8px"><p style="margin:0;font-size:13px;color:#0369a1">📎 Document adjunt: <strong>${docAdjunt.nom}</strong></p></div>` : ''}
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid #f3f4f6;font-size:11px;color:#9ca3af">${escolaNom} · Gestió Docent</div>
+    </div>
+  </div>`;
+}
+
 function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [title, setTitle] = useState('');
   const [grupsSeleccionats, setGrupsSeleccionats] = useState(new Set());
   const [docentsAniran, setDocentsAniran] = useState(new Set());
   // acompanyants manuals: noms fora dels tutors/especialistes suggerits
+  const [descripcio, setDescripcio] = useState('');
+  const [docSortida, setDocSortida] = useState(null);
+  const [tipusActivitat, setTipusActivitat] = useState('sortida');
+  const [numAlumnes, setNumAlumnes] = useState(null);
+  const [numAlumnesInput, setNumAlumnesInput] = useState('');
+  const [analitzantDoc, setAnalitzantDoc] = useState(false);
+  const [demanaManual, setDemanaManual] = useState(false);
   const [acompanyantSearch, setAcompanyantSearch] = useState('');
   const [showAcompanyantPicker, setShowAcompanyantPicker] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2450,6 +2649,33 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     setDocentsAniran(new Set(tutorsDeGrups.filter(d => !estatBaixa(d.nom)).map(d => d.nom)));
   }, [tutorsDeGrups, baixes, date]);
 
+  // Quan es puja un document, analitza automàticament quants alumnes hi ha
+  useEffect(() => {
+    if (!docSortida) {
+      setNumAlumnes(null);
+      setNumAlumnesInput('');
+      setDemanaManual(false);
+      return;
+    }
+    let cancelled = false;
+    setAnalitzantDoc(true);
+    setDemanaManual(false);
+    setNumAlumnes(null);
+    analitzarNombreAlumnes(docSortida)
+      .then(n => {
+        if (cancelled) return;
+        console.log('[analitzar] resultat IA:', n);
+        if (n) { setNumAlumnes(n); setDemanaManual(false); }
+        else setDemanaManual(true);
+      })
+      .catch(e => {
+        console.error('[analitzar] error:', e?.message || e);
+        if (!cancelled) setDemanaManual(true);
+      })
+      .finally(() => { if (!cancelled) setAnalitzantDoc(false); });
+    return () => { cancelled = true; };
+  }, [docSortida]);
+
   function toggleGrup(g) {
     setGrupsSeleccionats(prev => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n; });
   }
@@ -2475,10 +2701,20 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
       const grupsStr = [...grupsSeleccionats].join(', ');
       const motiu = `Sortida: ${title.trim()}`;
 
-      // Crea avís per a cada docent, diferenciant tutors (ambGrup) d'acompanyants
-      await Promise.all([...docentsAniran].map(nom => {
+      // Puja document adjunt si n'hi ha
+      let docAdjunt = null;
+      if (docSortida) {
+        try {
+          docAdjunt = await uploadFitxer(docSortida, `sortida_${date}`);
+        } catch (e) {
+          console.error('[sortida] Error pujant document:', e);
+        }
+      }
+
+      // Crea avís NOMÉS per als acompanyants (no tutors): els tutors van amb el grup i no cal cobertura
+      const acompanyants = [...docentsAniran].filter(nom => !nomsTutors.has(nom));
+      await Promise.all(acompanyants.map(nom => {
         const doc = docents.find(d => d.nom === nom);
-        const esTutor = nomsTutors.has(nom);
         return api.saveAbsencia({
           escola_id: escola.id,
           docent_id: doc?.id || null,
@@ -2486,12 +2722,31 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           data: date,
           franges: absenciaFranges,
           motiu,
-          notes: esTutor
-            ? `Surt AMB el grup a la sortida (${grupsStr}) · No cal cobertura per al grup`
-            : `Acompanyant a la sortida (${grupsStr}) · Cal cobrir les seves franges habituals`,
+          notes: `Acompanyant a la sortida (${grupsStr}) · Cal cobrir les seves franges habituals`,
           estat: 'pendent',
         });
       }));
+
+      // Envia correus a tots els participants que tenen email configurat
+      try {
+        const participants = [...docentsAniran]
+          .map(nom => docents.find(d => d.nom === nom))
+          .filter(d => d?.email?.trim());
+        if (participants.length > 0) {
+          const fmtDataLlarga = iso => new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+          const llistaPart = [...docentsAniran].map(nom => {
+            const esTutor = nomsTutors.has(nom);
+            return `<li style="margin-bottom:4px">${nom} <span style="color:#6b7280;font-size:12px">(${esTutor ? 'tutor/a · va amb el grup' : 'acompanyant'})</span></li>`;
+          }).join('');
+          const htmlEmail = buildSortidaEmailHtml({
+            title: title.trim(), date, descripcio, llistaPart, docAdjunt, escolaNom: escola.nom,
+          });
+          const attachments = docAdjunt ? [{ filename: docAdjunt.nom, path: docAdjunt.url }] : undefined;
+          await sendEmail(participants.map(d => d.email.trim()), `[Sortida] ${title.trim()} — ${fmtDataLlarga(date)}`, htmlEmail, attachments);
+        }
+      } catch (e) {
+        console.error('[sortida] Error enviant correus:', e);
+      }
 
       // Crea entrada a info_extra perquè la IA de cobertures sàpiga que aquells grups no són al centre
       try {
@@ -2522,6 +2777,12 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
       setSavedOk(info);
       showToast(`✓ ${info.count} avisos creats per "${info.title}"`);
       setTitle('');
+      setDescripcio('');
+      setDocSortida(null);
+      setTipusActivitat('sortida');
+      setNumAlumnes(null);
+      setNumAlumnesInput('');
+      setDemanaManual(false);
       setGrupsSeleccionats(new Set());
       setDocentsAniran(new Set());
       setShowAcompanyantPicker(false);
@@ -2533,6 +2794,14 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
 
   // Docents manuals ja afegits (no tutors ni suggerits però sí a docentsAniran)
   const docentsManualsAfegits = [...docentsAniran].filter(nom => !tutorNoms.has(nom) && !especialisteNoms.has(nom));
+
+  const ambEmailCount = useMemo(() =>
+    [...docentsAniran].filter(nom => docents.find(d => d.nom === nom)?.email?.trim()).length,
+    [docentsAniran, docents]
+  );
+
+  const ciclesDetectats = useMemo(() => detectarCiclesGrups([...grupsSeleccionats]), [grupsSeleccionats]);
+  const recomanacio = useMemo(() => calcRecomanacioRatio(numAlumnes, ciclesDetectats, tipusActivitat), [numAlumnes, ciclesDetectats, tipusActivitat]);
 
   return (
     <>
@@ -2555,6 +2824,87 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
               <label className="f-label">Data</label>
               <input type="date" className="f-ctrl" value={date} onChange={e => setDate(e.target.value)} style={{ width: 148 }} />
             </div>
+          </div>
+
+          <div>
+            <label className="f-label">Descripció de l'activitat <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(opcional)</span></label>
+            <textarea
+              className="f-ctrl"
+              placeholder="Explica de què va la sortida, itinerari, observacions..."
+              rows={3}
+              value={descripcio}
+              onChange={e => setDescripcio(e.target.value)}
+              style={{ resize: 'vertical', minHeight: 72 }}
+            />
+          </div>
+
+          <div>
+            <label className="f-label">Tipus d'activitat</label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              {[['sortida', '🚌 Sortida'], ['colonies', '🏕️ Colònies']].map(([val, lab]) => (
+                <button key={val} type="button" className="btn btn-sm"
+                  style={tipusActivitat === val
+                    ? { background: 'var(--blue)', color: '#fff', border: 'none', fontWeight: 700 }
+                    : { background: 'var(--bg-2)', borderColor: 'var(--border)' }}
+                  onClick={() => setTipusActivitat(val)}>{lab}</button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="f-label">Document adjunt <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(opcional · PDF, Word...)</span></label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 10px', border: '1px dashed var(--border)', borderRadius: 6, fontSize: 12, color: 'var(--ink-3)', background: 'var(--bg-2)' }}>
+              <span>📎</span>
+              {docSortida
+                ? <span style={{ flex: 1, color: 'var(--ink)', fontWeight: 500 }}>{docSortida.name}</span>
+                : <span style={{ flex: 1 }}>Puja un document amb l'organització de la sortida...</span>
+              }
+              {docSortida && (
+                <button type="button" onClick={e => { e.preventDefault(); setDocSortida(null); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
+              )}
+              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg" style={{ display: 'none' }}
+                onChange={e => setDocSortida(e.target.files[0] || null)} />
+            </label>
+            {analitzantDoc && (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--blue)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid var(--blue)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+                Analitzant document amb IA...
+              </div>
+            )}
+            {!analitzantDoc && numAlumnes && (
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--green-dark, var(--green))', fontWeight: 600 }}>
+                📊 {numAlumnes} alumnes detectats al document
+              </div>
+            )}
+            {!analitzantDoc && demanaManual && (
+              <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--amber-bg)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 600, marginBottom: 6 }}>
+                  ⚠ No s'ha pogut detectar el nombre d'alumnes al document. Introdueix-lo manualment:
+                </div>
+                <input
+                  type="number" min="1" className="f-ctrl"
+                  style={{ width: 100 }}
+                  placeholder="Ex: 47"
+                  value={numAlumnesInput}
+                  onChange={e => { setNumAlumnesInput(e.target.value); setNumAlumnes(parseInt(e.target.value, 10) || null); }}
+                />
+              </div>
+            )}
+            {recomanacio && (
+              <div style={{ marginTop: 8, padding: '10px 12px', background: docentsAniran.size >= recomanacio.recomanats ? 'var(--green-bg)' : 'var(--amber-bg)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>
+                  📋 Recomanació de ràtio ({tipusActivitat === 'colonies' ? 'colònies' : 'sortida'})
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', marginBottom: 4 }}>
+                  {numAlumnes} alumnes · {ciclesDetectats.map(c => CICLE_LABEL[c] || c).join(' + ')} · Ràtio {recomanacio.ratio}:1{ciclesDetectats.length > 1 ? ' (el més restrictiu)' : ''}
+                </div>
+                {docentsAniran.size >= recomanacio.recomanats
+                  ? <div style={{ fontSize: 12, color: 'var(--green-dark, var(--green))', fontWeight: 600 }}>✓ Cobert — tens {docentsAniran.size} professionals, mínim {recomanacio.recomanats}</div>
+                  : <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚠ Calen mínim {recomanacio.recomanats} professionals — tens {docentsAniran.size}, falten {recomanacio.recomanats - docentsAniran.size}</div>
+                }
+              </div>
+            )}
           </div>
 
           {(diaSetm === 'dissabte' || diaSetm === 'diumenge') && (
@@ -2697,8 +3047,11 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             {!title.trim() && (
               <div style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600 }}>⚠ Introdueix el nom de la sortida per poder confirmar.</div>
             )}
+            {ambEmailCount > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 500 }}>✉ S'enviarà correu a {ambEmailCount} participant{ambEmailCount !== 1 ? 's' : ''} amb correu configurat.</div>
+            )}
             <button className="btn btn-primary btn-full" onClick={confirmarSortida} disabled={saving || !title.trim()}>
-              {saving ? 'Creant avisos...' : `🚌 Crear ${docentsAniran.size} avís${docentsAniran.size !== 1 ? 'os' : ''} i registrar sortida`}
+              {saving ? 'Creant avisos i enviant correus...' : `🚌 Crear ${docentsAniran.size} avís${docentsAniran.size !== 1 ? 'os' : ''} i registrar sortida`}
             </button>
           </div>
         </div>

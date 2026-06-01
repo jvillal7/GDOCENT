@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { to, subject, html } = await req.json();
+    const { to, subject, html, attachments } = await req.json();
 
     if (!to || !subject || !html) {
       return new Response(JSON.stringify({ error: 'Falten camps: to, subject, html' }), {
@@ -29,12 +29,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data, error } = await resend.emails.send({
+    const emailPayload: any = {
       from: 'HORARIA <horaria@horariapro.com>',
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
-    });
+    };
+    if (attachments?.length) emailPayload.attachments = attachments;
+    const { data, error } = await resend.emails.send(emailPayload);
 
     if (error) {
       return new Response(JSON.stringify({ error }), {

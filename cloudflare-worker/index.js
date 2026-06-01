@@ -9,7 +9,10 @@ const ALLOWED_ORIGINS = [
 ];
 
 function corsHeaders(origin) {
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ||
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:')
+    ? origin : '';
   return {
     'Access-Control-Allow-Origin':  allowed,
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -57,16 +60,19 @@ export default {
       return new Response(null, { headers: corsHeaders(origin) });
     }
 
-    if (!ALLOWED_ORIGINS.includes(origin)) {
+    const originAllowed = ALLOWED_ORIGINS.includes(origin) ||
+      origin.startsWith('http://localhost:') ||
+      origin.startsWith('http://127.0.0.1:');
+    if (!originAllowed) {
       return new Response('Forbidden', { status: 403 });
     }
 
     // Validar JWT de Supabase
     const auth  = request.headers.get('Authorization') || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    const valid = await verifySupabaseJwt(token, env.SUPABASE_JWT_SECRET);
+    const valid = await verifySupabaseJwt(token, (env.SUPABASE_JWT_SECRET || '').trim());
     if (!valid) {
-      return new Response('Unauthorized', { status: 401 });
+      return new Response('Unauthorized', { status: 401, headers: corsHeaders(origin) });
     }
 
     let body;
@@ -76,12 +82,14 @@ export default {
       return new Response('Bad Request', { status: 400 });
     }
 
+    const hasPdf = JSON.stringify(body).includes('"application/pdf"');
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': env.CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01',
+        ...(hasPdf ? { 'anthropic-beta': 'pdfs-2024-09-25' } : {}),
       },
       body: JSON.stringify(body),
     });
