@@ -128,6 +128,7 @@ export default function HorarisPage() {
   const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', motiu_detall: '', estat: 'activa' });
   const [baixaMes,    setBaixaMes]    = useState('actives');
   const [baixaCobStats, setBaixaCobStats] = useState({});
+  const [baixaDeleteConfirm, setBaixaDeleteConfirm] = useState(null); // { idx, b, substitutDocent }
   const [searchDocent, setSearchDocent] = useState('');
   const fileRef = useRef(null);
   const [dragUpload, setDragUpload] = useState(false);
@@ -229,6 +230,10 @@ export default function HorarisPage() {
               email: baixaDraft.email.trim() || null,
               actiu: true,
             });
+            // Si el titular és directiu, sincronitzar el PIN a la taula directius perquè pugui fer login
+            if (titular.rol === 'directiu') {
+              await api.syncDirectiuPin(nomSubstitut, baixaDraft.pin.trim()).catch(() => {});
+            }
             await reload();
             showToast(`✓ Baixa guardada · ${nomSubstitut} pot fer login al sistema`);
           } catch (e) {
@@ -240,7 +245,27 @@ export default function HorarisPage() {
   }
 
   async function deleteBaixa(idx) {
+    const b = baixes[idx];
+    const substitutDocent = docents.find(d => d.nom.toLowerCase().trim() === (b.substitut || '').toLowerCase().trim());
+    if (substitutDocent) {
+      setBaixaDeleteConfirm({ idx, b, substitutDocent });
+      return;
+    }
     await saveBaixesList(baixes.filter((_, i) => i !== idx));
+  }
+
+  async function confirmarDeleteBaixa(eliminarSubstitut) {
+    if (!baixaDeleteConfirm) return;
+    const { idx, substitutDocent } = baixaDeleteConfirm;
+    setBaixaDeleteConfirm(null);
+    await saveBaixesList(baixes.filter((_, i) => i !== idx));
+    if (eliminarSubstitut && substitutDocent) {
+      try {
+        await api.deleteDocent(substitutDocent.id);
+        setDocents(prev => prev.filter(d => d.id !== substitutDocent.id));
+        showToast(`✓ Baixa i compte de ${substitutDocent.nom} eliminats`);
+      } catch (e) { showToast('Error eliminant substitut: ' + e.message); }
+    }
   }
 
   async function tancarBaixa(idx) {
@@ -484,6 +509,23 @@ export default function HorarisPage() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn btn-ghost btn-full" onClick={() => setDeleteTarget(null)}>Cancel·lar</button>
               <button className="btn btn-full" style={{ background: 'var(--red)', color: '#fff', border: 'none', fontWeight: 600 }} onClick={eliminar}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {baixaDeleteConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 16, padding: 24, maxWidth: 360, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: 'var(--ink)' }}>Eliminar baixa</div>
+            <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginBottom: 20, lineHeight: 1.5 }}>
+              <strong>{baixaDeleteConfirm.substitutDocent.nom}</strong> té accés al sistema com a substitut/a de <strong>{baixaDeleteConfirm.b.absent}</strong>. Vols eliminar també el seu compte?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button className="btn btn-full" style={{ background: 'var(--red)', color: '#fff', border: 'none', fontWeight: 600 }} onClick={() => confirmarDeleteBaixa(true)}>
+                🗑️ Eliminar baixa i compte de {baixaDeleteConfirm.substitutDocent.nom.split(' ')[0]}
+              </button>
+              <button className="btn btn-ghost btn-full" onClick={() => confirmarDeleteBaixa(false)}>Eliminar només la baixa</button>
+              <button className="btn btn-ghost btn-full" style={{ color: 'var(--ink-3)', fontSize: 12 }} onClick={() => setBaixaDeleteConfirm(null)}>Cancel·lar</button>
             </div>
           </div>
         </div>
@@ -3382,10 +3424,11 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
 }
 
 function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docents }) {
+  const [substitutNou, setSubstitutNou] = useState(false);
   const docentsSorted = [...(docents || [])].sort((a, b) => a.nom.localeCompare(b.nom));
   const titular = docentsSorted.find(d => d.nom.toLowerCase() === draft.absent.toLowerCase().trim());
-  const substitutJaExisteix = docentsSorted.some(d => d.nom.toLowerCase() === draft.substitut.toLowerCase().trim());
-  const mostraCrearCompte = isNew && draft.substitut.trim() && !substitutJaExisteix;
+  const substitutJaExisteix = !substitutNou && docentsSorted.some(d => d.nom.toLowerCase() === draft.substitut.toLowerCase().trim());
+  const mostraCrearCompte = isNew && draft.substitut.trim() && (substitutNou || !substitutJaExisteix);
 
   return (
     <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12, background: isNew ? 'var(--green-bg)' : 'var(--bg-2)' }}>
@@ -3404,7 +3447,20 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docent
         </div>
         <div>
           <label className="f-label">Substitut/a</label>
-          <input className="f-ctrl" placeholder="Nom del substitut/a" value={draft.substitut} onChange={e => onChange(d => ({ ...d, substitut: e.target.value }))} />
+          {substitutNou ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input className="f-ctrl" style={{ flex: 1 }} placeholder="Nom complet del nou substitut" value={draft.substitut} onChange={e => onChange(d => ({ ...d, substitut: e.target.value }))} autoFocus />
+              <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={() => { setSubstitutNou(false); onChange(d => ({ ...d, substitut: '' })); }}>← Existent</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select className="f-ctrl" style={{ flex: 1 }} value={draft.substitut} onChange={e => onChange(d => ({ ...d, substitut: e.target.value }))}>
+                <option value="">Selecciona docent existent...</option>
+                {docentsSorted.filter(d => d.nom !== draft.absent).map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
+              </select>
+              <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={() => { setSubstitutNou(true); onChange(d => ({ ...d, substitut: '' })); }}>+ Nou</button>
+            </div>
+          )}
         </div>
       </div>
 
