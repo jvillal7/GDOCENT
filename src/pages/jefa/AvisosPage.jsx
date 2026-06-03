@@ -247,6 +247,7 @@ export default function AvisosPage() {
 
       // 2. Cobertura per cada franja (detecta TP)
       const cobrintDocent = docents.find(d => d.nom === cmCobrint);
+      const cobrintRolSenseTP = ['vetllador', 'educador', 'tei'].includes(cobrintDocent?.rol);
       for (const fid of frangesArr) {
         const val = cobrintDocent?.horari?.[dia]?.[fid] || '';
         const tpAfectat = val.toLowerCase() === 'tp';
@@ -258,10 +259,10 @@ export default function AvisosPage() {
           franja: fid,
           grup: cmGrup,
           data: cmData,
-          tp_afectat: tpAfectat,
+          tp_afectat: tpAfectat && !cobrintRolSenseTP,
           motiu: cmMotiu || 'Cobertura manual',
         });
-        if (tpAfectat && !esFutura) {
+        if (tpAfectat && !esFutura && !cobrintRolSenseTP) {
           await api.saveDeuteTP({
             escola_id: escola.id,
             docent_nom: cmCobrint,
@@ -574,7 +575,9 @@ export default function AvisosPage() {
             motiu:              p.motiu || '',
           });
         }
-        if (p.tp_afectat && !esFutura) {
+        const cobrintRolTP = docents.find(d => d.nom === p.docent)?.rol;
+        const rolSenseTP = ['vetllador', 'educador', 'tei'].includes(cobrintRolTP);
+        if (p.tp_afectat && !esFutura && !rolSenseTP) {
           await api.saveDeuteTP({
             escola_id:   escola.id,
             docent_nom:  p.docent,
