@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
@@ -17,7 +18,12 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^4.4.1",
-    "vite": "^5.4.10"
+    "@vitest/ui": "^4.1.8",
+    "jsdom": "^29.1.1",
+    "vite": "^5.4.10",
+    "vitest": "^4.1.8"
   }
 }

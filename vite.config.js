@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+/// <reference types="vitest" />
 
 const WORKER_HOST = 'https://orange-bar-54f5gceip-claude-proxy.jvillal7.workers.dev';
 const SUPA_HOST   = 'https://mtrylcazzwolgzfzmbrn.supabase.co';
@@ -27,4 +28,9 @@ export default defineConfig({
   base: './',
   server: { headers: securityHeaders },
   preview: { headers: securityHeaders },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js'],
+  },
 })
