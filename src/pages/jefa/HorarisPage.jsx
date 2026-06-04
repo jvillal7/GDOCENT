@@ -3002,7 +3002,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             )}
           </div>
 
-          {(diaSetm === 'dissabte' || diaSetm === 'diumenge') && (
+          {(() => { const dw = new Date(date + 'T12:00:00').getDay(); return dw === 0 || dw === 6; })() && (
             <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚠ La data seleccionada és cap de setmana.</div>
           )}
 
