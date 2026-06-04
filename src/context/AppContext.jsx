@@ -65,7 +65,8 @@ export function AppProvider({ children }) {
 
   // Carregar docents i normes quan hi ha escola (login fresc o sessió restaurada)
   useEffect(() => {
-    if (!escola) return;
+    if (!escola) { setDocents([]); return; }
+    setDocents([]); // Neteja docents de l'escola anterior abans de carregar la nova
     if (saved?.escola) document.title = `HORARIA — ${escola.nom}`;
     const a = makeApi(escola.id);
     a.getDocents().then(data => { if (data) setDocents(data); });

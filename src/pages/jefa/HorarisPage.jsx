@@ -567,10 +567,10 @@ export default function HorarisPage() {
       </div>
 
       {viewMode === 'grups' && isOriol && (
-        <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} onCellSave={handleCellSave} configIntensiva={configIntensiva} onConfigChange={setConfigIntensiva} api={api} showToast={showToast} />
+        <GrupsView docents={docents} franjes={franjes} selectedGrup={selectedGrup} onSelectGrup={setSelectedGrup} onCellSave={handleCellSave} configIntensiva={configIntensiva} onConfigChange={setConfigIntensiva} api={api} showToast={showToast} escola={escola} />
       )}
       {viewMode === 'grups' && !isOriol && (
-        <RivoGrupsView docents={docents} franjes={franjes} selectedGrup={selectedRivoGrup} onSelectGrup={setSelectedRivoGrup} onCellSave={handleCellSave} configIntensiva={configIntensiva} onConfigChange={setConfigIntensiva} api={api} showToast={showToast} />
+        <RivoGrupsView docents={docents} franjes={franjes} selectedGrup={selectedRivoGrup} onSelectGrup={setSelectedRivoGrup} onCellSave={handleCellSave} configIntensiva={configIntensiva} onConfigChange={setConfigIntensiva} api={api} showToast={showToast} escola={escola} />
       )}
       {viewMode === 'intensiva' && (
         <IntensivaView
@@ -3717,7 +3717,7 @@ function matchesGrup(val, grup) {
   return new RegExp('\\b' + escaped + '\\b').test(v);
 }
 
-function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, configIntensiva, onConfigChange, api, showToast }) {
+function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, configIntensiva, onConfigChange, api, showToast, escola }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editing, setEditing] = useState(null); // { nom, dia, fid, currentVal }
   const [editVal, setEditVal] = useState('');
@@ -3733,14 +3733,20 @@ function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSav
   const [dragOver, setDragOver] = useState(false);
   const [showAlumnatIntensiva, setShowAlumnatIntensiva] = useState(false); // vista intensiva alumnat
 
+  // Filtra sempre per escola per evitar que docents d'altres escoles apareguen
+  const docentsPropis = useMemo(() =>
+    escola?.id ? docents.filter(d => d.escola_id === escola.id) : docents,
+    [docents, escola?.id]
+  );
+
   const grups = useMemo(() => {
-    const tutorGroups = docents
+    const tutorGroups = docentsPropis
       .filter(d => d.rol === 'tutor' && d.grup_principal?.trim())
       .map(d => d.grup_principal.trim());
     return [...new Set(tutorGroups)].sort((a, b) =>
       sortRivoGrupKey(a).localeCompare(sortRivoGrupKey(b))
     );
-  }, [docents]);
+  }, [docentsPropis]);
 
   const activeGrup = grups.includes(selectedGrup) ? selectedGrup : (grups[0] || '');
 
@@ -3814,7 +3820,7 @@ Retorna ÚNICAMENT JSON sense cap altre text:
   }
   function commitGroupEdit() {
     if (!editing || !onCellSave) { setEditing(null); return; }
-    const docent = docents.find(d => d.nom === editing.nom);
+    const docent = docentsPropis.find(d => d.nom === editing.nom);
     if (docent && editVal !== editing.currentVal) onCellSave(docent, editing.dia, editing.fid, editVal);
     setEditing(null);
   }
@@ -3826,7 +3832,7 @@ Retorna ÚNICAMENT JSON sense cap altre text:
   function commitAddEntry() {
     if (!addingEntry || !onCellSave || !addVal.trim()) { setAddingEntry(null); setAddVal(''); return; }
     const v = addVal.trim().toLowerCase();
-    const target = docents.find(d =>
+    const target = docentsPropis.find(d =>
       d.nom.toLowerCase() === v ||
       initials(d.nom).toLowerCase() === v ||
       d.nom.toLowerCase().split(' ')[0] === v
@@ -3843,7 +3849,7 @@ Retorna ÚNICAMENT JSON sense cap altre text:
       result[dia] = {};
       franjes.forEach(f => {
         result[dia][f.id] = [];
-        docents.forEach(d => {
+        docentsPropis.forEach(d => {
           const val = d.horari?.[dia]?.[f.id] || '';
           if (matchesGrup(val, activeGrup)) {
             result[dia][f.id].push({ nom: d.nom, val, rol: d.rol, grup_principal: d.grup_principal });
@@ -3852,11 +3858,11 @@ Retorna ÚNICAMENT JSON sense cap altre text:
       });
     });
     return result;
-  }, [docents, franjes, activeGrup]);
+  }, [docentsPropis, franjes, activeGrup]);
 
   const tutor = useMemo(() =>
-    docents.find(d => d.rol === 'tutor' && d.grup_principal?.trim() === activeGrup),
-    [docents, activeGrup]
+    docentsPropis.find(d => d.rol === 'tutor' && d.grup_principal?.trim() === activeGrup),
+    [docentsPropis, activeGrup]
   );
 
   const visibleFranjes = franjes.filter(f => !f.lliure);
@@ -3973,17 +3979,14 @@ Retorna ÚNICAMENT JSON sense cap altre text:
                       <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
                       {DIES.map(dia => {
                         const entries = grupHorari[dia]?.[f.id] || [];
-                        const tutorRawVal = tutor?.horari?.[dia]?.[f.id] || '';
-                        const tutorValL = tutorRawVal.toLowerCase();
-                        const isTutorTP = /^tp\b/i.test(tutorValL);
-                        const isTutorCoord = isCoord(tutorValL);
                         const primaris = entries.filter(e => !rolBadgeRivo(e, activeGrup));
                         const suports  = entries.filter(e =>  rolBadgeRivo(e, activeGrup));
                         const hasCoverage = entries.length > 0;
+                        const isAdding = addingEntry?.dia === dia && addingEntry?.fid === f.id;
                         return (
                           <td key={dia} style={{
                             padding: '3px 4px', border: '1px solid var(--border)',
-                            background: hasCoverage ? 'var(--blue-bg)' : isTutorTP ? 'var(--amber-bg)' : isTutorCoord ? 'var(--purple-bg)' : isEditMode ? 'var(--bg-2)' : 'var(--bg)',
+                            background: hasCoverage ? 'var(--blue-bg)' : 'var(--bg)',
                             textAlign: 'center', minWidth: 80, overflow: 'visible',
                           }}>
                             {hasCoverage && (
@@ -3992,38 +3995,28 @@ Retorna ÚNICAMENT JSON sense cap altre text:
                                 {suports.map(e => renderEntry(e, dia, f.id))}
                               </div>
                             )}
-                            {!hasCoverage && !isEditMode && (
-                              isTutorTP ? (
-                                <span style={{ fontSize: 8.5, color: 'var(--amber)', fontWeight: 700 }}>TP</span>
-                              ) : isTutorCoord ? (
-                                <span style={{ fontSize: 8.5, color: 'var(--purple)', fontWeight: 700 }}>Coord.</span>
-                              ) : (
-                                <span style={{ fontSize: 9, color: 'var(--ink-4)' }}>—</span>
-                              )
-                            )}
-                            {isEditMode && (
-                              addingEntry?.dia === dia && addingEntry?.fid === f.id ? (
-                                <>
-                                  <input
-                                    autoFocus
-                                    list="rivo-grups-docents-list"
-                                    value={addVal}
-                                    onChange={ev => setAddVal(ev.target.value)}
-                                    onBlur={commitAddEntry}
-                                    onKeyDown={ev => { if (ev.key === 'Enter') commitAddEntry(); if (ev.key === 'Escape') { setAddingEntry(null); setAddVal(''); } }}
-                                    placeholder="Nom..."
-                                    style={{ width: 72, border: 'none', outline: '2px solid var(--green)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
-                                  />
-                                  <datalist id="rivo-grups-docents-list">
-                                    {docents.map(d => <option key={d.id} value={d.nom} />)}
-                                  </datalist>
-                                </>
-                              ) : (
-                                <span
-                                  onClick={() => startAddEntry(dia, f.id)}
-                                  style={{ fontSize: 11, color: 'var(--green)', cursor: 'pointer', display: 'block', padding: '1px 0', lineHeight: 1 }}
-                                >+</span>
-                              )
+                            {isAdding ? (
+                              <>
+                                <input
+                                  autoFocus
+                                  list="rivo-grups-docents-list"
+                                  value={addVal}
+                                  onChange={ev => setAddVal(ev.target.value)}
+                                  onBlur={commitAddEntry}
+                                  onKeyDown={ev => { if (ev.key === 'Enter') commitAddEntry(); if (ev.key === 'Escape') { setAddingEntry(null); setAddVal(''); } }}
+                                  placeholder="Nom..."
+                                  style={{ width: 72, border: 'none', outline: '2px solid var(--green)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
+                                />
+                                <datalist id="rivo-grups-docents-list">
+                                  {docentsPropis.map(d => <option key={d.id} value={d.nom} />)}
+                                </datalist>
+                              </>
+                            ) : (
+                              <span
+                                onClick={() => startAddEntry(dia, f.id)}
+                                style={{ fontSize: hasCoverage ? 9 : 12, color: hasCoverage ? 'var(--ink-4)' : 'var(--ink-3)', cursor: 'pointer', display: 'block', padding: '1px 0', lineHeight: 1, opacity: hasCoverage ? 0.4 : 0.6 }}
+                                title="Afegir professional"
+                              >{hasCoverage ? '+' : '+'}</span>
                             )}
                           </td>
                         );
@@ -4107,7 +4100,7 @@ Retorna ÚNICAMENT JSON sense cap altre text:
   );
 }
 
-function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, configIntensiva, onConfigChange, api, showToast }) {
+function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, configIntensiva, onConfigChange, api, showToast, escola }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editing, setEditing] = useState(null); // { nom, dia, fid, currentVal }
   const [editVal, setEditVal] = useState('');
@@ -4128,9 +4121,15 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, c
     setEditing({ nom, dia, fid, currentVal });
     setEditVal(currentVal);
   }
+  // Filtra docents per escola per evitar que docents d'altres escoles apareguen
+  const docentsPropis = useMemo(() =>
+    escola?.id ? docents.filter(d => d.escola_id === escola.id) : docents,
+    [docents, escola?.id]
+  );
+
   function commitGroupEdit() {
     if (!editing || !onCellSave) { setEditing(null); return; }
-    const docent = docents.find(d => d.nom === editing.nom);
+    const docent = docentsPropis.find(d => d.nom === editing.nom);
     if (docent && editVal !== editing.currentVal) onCellSave(docent, editing.dia, editing.fid, editVal);
     setEditing(null);
   }
@@ -4141,7 +4140,7 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, c
   }
   function commitAddEntry() {
     if (!addingEntry || !onCellSave || !addVal.trim()) { setAddingEntry(null); setAddVal(''); return; }
-    const target = docents.find(d =>
+    const target = docentsPropis.find(d =>
       d.nom.toLowerCase() === addVal.toLowerCase() ||
       oriolInitials(d.nom).toLowerCase() === addVal.toLowerCase().trim()
     );
@@ -4382,7 +4381,7 @@ Retorna ÚNICAMENT JSON sense cap altre text:
                                     style={{ width: 70, border: 'none', outline: '2px solid var(--green)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
                                   />
                                   <datalist id="grups-docents-list">
-                                    {docents.map(d => <option key={d.id} value={d.nom} />)}
+                                    {docentsPropis.map(d => <option key={d.id} value={d.nom} />)}
                                   </datalist>
                                 </>
                               ) : (
