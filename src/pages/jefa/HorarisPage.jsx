@@ -2658,6 +2658,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     for (const d of docents) {
       if (tutorIds.has(d.id) || !d.horari) continue;
       if (estatBaixa(d.nom)?.status === 'baixa') continue;
+      // Criteri 1: afinitat setmanal (sessions amb els grups al llarg de tota la setmana)
       let count = 0;
       for (const dH of Object.values(d.horari)) {
         for (const v of Object.values(dH || {})) {
@@ -2665,13 +2666,25 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
         }
       }
       if (!count) continue;
-      const daySlots = Object.values(d.horari[diaSetm] || {}).filter(v => {
+      const horariDia = d.horari[diaSetm] || {};
+      // Criteri 2: franges amb els grups que marxen específicament el dia de la sortida
+      // → si acompanya, aquestes franges NO necessiten cobertura (el grup tampoc és al centre)
+      let dayGroupSlots = 0;
+      for (const v of Object.values(horariDia)) {
+        for (const g of grupsSeleccionats) { if (matchesGrup(v, g)) { dayGroupSlots++; break; } }
+      }
+      // Slots ocupats el dia (per saber quant de "buit" deix si marxa)
+      const daySlots = Object.values(horariDia).filter(v => {
         const vl = (v || '').toLowerCase().trim();
         return vl && vl !== 'lliure' && vl !== 'libre';
       }).length;
-      scores[d.id] = { d, count, daySlots, leaveStatus: estatBaixa(d.nom) };
+      scores[d.id] = { d, count, daySlots, dayGroupSlots, leaveStatus: estatBaixa(d.nom) };
     }
-    return Object.values(scores).sort((a, b) => b.count - a.count || a.daySlots - b.daySlots);
+    // Ordre: primer els que tenen més franges del grup que marxa aquell dia (menys cobertura),
+    // després per afinitat setmanal, finalment menys slots ocupats aquell dia
+    return Object.values(scores).sort((a, b) =>
+      b.dayGroupSlots - a.dayGroupSlots || b.count - a.count || a.daySlots - b.daySlots
+    );
   }, [docents, grupsSeleccionats, diaSetm, tutorsDeGrups, baixes, date]);
 
   // Docents disponibles per afegir manualment (no tutors dels grups, no en els suggerits, no de baixa total)
@@ -3022,22 +3035,49 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             </>
           )}
 
-          {especialistesSuggerits.length > 0 && (
-            <>
-              <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
-                Especialistes suggerits · Per afinitat amb els grups
-              </div>
-              {especialistesSuggerits.slice(0, 10).map(({ d, count, daySlots, leaveStatus }) => (
-                <SortidaDocentsRow
-                  key={d.id} d={d}
-                  selected={docentsAniran.has(d.nom)}
-                  onToggle={() => toggleDocent(d.nom)}
-                  leaveStatus={leaveStatus}
-                  hint={`${count} sessions setmanals amb ${[...grupsSeleccionats].join('+')} · ${daySlots} sl. ocupats el ${diaSetm}`}
-                />
-              ))}
-            </>
-          )}
+          {especialistesSuggerits.length > 0 && (() => {
+            const ambDia = especialistesSuggerits.filter(e => e.dayGroupSlots > 0);
+            const nomesSetmana = especialistesSuggerits.filter(e => e.dayGroupSlots === 0);
+            const grupsLabel = [...grupsSeleccionats].join('+');
+            return (
+              <>
+                {ambDia.length > 0 && (
+                  <>
+                    <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--green-bg)', borderBottom: '1px solid var(--border)' }}>
+                      🎯 Especialistes del dia · Menys cobertura necessària
+                    </div>
+                    {ambDia.slice(0, 8).map(({ d, count, daySlots, dayGroupSlots, leaveStatus }) => (
+                      <SortidaDocentsRow
+                        key={d.id} d={d}
+                        selected={docentsAniran.has(d.nom)}
+                        onToggle={() => toggleDocent(d.nom)}
+                        leaveStatus={leaveStatus}
+                        dayGroupSlots={dayGroupSlots}
+                        diaSetm={diaSetm}
+                        hint={`${dayGroupSlots} fr. amb ${grupsLabel} el ${diaSetm} · ${count} sessions/setm.`}
+                      />
+                    ))}
+                  </>
+                )}
+                {nomesSetmana.length > 0 && (
+                  <>
+                    <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
+                      Especialistes per afinitat setmanal
+                    </div>
+                    {nomesSetmana.slice(0, 6).map(({ d, count, daySlots, leaveStatus }) => (
+                      <SortidaDocentsRow
+                        key={d.id} d={d}
+                        selected={docentsAniran.has(d.nom)}
+                        onToggle={() => toggleDocent(d.nom)}
+                        leaveStatus={leaveStatus}
+                        hint={`${count} sessions/setm. amb ${grupsLabel} · ${daySlots} sl. el ${diaSetm}`}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          })()}
 
           {/* Acompanyants manuals ja afegits */}
           {docentsManualsAfegits.length > 0 && (
@@ -3127,7 +3167,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   );
 }
 
-function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStatus, hint }) {
+function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStatus, hint, dayGroupSlots }) {
   const isBaixa   = leaveStatus?.status === 'baixa';
   const isPendent = leaveStatus?.status === 'pendent';
   const fmtFi = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
@@ -3152,11 +3192,12 @@ function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStat
         </div>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>
           {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}
-          {hint && <span style={{ marginLeft: 6, color: 'var(--ink-4)' }}>· {hint}</span>}
+          {hint && <span style={{ marginLeft: 6, color: dayGroupSlots > 0 ? 'var(--green)' : 'var(--ink-4)' }}>· {hint}</span>}
         </div>
       </div>
       {isBaixa   && <span className="sp sp-amber" style={{ fontSize: 9.5, flexShrink: 0 }}>🩹 De baixa</span>}
       {isPendent && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 7px', fontWeight: 700, whiteSpace: 'nowrap' }}>⚠ Permís fins {fmtFi(leaveStatus.fi)}</span>}
+      {!leaveStatus && dayGroupSlots > 0 && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 7px', fontWeight: 700 }}>🎯 {dayGroupSlots} fr.</span>}
       {!leaveStatus && isTutor  && <span className="sp sp-blue" style={{ fontSize: 9.5, flexShrink: 0 }}>tutor/a</span>}
       {!leaveStatus && isManual && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--purple-bg)', color: 'var(--purple)', border: '1px solid var(--purple)', borderRadius: 20, padding: '1px 7px', fontWeight: 700 }}>personal</span>}
       <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected ? 'var(--blue)' : 'var(--border)'}`, background: selected ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .1s' }}>
