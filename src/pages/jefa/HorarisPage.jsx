@@ -2610,6 +2610,7 @@ const _dmyToIso = s => {
 };
 function InputDataDMY({ value, onChange, min, style }) {
   const [txt, setTxt] = useState(() => _isoToDMY(value));
+  const pickerRef = useRef(null);
   useEffect(() => {
     const iso = _dmyToIso(txt);
     if (iso !== value) setTxt(_isoToDMY(value));
@@ -2622,10 +2623,24 @@ function InputDataDMY({ value, onChange, min, style }) {
     const iso = _dmyToIso(v);
     if (iso && (!min || iso >= min)) onChange(iso);
   }
+  function handlePicker(e) {
+    const iso = e.target.value;
+    if (iso) { setTxt(_isoToDMY(iso)); onChange(iso); }
+  }
   return (
-    <input className="f-ctrl" type="text" inputMode="numeric"
-      placeholder="DD/MM/AAAA" value={txt} onChange={handleChange}
-      maxLength={10} style={style} />
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      <input className="f-ctrl" type="text" inputMode="numeric"
+        placeholder="DD/MM/AAAA" value={txt} onChange={handleChange}
+        maxLength={10} style={style} />
+      <button type="button"
+        onClick={() => pickerRef.current?.showPicker()}
+        style={{ padding: '6px 8px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'var(--bg-2)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+        title="Obrir calendari"
+      >📅</button>
+      <input ref={pickerRef} type="date" value={value} min={min}
+        onChange={handlePicker}
+        style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', width: 0, height: 0 }} />
+    </div>
   );
 }
 
