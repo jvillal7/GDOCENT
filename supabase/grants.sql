@@ -10,6 +10,8 @@ grant select (id, nom, codi) on public.escoles to anon;
 grant select, update on public.escoles to authenticated;
 
 -- ── DOCENTS ── Anon: id/nom/rol (llista login, sense PIN). Auth: tot excepte pin.
+-- NOTA: anon NO té escriptura (INSERT/UPDATE/DELETE). Auth usa PATCH amb return=minimal
+-- per evitar RETURNING * que necessita SELECT de taula (no concedida per protegir pin).
 revoke all on public.docents from anon;
 grant select (id, nom, rol, grup_principal, escola_id, actiu, email) on public.docents to anon;
 revoke all on public.docents from authenticated;
@@ -19,6 +21,7 @@ grant select (id, nom, rol, grup_principal, escola_id, actiu, email, horari,
 grant insert, update, delete on public.docents to authenticated;
 
 -- ── DIRECTIUS ── Anon: id/nom/rol (llista login, sense PIN). Auth: tot excepte pin.
+-- Igual que docents: anon sense escriptura, PATCH d'auth usa return=minimal.
 revoke all on public.directius from anon;
 grant select (id, nom, rol, grup_principal, escola_id, actiu, posicio) on public.directius to anon;
 revoke all on public.directius from authenticated;

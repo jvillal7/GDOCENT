@@ -67,11 +67,7 @@ export async function supaFetch(path, opts = {}, escolaId = null) {
     clearTimeout(tid);
     if (!res.ok) throw new Error(`Supabase Error (${res.status}): ${await res.text()}`);
     const t = await res.text();
-    const parsed = t ? JSON.parse(t) : null;
-    if (opts.method === 'PATCH' && Array.isArray(parsed) && parsed.length === 0) {
-      throw new Error('No s\'ha actualitzat cap registre. Comprova els permisos de la base de dades.');
-    }
-    return parsed;
+    return t ? JSON.parse(t) : null;
   } catch (err) {
     clearTimeout(tid);
     if (err.name === 'AbortError') throw new Error("Temps d'espera esgotat.");
@@ -126,12 +122,12 @@ export function makeApi(escolaId) {
     saveDocent: d => {
       cacheDel(`doc_${escolaId}`);
       return d.id
-        ? f(`docents?id=eq.${d.id}`, { method: 'PATCH', body: JSON.stringify(d) })
+        ? f(`docents?id=eq.${d.id}`, { method: 'PATCH', body: JSON.stringify(d), prefer: 'return=minimal' })
         : f('docents', { method: 'POST', body: JSON.stringify(d) });
     },
     deleteDocent: id => {
       cacheDel(`doc_${escolaId}`);
-      return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actiu: false }) });
+      return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actiu: false }), prefer: 'return=minimal' });
     },
     getAbsenciesAvui:    ()    => f(`absencies?data=eq.${avui()}&order=creat_el.desc`),
     getAbsencies:        ()    => f('absencies?order=creat_el.desc&limit=50'),
@@ -167,7 +163,7 @@ export function makeApi(escolaId) {
     saveOriolPdfData:            d  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_pdf_data: d }), bypassSchoolId: true }),
     saveOriolLema:               t  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_lema: t }),    bypassSchoolId: true }),
     saveOriolDiariClassificacio: d  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify(d),                    bypassSchoolId: true }),
-    syncDirectiuPin: (nom, pin) => f(`directius?escola_id=eq.${escolaId}&nom=eq.${encodeURIComponent(nom)}`, { method: 'PATCH', body: JSON.stringify({ pin }), bypassSchoolId: true }),
+    syncDirectiuPin: (nom, pin) => f(`directius?escola_id=eq.${escolaId}&nom=eq.${encodeURIComponent(nom)}`, { method: 'PATCH', body: JSON.stringify({ pin }), bypassSchoolId: true, prefer: 'return=minimal' }),
     getAbsenciesByDocent: nom => f(`absencies?docent_nom=eq.${encodeURIComponent(nom)}&estat=neq.arxivat&order=data.desc&limit=10`),
     getCoberturesForAbsent: nom => f(`cobertures?docent_absent_nom=eq.${encodeURIComponent(nom)}&order=data.desc&limit=30`),
     getAbsenciesHistorial: (offset = 0, limit = 50) => f(`absencies?order=data.desc&limit=${limit}&offset=${offset}`),
@@ -182,7 +178,7 @@ export function makeApi(escolaId) {
     saveEmailsNotificacions: arr   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ emails_notificacions: arr }), bypassSchoolId: true }),
     getConfigIntensiva:      ()    => f(`escoles?id=eq.${escolaId}&select=config_intensiva`, { bypassSchoolId: true }),
     saveConfigIntensiva:     cfg   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ config_intensiva: cfg }), bypassSchoolId: true }),
-    saveHorariIntensiu: (id, h) => { cacheDel(`doc_${escolaId}`); return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ horari_intensiu: h }) }); },
+    saveHorariIntensiu: (id, h) => { cacheDel(`doc_${escolaId}`); return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ horari_intensiu: h }), prefer: 'return=minimal' }); },
     getPatiTorns:       ()    => f(`escoles?id=eq.${escolaId}&select=config_pati`, { bypassSchoolId: true }),
     savePatiTorns:      data  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ config_pati: data }), bypassSchoolId: true }),
   };
