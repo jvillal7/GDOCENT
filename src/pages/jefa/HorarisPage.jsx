@@ -3677,18 +3677,20 @@ function extractBadge(nom) {
 function badgeStyle(badge) {
   if (!badge) return {};
   const b = badge.toUpperCase();
-  if (b === 'PAE')  return { bg: 'var(--purple-bg)', color: 'var(--purple)' };
-  if (b === 'MALL') return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
-  if (b === 'MUS')   return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
-  if (b === 'MÚS')   return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
-  if (b === 'ESTIM') return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
-  if (b === 'EVIP')  return { bg: 'var(--red-bg)',    color: 'var(--red)'    };
-  if (b === 'SUP')   return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
-  if (b === 'EF')    return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
-  if (b === 'ANG')   return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
-  if (b === 'EIS')   return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
-  if (b === 'SIEI')  return { bg: 'var(--red-bg)',    color: 'var(--red)'    };
-  if (b === 'TUT')   return { bg: 'var(--bg-3)',      color: 'var(--ink-3)'  };
+  if (b === 'PAE')          return { bg: 'var(--purple-bg)', color: 'var(--purple)' };
+  if (b === 'MALL')         return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  if (b === 'MUS' || b === 'MÚS') return { bg: 'var(--green-bg)', color: 'var(--green)' };
+  if (b === 'ESTIM')        return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
+  if (b === 'EVIP')         return { bg: 'var(--red-bg)',    color: 'var(--red)'    };
+  if (b === 'SUP')          return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  if (b === 'EF')           return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
+  if (b === 'ANG')          return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
+  if (b === 'EIS')          return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  if (b === 'SIEI')         return { bg: '#FFF0F0',          color: '#C03030'       };
+  if (b === 'SIEI+')        return { bg: '#FFF0F5',          color: '#D81B60'       };
+  if (b === 'MESI')         return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
+  if (b === 'TEI')          return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
+  if (b === 'TUT')          return { bg: 'var(--bg-3)',      color: 'var(--ink-3)'  };
   return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
 }
 
@@ -3707,18 +3709,38 @@ function sortRivoGrupKey(g) {
 }
 
 function rolBadgeRivo(e, activeGrup) {
+  // Tutor d'aquest grup concret → sense badge (és la referència del grup)
   if (e.rol === 'tutor' && e.grup_principal?.trim() === activeGrup) return null;
+
+  // Badge explícit al nom: "Laura (SUP)" → extreu "SUP"
   const extracted = extractBadge(e.nom);
   if (extracted) return extracted;
-  if (e.rol === 'ee') return 'SIEI';
-  if (e.rol === 'msuport') return 'SUP';
-  if (['educador', 'vetllador', 'tei', 'suport'].includes(e.rol)) return 'PAE';
+
   const gp = (e.grup_principal || '').trim();
-  if (gp === 'EF') return 'EF';
-  if (gp === 'Anglès') return 'ANG';
-  if (/^música$/i.test(gp)) return 'MÚS';
-  if (gp === 'EI suport') return 'EIS';
-  if (e.rol === 'tutor') return 'TUT';
+  const gpL = gp.toLowerCase();
+
+  // Detectar per grup_principal — molt més fiable que el rol
+  if (/mesi\+?/i.test(gpL))  return 'MESI';
+  if (/siei\+/i.test(gpL))   return 'SIEI+';
+  if (/siei/i.test(gpL))     return 'SIEI';
+  if (gpL === 'ef')           return 'EF';
+  if (/^angl[eè]s$/i.test(gpL)) return 'ANG';
+  if (/^m[uú]sica$/i.test(gpL)) return 'MÚS';
+  if (gpL === 'ei suport')   return 'EIS';
+  if (/mall/i.test(gpL))     return 'MALL';
+  if (/estim/i.test(gpL))    return 'ESTIM';
+  if (/evip/i.test(gpL))     return 'EVIP';
+  if (/^tei/i.test(gpL))     return 'TEI';
+  if (/^pae/i.test(gpL))     return 'PAE';
+
+  // Fallback pel rol si el grup_principal no és informatiu
+  if (e.rol === 'ee')         return 'SIEI';
+  if (e.rol === 'msuport')    return 'SUP';
+  if (e.rol === 'suport')     return 'SUP'; // suport a grup específic, no PAE
+  if (['educador', 'vetllador'].includes(e.rol)) return 'PAE';
+  if (e.rol === 'tei')        return 'TEI';
+  if (e.rol === 'tutor')      return 'TUT';
+  // teacher / especialista sense grup_principal → sense badge
   return null;
 }
 
