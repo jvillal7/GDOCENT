@@ -2637,7 +2637,7 @@ function InputDataDMY({ value, onChange, min, style }) {
         style={{ padding: '6px 8px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'var(--bg-2)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
         title="Obrir calendari"
       >📅</button>
-      <input ref={pickerRef} type="date" value={value} min={min}
+      <input ref={pickerRef} type="date" value={value} min={min} lang="ca"
         onChange={handlePicker}
         style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', width: 0, height: 0 }} />
     </div>
