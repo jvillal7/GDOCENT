@@ -2603,6 +2603,32 @@ function buildSortidaEmailHtml({ title, date, descripcio, llistaPart, docAdjunt,
   </div>`;
 }
 
+const _isoToDMY = iso => iso ? iso.split('-').reverse().join('/') : '';
+const _dmyToIso = s => {
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+};
+function InputDataDMY({ value, onChange, min, style }) {
+  const [txt, setTxt] = useState(() => _isoToDMY(value));
+  useEffect(() => {
+    const iso = _dmyToIso(txt);
+    if (iso !== value) setTxt(_isoToDMY(value));
+  }, [value]);
+  function handleChange(e) {
+    let v = e.target.value.replace(/[^0-9/]/g, '');
+    if (v.length === 2 && txt.length === 1) v += '/';
+    if (v.length === 5 && txt.length === 4) v += '/';
+    setTxt(v);
+    const iso = _dmyToIso(v);
+    if (iso && (!min || iso >= min)) onChange(iso);
+  }
+  return (
+    <input className="f-ctrl" type="text" inputMode="numeric"
+      placeholder="DD/MM/AAAA" value={txt} onChange={handleChange}
+      maxLength={10} style={style} />
+  );
+}
+
 function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [dateFi, setDateFi] = useState(new Date().toISOString().split('T')[0]);
@@ -2911,13 +2937,11 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             </div>
             <div>
               <label className="f-label">Data inici</label>
-              <input type="date" className="f-ctrl" value={date} onChange={e => { setDate(e.target.value); if (e.target.value > dateFi) setDateFi(e.target.value); }} style={{ width: 148 }} />
-              {date && <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{new Date(date + 'T12:00:00').toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>}
+              <InputDataDMY value={date} onChange={iso => { setDate(iso); if (iso > dateFi) setDateFi(iso); }} style={{ width: 130 }} />
             </div>
             <div>
               <label className="f-label">Data fi</label>
-              <input type="date" className="f-ctrl" value={dateFi} min={date} onChange={e => setDateFi(e.target.value)} style={{ width: 148 }} />
-              {dateFi && <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{new Date(dateFi + 'T12:00:00').toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>}
+              <InputDataDMY value={dateFi} min={date} onChange={iso => setDateFi(iso)} style={{ width: 130 }} />
             </div>
           </div>
 
