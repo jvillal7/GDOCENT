@@ -44,6 +44,7 @@ export default function AvisosPage() {
   // Avisos descoberts des d'infoExtra
   const [avisosDescoberts, setAvisosDescoberts] = useState([]);
   const [creantAvisos,     setCreantAvisos]     = useState(false);
+  const [generantPropostes, setGenerantPropostes] = useState(null); // null or { actual, total }
   const [coberturesPerId,  setCoberturesPerId]  = useState({});
   const [tallersPending,   setTallersPending]   = useState(null); // { avis, totsIds, tallersIds }
   const [iaDecisions, setIaDecisions] = useState([]);
@@ -203,9 +204,11 @@ export default function AvisosPage() {
 
   async function crearAvisosAutomatics() {
     setCreantAvisos(true);
+    const totalAvisos = avisosDescoberts.length;
+    const savedAbsencies = [];
     try {
       for (const av of avisosDescoberts) {
-        await api.saveAbsencia({
+        const result = await api.saveAbsencia({
           escola_id: escola.id,
           docent_nom: av.nom,
           data: av.data,
@@ -214,14 +217,82 @@ export default function AvisosPage() {
           estat: 'pendent',
           tipus: isOriol ? 'absencia' : 'sortida',
         });
+        const absId = result?.[0]?.id;
+        if (absId) savedAbsencies.push({ ...av, id: absId });
       }
       setAvisosDescoberts([]);
-      showToast(`✓ ${avisosDescoberts.length} avís${avisosDescoberts.length > 1 ? 'os' : ''} creat${avisosDescoberts.length > 1 ? 's' : ''}`);
-      load();
+      showToast(`✓ ${totalAvisos} avís${totalAvisos > 1 ? 'os' : ''} creat${totalAvisos > 1 ? 's' : ''}`);
     } catch (e) {
       showToast('Error creant avisos: ' + e.message);
-    } finally {
       setCreantAvisos(false);
+      return;
+    }
+    setCreantAvisos(false);
+    load();
+
+    // Auto-generar propostes provisionals per a totes les absències creades
+    if (savedAbsencies.length > 0) {
+      setGenerantPropostes({ actual: 0, total: savedAbsencies.length });
+      for (let i = 0; i < savedAbsencies.length; i++) {
+        setGenerantPropostes({ actual: i + 1, total: savedAbsencies.length });
+        await generarIGuardarProvisional(savedAbsencies[i]);
+      }
+      setGenerantPropostes(null);
+      load();
+    }
+  }
+
+  async function generarIGuardarProvisional(av) {
+    try {
+      const absData = av.data;
+      const infoExtraActiva = infoExtra.filter(ie =>
+        (!ie.data_inici || ie.data_inici <= absData) && (!ie.data_fi || ie.data_fi >= absData)
+      );
+      const nomsBlocats = infoExtraActiva.flatMap(ie => (ie.docentsBlocats || []).map(b => b.nom || b));
+      const absentDocent = docents.find(d => nomsSimilars(d.nom, av.nom));
+      const esSIEITutor = ['SIEI', 'SIEI+'].includes(absentDocent?.grup_principal);
+      const ROLS_EXCLOSOS = esSIEITutor ? new Set(['tei']) : new Set(['vetllador', 'educador', 'tei']);
+      const docentsFiltrats = docents.filter(d =>
+        d.nom === av.nom ||
+        (!nomsBlocats.some(nb => nomsSimilars(nb, d.nom)) &&
+         !baixes.some(b => nomsSimilars(b.absent, d.nom)) &&
+         !ROLS_EXCLOSOS.has(d.rol) &&
+         !['SIEI', 'SIEI+'].includes(d.grup_principal) &&
+         d.horari)
+      );
+      const infoExtraCombinada = infoExtraActiva.length
+        ? { context: infoExtraActiva.map(ie => ie.context).filter(Boolean).join(' | '), docentsBlocats: infoExtraActiva.flatMap(ie => ie.docentsBlocats || []) }
+        : null;
+
+      const result = await proposarCobertura(av.nom, av.franges, docentsFiltrats, normes, absData, isOriol, infoExtraCombinada, baixes.length ? baixes : null, frangesIA);
+
+      if (!result.noCalCobrir && result.proposta?.length > 0) {
+        const grupFallback = absentDocent?.grup_principal || '';
+        const GRUPS_GENERICS = new Set(['suport','pae','mee','mall','estim','evip','atri']);
+        for (const p of result.proposta) {
+          const rawOrigen = (p.grup_origen || '').trim();
+          const grupCobertura = (!rawOrigen || GRUPS_GENERICS.has(rawOrigen.toLowerCase()))
+            ? ((p.motiu || '').match(/\b(G\d{1,2}|MxI|CEEPSIR)\b/i)?.[1]?.toUpperCase() || rawOrigen || grupFallback)
+            : (rawOrigen || grupFallback);
+          const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja];
+          for (const fid of frangesACobrir) {
+            await api.saveCobertura({
+              escola_id:          escola.id,
+              absencia_id:        av.id,
+              docent_cobrint_nom: p.docent,
+              franja:             fid,
+              docent_absent_nom:  av.nom,
+              grup:               grupCobertura,
+              data:               absData,
+              tp_afectat:         p.tp_afectat || false,
+              motiu:              p.motiu || '',
+            });
+          }
+        }
+        await api.patchAbsencia(av.id, { estat: 'provisional' });
+      }
+    } catch (e) {
+      console.warn(`Error generant proposta provisional per ${av.nom} (${av.data}):`, e);
     }
   }
 
@@ -753,6 +824,21 @@ export default function AvisosPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Progrés generació de propostes provisionals */}
+        {generantPropostes && (
+          <div style={{ marginTop: 8, background: '#E8F5E9', border: '1px solid #A5D6A7', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Spinner size={14} />
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#2E7D32' }}>
+                Generant propostes provisionals... ({generantPropostes.actual}/{generantPropostes.total})
+              </div>
+            </div>
+            <div style={{ marginTop: 6, height: 4, background: '#C8E6C9', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: '#4CAF50', borderRadius: 2, width: `${(generantPropostes.actual / generantPropostes.total) * 100}%`, transition: 'width .3s' }} />
             </div>
           </div>
         )}
