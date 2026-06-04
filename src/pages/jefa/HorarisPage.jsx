@@ -2605,6 +2605,7 @@ function buildSortidaEmailHtml({ title, date, descripcio, llistaPart, docAdjunt,
 
 function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dateFi, setDateFi] = useState(new Date().toISOString().split('T')[0]);
   const [title, setTitle] = useState('');
   const [grupsSeleccionats, setGrupsSeleccionats] = useState(new Set());
   const [docentsAniran, setDocentsAniran] = useState(new Set());
@@ -2743,6 +2744,17 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
       const grupsStr = [...grupsSeleccionats].join(', ');
       const motiu = `Sortida: ${title.trim()}`;
 
+      // Calcular tots els dies laborables entre date i dateFi
+      const dies = [];
+      let cur = new Date(date + 'T12:00:00');
+      const fi = new Date((dateFi || date) + 'T12:00:00');
+      while (cur <= fi) {
+        const d = cur.getDay();
+        if (d >= 1 && d <= 5) dies.push(cur.toISOString().split('T')[0]);
+        cur.setDate(cur.getDate() + 1);
+      }
+      const dataFiReal = dateFi && dateFi > date ? dateFi : date;
+
       // Puja document adjunt si n'hi ha
       let docAdjunt = null;
       if (docSortida) {
@@ -2755,19 +2767,20 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
 
       // Crea avís NOMÉS per als acompanyants (no tutors): els tutors van amb el grup i no cal cobertura
       const acompanyants = [...docentsAniran].filter(nom => !nomsTutors.has(nom));
-      await Promise.all(acompanyants.map(nom => {
+      await Promise.all(dies.flatMap(dia => acompanyants.map(nom => {
         const doc = docents.find(d => d.nom === nom);
         return api.saveAbsencia({
           escola_id: escola.id,
           docent_id: doc?.id || null,
           docent_nom: nom,
-          data: date,
+          data: dia,
           franges: absenciaFranges,
           motiu,
           notes: `Acompanyant a la sortida (${grupsStr}) · Cal cobrir les seves franges habituals`,
           estat: 'pendent',
+          tipus: 'sortida',
         });
-      }));
+      })));
 
       // Envia correus a tots els participants que tenen email configurat
       try {
@@ -2810,14 +2823,16 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           grups_fora: [...grupsSeleccionats],
           context: `Sortida escolar "${title.trim()}". Grups fora del centre: ${grupsStr}. Les franges dels tutors acompanyants no necessiten cobertura per al grup. Els acompanyants extra sí que deixen franges descobertes.`,
           data_inici: date,
-          data_fi: date,
+          data_fi: dataFiReal,
         };
         await api.saveInfoExtra([...infoExtraActual, novaEntrada]);
       } catch { /* si falla info_extra, els avisos ja estan creats */ }
 
-      const info = { count: docentsAniran.size, title: title.trim(), date };
+      const totalAvisos = acompanyants.length * dies.length;
+      const info = { count: totalAvisos, title: title.trim(), date, dateFi: dataFiReal, dies: dies.length };
       setSavedOk(info);
-      showToast(`✓ ${info.count} avisos creats per "${info.title}"`);
+      const msgDies = dies.length > 1 ? ` (${dies.length} dies)` : '';
+      showToast(`✓ ${totalAvisos} avis${totalAvisos !== 1 ? 'os' : ''} creats per "${info.title}"${msgDies}`);
       setTitle('');
       setDescripcio('');
       setDocSortida(null);
@@ -2828,6 +2843,9 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
       setGrupsSeleccionats(new Set());
       setDocentsAniran(new Set());
       setShowAcompanyantPicker(false);
+      const avui = new Date().toISOString().split('T')[0];
+      setDate(avui);
+      setDateFi(avui);
     } catch (e) { showToast('Error: ' + e.message); }
     finally { setSaving(false); }
   }
@@ -2849,7 +2867,10 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     <>
       {savedOk && (
         <div style={{ padding: '10px 14px', background: 'var(--green-bg)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 14, fontSize: 13, lineHeight: 1.5 }}>
-          ✅ <strong>{savedOk.count} avisos creats</strong> per la sortida "{savedOk.title}" ({fmtData(savedOk.date)}).
+          ✅ <strong>{savedOk.count} avis{savedOk.count !== 1 ? 'os' : ''} creats</strong> per la sortida "{savedOk.title}"
+          {savedOk.dies > 1
+            ? ` (${fmtData(savedOk.date)} – ${fmtData(savedOk.dateFi)} · ${savedOk.dies} dies)`
+            : ` (${fmtData(savedOk.date)})`}.
           La IA ja sap quins grups surten. Gestiona les cobertures des de <strong>Avisos</strong>.
         </div>
       )}
@@ -2857,14 +2878,18 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head"><h3>🚌 Nova sortida escolar</h3></div>
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'end' }}>
             <div>
               <label className="f-label">Nom de la sortida</label>
               <input className="f-ctrl" placeholder="Ex: Visita al Museu, Colònies 5è..." value={title} onChange={e => setTitle(e.target.value)} />
             </div>
             <div>
-              <label className="f-label">Data</label>
-              <input type="date" className="f-ctrl" value={date} onChange={e => setDate(e.target.value)} style={{ width: 148 }} />
+              <label className="f-label">Data inici</label>
+              <input type="date" className="f-ctrl" value={date} onChange={e => { setDate(e.target.value); if (e.target.value > dateFi) setDateFi(e.target.value); }} style={{ width: 148 }} />
+            </div>
+            <div>
+              <label className="f-label">Data fi</label>
+              <input type="date" className="f-ctrl" value={dateFi} min={date} onChange={e => setDateFi(e.target.value)} style={{ width: 148 }} />
             </div>
           </div>
 
