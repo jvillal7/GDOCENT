@@ -3463,6 +3463,14 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
             )}
           </div>
           <div>
+            <label className="f-label">Tipus de jornada</label>
+            <select className="f-ctrl" value={jornada} onChange={e => setJornada(e.target.value)}>
+              <option value="sencera">Jornada sencera</option>
+              <option value="dos_tercos">2/3 de jornada</option>
+              <option value="mitja">Mitja jornada</option>
+            </select>
+          </div>
+          <div>
             <label className="f-label">PIN d'accés (4 dígits)</label>
             <input
               type="text"
@@ -3482,24 +3490,6 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
               value={email}
               onChange={e => setEmail(e.target.value)}
             />
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <details style={{ background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)', padding: '8px 12px' }}>
-              <summary style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', cursor: 'pointer', userSelect: 'none' }}>
-                🌅 Jornada intensiva
-              </summary>
-              <div style={{ marginTop: 10 }}>
-                <label className="f-label">Tipus de jornada</label>
-                <select className="f-ctrl" value={jornada} onChange={e => setJornada(e.target.value)}>
-                  <option value="sencera">Jornada sencera (1h TP en lectiu)</option>
-                  <option value="dos_tercos">2/3 de jornada (1h TP en lectiu)</option>
-                  <option value="mitja">Mitja jornada (30 min TP en lectiu)</option>
-                </select>
-                <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 6 }}>
-                  Determina quant TP es col·loca en horari lectiu durant la jornada intensiva.
-                </div>
-              </div>
-            </details>
           </div>
         </div>
       </div>
