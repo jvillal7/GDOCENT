@@ -404,6 +404,7 @@ export default function HorarisPage() {
       pin: data.pin,
       email: data.email || null,
       coordinador_cicle: data.coordinador_cicle || null,
+      jornada: data.jornada || 'sencera',
       ...(existing?.id ? { id: existing.id } : {}),
     };
     try {
@@ -842,6 +843,11 @@ export default function HorarisPage() {
                             )}
                           </div>
                           {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
+                          {d.jornada && d.jornada !== 'sencera' && (
+                            <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 4, padding: '1px 6px', fontWeight: 600, display: 'inline-block', marginTop: 2 }}>
+                              🌅 {d.jornada === 'mitja' ? 'Mitja jornada' : '2/3 jornada'}
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {teHorari && (
@@ -3378,6 +3384,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
   const [pin,            setPin]            = useState(data.pin || '1234');
   const [email,          setEmail]          = useState(data.email || '');
   const [coordCicle,     setCoordCicle]     = useState(data.coordinador_cicle ?? null); // null = no coord, string = coord + cicle
+  const [jornada,        setJornada]        = useState(data.jornada || 'sencera');
   const [horari, setHorari] = useState(() => {
     const h = {};
     const tpSet = new Set(Array.isArray(data.tp_franges) ? data.tp_franges : []);
@@ -3400,7 +3407,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
     if (!pin.trim() || pin.length !== 4 || !/^\d{4}$/.test(pin)) return alert('El PIN ha de ser de 4 dígits.');
     // Si el grup principal és G1–G14 o MxI, el rol ha de ser tutor sempre
     const rolFinal = /^G\d+/i.test(grup.trim()) || /^MxI$/i.test(grup.trim()) ? 'tutor' : rol;
-    onSave({ id: data.id, nom, rol: rolFinal, grup_principal: grup, horari, pin, email: email.trim() || null, coordinador_cicle: (coordCicle !== null && coordCicle.trim()) ? coordCicle.trim() : null });
+    onSave({ id: data.id, nom, rol: rolFinal, grup_principal: grup, horari, pin, email: email.trim() || null, coordinador_cicle: (coordCicle !== null && coordCicle.trim()) ? coordCicle.trim() : null, jornada });
   }
 
   // Group franjes by hora for rowspan
@@ -3475,6 +3482,24 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
               value={email}
               onChange={e => setEmail(e.target.value)}
             />
+          </div>
+          <div style={{ gridColumn: 'span 2' }}>
+            <details style={{ background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)', padding: '8px 12px' }}>
+              <summary style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', cursor: 'pointer', userSelect: 'none' }}>
+                🌅 Jornada intensiva
+              </summary>
+              <div style={{ marginTop: 10 }}>
+                <label className="f-label">Tipus de jornada</label>
+                <select className="f-ctrl" value={jornada} onChange={e => setJornada(e.target.value)}>
+                  <option value="sencera">Jornada sencera (1h TP en lectiu)</option>
+                  <option value="dos_tercos">2/3 de jornada (1h TP en lectiu)</option>
+                  <option value="mitja">Mitja jornada (30 min TP en lectiu)</option>
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 6 }}>
+                  Determina quant TP es col·loca en horari lectiu durant la jornada intensiva.
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </div>
