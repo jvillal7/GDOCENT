@@ -202,6 +202,31 @@ export default function AvuiPage() {
       const newSieiCells = {};
       if (sieiStudents.length > 0) {
         const todayDia = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][today.getDay()];
+
+        // SIEI Pas 1: horari normal — docents/PAE/vetlladors que acompanyen cada alumne
+        SCHOOL_F.forEach(f => {
+          sieiStudents.forEach(student => {
+            const presents = new Set();
+            let isPeixos = false;
+            docents.forEach(d => {
+              if (baixaAbsents.has(d.nom)) return;
+              const val = (d.horari?.[todayDia]?.[f.id] || '').toUpperCase();
+              if (val.includes(student)) {
+                presents.add(d.nom.split(' ')[0]);
+                if (val.includes('PEIXOS')) isPeixos = true;
+              }
+            });
+            if (presents.size > 0) {
+              newSieiCells[`${student}__${f.id}`] = {
+                estat: 'normal',
+                noms: [...presents],
+                ...(isPeixos ? { lloc: 'Peixos' } : {}),
+              };
+            }
+          });
+        });
+
+        // SIEI Pas 2: superposar absències i cobertures
         (absencies || []).forEach(a => {
           const docent = docents.find(d => d.nom === a.docent_nom);
           if (!docent?.horari) return;
@@ -453,7 +478,10 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                             {cell?.estat === 'resolt' && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
                             {(cell?.estat === 'normal' || cell?.estat === 'ok') && (
                               cell.noms?.length > 0
-                                ? cell.noms.map((n, i) => <span key={i} style={{ fontSize: 8, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{n}</span>)
+                                ? <>
+                                    {cell.noms.map((n, i) => <span key={i} style={{ fontSize: 8, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{n}</span>)}
+                                    {cell.lloc && <span style={{ fontSize: 7, color: 'var(--ink-3)', display: 'block', lineHeight: 1.2, fontStyle: 'italic' }}>{cell.lloc}</span>}
+                                  </>
                                 : cell.cobrint
                                   ? <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2 }}>{cell.cobrint}</span>
                                   : null
