@@ -352,7 +352,12 @@ function matchesGrup(val, grup) {
   if (v === g) return true;
   if (v.startsWith(g + ' ') || v.startsWith(g + '-') || v.startsWith(g + '/')) return true;
   const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp('\\b' + escaped + '\\b').test(v);
+  if (new RegExp('\\b' + escaped + '\\b').test(v)) return true;
+  // Cobreix "3r B" ↔ "3rB", "4t B" ↔ "4tB": eliminem espais entre alfanumèrics
+  const vc = v.replace(/([a-z0-9]) +([a-z0-9])/g, '$1$2');
+  if (vc === g) return true;
+  if (vc.startsWith(g) && (vc.length === g.length || !/[a-z0-9]/.test(vc[g.length]))) return true;
+  return new RegExp('\\b' + escaped + '\\b').test(vc);
 }
 
 // Extreu inicials de tipus "L.M", "R.V", "A.S", "LA.S", "M.VG" d'una cadena d'horari
