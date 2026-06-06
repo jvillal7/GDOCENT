@@ -5,3 +5,5 @@ dist/
 .env.local
 .env.*.local
 supabase/.temp/
+screenshot*.mjs
+screenshots/
