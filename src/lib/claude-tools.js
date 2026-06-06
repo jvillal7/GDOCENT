@@ -93,6 +93,41 @@ export async function generarHorarisIntensius(docents, franjes, regles, normes, 
     }
   }
 
+  // Enforce minimum weekly morning TP: clearing tardes may have removed all TP;
+  // ensure each teacher has at least tpMinsMin in morning slots before the AI runs.
+  for (const d of docents) {
+    if (!d.horari || !d.tp_franges?.length) continue;
+    const jornada = d.jornada || 'sencera';
+    const tpMinsMin = jornada === 'mitja' ? 30 : 60;
+    let morningTpMins = 0;
+    for (const dia of DIES) {
+      for (const fid of matinsIds) {
+        const changed = canvisMap[d.nom]?.[dia]?.[fid];
+        const val = changed !== undefined ? changed : ((d.horari[dia] || {})[fid] || '');
+        if (/^tp\b/i.test((val || '').trim())) morningTpMins += 30;
+      }
+    }
+    if (morningTpMins >= tpMinsMin) continue;
+    let slotsNeeded = Math.ceil((tpMinsMin - morningTpMins) / 30);
+    outer: for (const dia of DIES) {
+      for (const fid of matinsIds) {
+        if (slotsNeeded <= 0) break outer;
+        const changed = canvisMap[d.nom]?.[dia]?.[fid];
+        const orig = (d.horari[dia] || {})[fid] || '';
+        const cur = changed !== undefined ? changed : orig;
+        if (!cur) {
+          if (!canvisMap[d.nom]) canvisMap[d.nom] = {};
+          if (!canvisMap[d.nom][dia]) canvisMap[d.nom][dia] = {};
+          canvisMap[d.nom][dia][fid] = 'TP';
+          if (!canvisAnteriors[d.nom]) canvisAnteriors[d.nom] = {};
+          if (!canvisAnteriors[d.nom][dia]) canvisAnteriors[d.nom][dia] = {};
+          if (canvisAnteriors[d.nom][dia][fid] === undefined) canvisAnteriors[d.nom][dia][fid] = orig;
+          slotsNeeded--;
+        }
+      }
+    }
+  }
+
   const toCanvis = () => Object.entries(canvisMap).map(([nom, dies]) => ({ nom, dies }));
   const totalAmbHorari = docents.filter(d => d.horari).length;
 

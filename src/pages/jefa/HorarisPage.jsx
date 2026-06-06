@@ -583,6 +583,7 @@ export default function HorarisPage() {
           onConfigChange={cfg => setConfigIntensiva(cfg)}
           onHorarisSaved={reload}
           showToast={showToast}
+          baixes={baixes}
         />
       )}
       {viewMode === 'pati' && (
@@ -926,11 +927,147 @@ export default function HorarisPage() {
   );
 }
 
-function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfigChange, onHorarisSaved, showToast }) {
+function calcularCasosTPRetallat(docents, editingMap, normalFranjes, baixes) {
+  const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+  const matiFranjes = normalFranjes.filter(f => !f.lliure && !f.patio && f.hora !== 'Tarda');
+  // All intensive morning slot IDs (derived from MAP_NORMAL_TO_INTENSIVA, excludes pati and tarda)
+  const INTENSIVE_MATI_IDS = Object.values(MAP_NORMAL_TO_INTENSIVA).flat();
+  const casos = [];
+
+  // Skip teachers on active leave who have a substitute
+  const baixaActiva = new Set(
+    (baixes || []).filter(b => b.estat === 'activa' && b.substitut)
+                  .map(b => (b.absent || '').toLowerCase().trim())
+  );
+
+  for (const d of docents) {
+    if (!d.horari || !d.tp_franges?.length || !d.grup_principal) continue;
+    if (baixaActiva.has(d.nom.toLowerCase().trim())) continue;
+
+    // Count actual morning TP in the generated intensive schedule (after minimum enforcement)
+    let morningTpMins = 0;
+    for (const dia of DIES) {
+      for (const slotId of INTENSIVE_MATI_IDS) {
+        const val = (editingMap[d.id]?.[dia]?.[slotId] || '').trim();
+        if (/^tp\b/i.test(val)) morningTpMins += 15;
+      }
+    }
+
+    const jornada = d.jornada || 'sencera';
+    const tpMinsNou = jornada === 'mitja' ? 30 : 60;
+    // Only expose slots ABOVE the minimum — that's the genuine excess
+    const minsRetallats = Math.max(0, morningTpMins - tpMinsNou);
+    if (minsRetallats <= 0) continue;
+
+    const slotsNecessaris = Math.ceil(minsRetallats / 30);
+    let trobats = 0;
+    let tpRestant = morningTpMins;
+
+    for (const dia of DIES) {
+      if (trobats >= slotsNecessaris) break;
+      for (const f of matiFranjes) {
+        if (trobats >= slotsNecessaris) break;
+
+        const intensivaSlots = MAP_NORMAL_TO_INTENSIVA[f.id] || [];
+        if (!intensivaSlots.length) continue;
+
+        // Must be TP in intensive (not just empty) — we only redistribute genuine TP excess
+        const isTPInIntensiva = intensivaSlots.every(s =>
+          /^tp\b/i.test((editingMap[d.id]?.[dia]?.[s] || '').trim())
+        );
+        if (!isTPInIntensiva) continue;
+
+        // Guard: never drop below minimum
+        const slotMins = intensivaSlots.length * 15;
+        if (tpRestant - slotMins < tpMinsNou) continue;
+        tpRestant -= slotMins;
+
+        const especialista = docents.find(other =>
+          other.id !== d.id && other.horari &&
+          normGrup((other.horari[dia] || {})[f.id] || '').includes(normGrup(d.grup_principal))
+        );
+
+        casos.push({
+          docent: d,
+          dia,
+          normalFid: f.id,
+          horaLabel: f.sub,
+          intensivaSlots,
+          especialistaNom: especialista?.nom || null,
+          materiaLabel: especialista
+            ? (((especialista.horari[dia] || {})[f.id] || '').split(/\s*[·/]\s*/)[1] || especialista.grup_principal || '')
+            : '',
+          assignat: 'disponible',
+        });
+        trobats++;
+      }
+    }
+  }
+  return casos;
+}
+
+// Fusiona casos consecutius del mateix docent i dia en una sola card d'1h
+function mergeConsecutiusTpCasos(casos, matiFranjes) {
+  const fidIdx = {};
+  matiFranjes.forEach((f, i) => { fidIdx[f.id] = i; });
+
+  const used = new Set();
+  const merged = [];
+
+  for (let i = 0; i < casos.length; i++) {
+    if (used.has(i)) continue;
+    const c1 = casos[i];
+    let parella = -1;
+
+    for (let j = i + 1; j < casos.length; j++) {
+      if (used.has(j)) continue;
+      const c2 = casos[j];
+      if (c2.docent.id !== c1.docent.id || c2.dia !== c1.dia) continue;
+      // Consecutius si c2 és la franja immediatament posterior a c1
+      if (fidIdx[c2.normalFid] === fidIdx[c1.normalFid] + 1) { parella = j; break; }
+    }
+
+    if (parella !== -1) {
+      const c2 = casos[parella];
+      used.add(i);
+      used.add(parella);
+      const start = c1.horaLabel.split('–')[0].trim();
+      const end   = c2.horaLabel.split('–').pop().trim();
+      merged.push({
+        ...c1,
+        horaLabel: `${start}–${end}`,
+        intensivaSlots: [...c1.intensivaSlots, ...c2.intensivaSlots],
+        especialistaNom: c1.especialistaNom || c2.especialistaNom,
+        materiaLabel:    c1.materiaLabel    || c2.materiaLabel,
+        assignat: 'disponible',
+        merged: true,
+      });
+    } else {
+      used.add(i);
+      merged.push(c1);
+    }
+  }
+  return merged;
+}
+
+// Format helpers: YYYY-MM-DD ↔ DD/MM/AAAA
+function isoToDisplay(iso) {
+  if (!iso) return '';
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+function displayToIso(s) {
+  const m = (s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
+}
+
+function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfigChange, onHorarisSaved, showToast, baixes }) {
   const { escola } = useApp();
   const cfg = configIntensiva || {};
   const [dataInici, setDataInici]   = useState(cfg.data_inici || '');
   const [dataFi, setDataFi]         = useState(cfg.data_fi || '');
+  const [dataIniciText, setDataIniciText] = useState(isoToDisplay(cfg.data_inici || ''));
+  const [dataFiText, setDataFiText]       = useState(isoToDisplay(cfg.data_fi || ''));
   const [actiu, setActiu]           = useState(cfg.actiu || false);
   const [generating, setGenerating] = useState(false);
   const [generatingMsg, setGeneratingMsg] = useState('');
@@ -941,6 +1078,58 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   const [resumGeneracio, setResumGeneracio] = useState('');
   const [saving, setSaving]                 = useState(false);
   const [configSaving, setConfigSaving]     = useState(false);
+  const [tpRetallatCasos, setTpRetallatCasos] = useState([]);
+  const [tpRetallatMode, setTpRetallatMode]   = useState(false);
+  const [tpRetallatActiu, setTpRetallatActiu] = useState(cfg.regles?.tpRetallatActiu !== false);
+  const [reglesCollapsed, setReglesCollapsed] = useState(true);
+  const [draftBanner, setDraftBanner]         = useState(null);
+  useEffect(() => {
+    if (!escola?.id) return;
+    try {
+      const raw = localStorage.getItem(`gd_tp_draft_${escola.id}`);
+      if (raw) setDraftBanner(JSON.parse(raw));
+    } catch {}
+  }, [escola?.id]);
+
+  // Counts contextuals (memòria per evitar recàlcul continu)
+  const counts = useMemo(() => {
+    const DIES = ['dilluns','dimarts','dimecres','dijous','divendres'];
+    const tardesIds = franjes.filter(f => f.hora === 'Tarda' && !f.lliure).map(f => f.id);
+    const ESP_KW = ['ef', 'anglès', 'angles', 'música', 'musica'];
+
+    const tpTarda = docents.filter(d =>
+      d.tp_franges?.some(tf => tardesIds.some(tid => tf.endsWith(tid)))
+    ).length;
+
+    const tallersRacons = docents.filter(d => {
+      if (!d.horari) return false;
+      return DIES.some(dia => Object.values(d.horari[dia] || {}).some(v => /^(tallers|racons)/i.test((v||'').trim())));
+    }).length;
+
+    const tpRetallat = docents.filter(d => {
+      if (!d.tp_franges?.length || !d.grup_principal) return false;
+      const tpMins = d.tp_franges.length * 30;
+      const nouMins = (d.jornada || 'sencera') === 'mitja' ? 30 : 60;
+      return tpMins > nouMins;
+    }).length;
+
+    const especialistesDeseq = docents.filter(d => {
+      if (!d.horari || !ESP_KW.some(kw => (d.grup_principal||'').toLowerCase().includes(kw))) return false;
+      const grupsMap = {};
+      for (const dia of DIES) {
+        for (const v of Object.values(d.horari[dia] || {})) {
+          const val = (v||'').trim();
+          if (!val || /^(tp|lliure|pati|coordinaci|càrrec|ceepsir)/i.test(val)) continue;
+          const g = val.split(/\s*[·/]\s*/)[0].trim();
+          if (g) grupsMap[g] = (grupsMap[g] || 0) + 1;
+        }
+      }
+      const c = Object.values(grupsMap);
+      return c.length > 1 && Math.max(...c) !== Math.min(...c);
+    }).length;
+
+    return { tpTarda, tallersRacons, tpRetallat, especialistesDeseq };
+  }, [docents, franjes]);
   // Regles per checklist
   const [regleTpTarda, setRegleTpTarda]       = useState(cfg.regles?.tpTarda || 'pati');
   const [regleTpAltraText, setRegleTpAltraText] = useState(cfg.regles?.tpAltraText || '');
@@ -961,6 +1150,8 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     if (configIntensiva) {
       setDataInici(configIntensiva.data_inici || '');
       setDataFi(configIntensiva.data_fi || '');
+      setDataIniciText(isoToDisplay(configIntensiva.data_inici || ''));
+      setDataFiText(isoToDisplay(configIntensiva.data_fi || ''));
       setActiu(configIntensiva.actiu || false);
       if (configIntensiva.regles) {
         setRegleTpTarda(configIntensiva.regles.tpTarda || 'pati');
@@ -969,6 +1160,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
         setReglesNoTallers(configIntensiva.regles.noTallers || false);
         setReglesCompactar45(configIntensiva.regles.compactar45 || false);
         setInstruccionsLliures(configIntensiva.regles.instruccionsLliures || '');
+        if (configIntensiva.regles.tpRetallatActiu !== undefined) setTpRetallatActiu(configIntensiva.regles.tpRetallatActiu !== false);
       }
     }
   }, [configIntensiva]);
@@ -987,7 +1179,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   async function guardarPlantilla() {
     setPlantillaSaving(true);
     try {
-      const regles = { tpTarda: regleTpTarda, tpAltraText: regleTpAltraText, equilibrarEspecialistes: reglesEquilibraEsp, noTallers: reglesNoTallers, compactar45: reglesCompactar45, instruccionsLliures };
+      const regles = { tpTarda: regleTpTarda, tpAltraText: regleTpAltraText, equilibrarEspecialistes: reglesEquilibraEsp, noTallers: reglesNoTallers, compactar45: reglesCompactar45, instruccionsLliures, tpRetallatActiu };
       const nova = { ...cfg, regles };
       await api.saveConfigIntensiva(nova);
       onConfigChange(nova);
@@ -1210,6 +1402,15 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
       setTornsPati(result.tornsPati || null);
       setTpPendents(pendents);
       setResumGeneracio(result.resum || '');
+      if (tpRetallatActiu) {
+        const matiFranjes = franjes.filter(f => !f.lliure && !f.patio && f.hora !== 'Tarda');
+        const tpCasos = mergeConsecutiusTpCasos(
+          calcularCasosTPRetallat(docents, map, franjes, baixes),
+          matiFranjes
+        );
+        setTpRetallatCasos(tpCasos);
+        if (tpCasos.length > 0) setTpRetallatMode(true);
+      }
     } catch (e) { showToast('Error IA: ' + e.message); }
     finally { clearInterval(msgInterval); setGenerating(false); setGeneratingMsg(''); }
   }
@@ -1238,6 +1439,46 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
 
   const docentAmbIntensiu = docents.filter(d => d.horari_intensiu).length;
 
+  function descartarTot() {
+    setEditingMap(null);
+    setTpPendents([]);
+    setResumGeneracio('');
+    setCanvisAnteriors({});
+    setTornsPati(null);
+    setTpRetallatCasos([]);
+    setTpRetallatMode(false);
+  }
+
+  if (tpRetallatMode && editingMap) {
+    return (
+      <TPRetallatView
+        casos={tpRetallatCasos}
+        docents={docents}
+        editingMap={editingMap}
+        escolaId={escola.id}
+        onConfirm={assignacions => {
+          localStorage.removeItem(`gd_tp_draft_${escola.id}`);
+          const newMap = JSON.parse(JSON.stringify(editingMap));
+          for (const a of assignacions) {
+            if (!a.assignat || a.assignat === 'disponible') continue;
+            const id = a.docent.id;
+            if (!newMap[id]) continue;
+            if (!newMap[id][a.dia]) newMap[id][a.dia] = {};
+            for (const slot of a.intensivaSlots) {
+              newMap[id][a.dia][slot] = `Suport ${a.assignat}`;
+            }
+          }
+          setEditingMap(newMap);
+          setTpRetallatMode(false);
+        }}
+        onDiscard={() => {
+          localStorage.removeItem(`gd_tp_draft_${escola.id}`);
+          descartarTot();
+        }}
+      />
+    );
+  }
+
   if (editingMap) {
     const isOriolFranjes = franjes.some(f => f.id.startsWith('o'));
     const editFranjes = isOriolFranjes ? FRANJES_INTENSIVA_ORIOL : FRANJES_INTENSIVA;
@@ -1256,7 +1497,7 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
           [id]: { ...prev[id], [dia]: { ...(prev[id][dia] || {}), [fid]: val } },
         }))}
         onConfirm={confirmarIGuardar}
-        onDiscard={() => { setEditingMap(null); setTpPendents([]); setResumGeneracio(''); setCanvisAnteriors({}); setTornsPati(null); }}
+        onDiscard={descartarTot}
         saving={saving}
         escola={escola}
         configIntensiva={configIntensiva}
@@ -1266,6 +1507,43 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
 
   return (
     <>
+      {/* Banner de draft guardat */}
+      {draftBanner && (
+        <div style={{ background: 'linear-gradient(135deg, #EEF5FF 0%, #F5F0FF 100%)', border: '1px solid var(--blue)', borderRadius: 12, padding: '14px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span style={{ fontSize: 22, flexShrink: 0 }}>💾</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 3 }}>Tens una assignació de TP en curs</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+              Guardat el {new Date(draftBanner.savedAt).toLocaleDateString('ca', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} · {draftBanner.assignacions?.length || 0} casos
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ fontSize: 12 }}
+              onClick={() => {
+                setEditingMap(draftBanner.editingMap);
+                setTpRetallatCasos(draftBanner.assignacions);
+                setTpRetallatMode(true);
+                setDraftBanner(null);
+              }}
+            >
+              ↩ Reprendre
+            </button>
+            <button
+              className="btn btn-sm"
+              style={{ fontSize: 12 }}
+              onClick={() => {
+                localStorage.removeItem(`gd_tp_draft_${escola.id}`);
+                setDraftBanner(null);
+              }}
+            >
+              Descartar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Config dates */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head">
@@ -1277,11 +1555,39 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
         <div style={{ padding: '14px 16px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', display: 'block', marginBottom: 4 }}>Del</label>
-            <input type="date" className="f-ctrl" value={dataInici} onChange={e => setDataInici(e.target.value)} style={{ width: 148 }} />
+            <input
+              type="text"
+              className="f-ctrl"
+              value={dataIniciText}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+              style={{ width: 148 }}
+              onChange={e => {
+                setDataIniciText(e.target.value);
+                const iso = displayToIso(e.target.value);
+                if (iso) setDataInici(iso);
+                else if (!e.target.value) setDataInici('');
+              }}
+              onBlur={() => { if (dataInici) setDataIniciText(isoToDisplay(dataInici)); }}
+            />
           </div>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', display: 'block', marginBottom: 4 }}>Al</label>
-            <input type="date" className="f-ctrl" value={dataFi} onChange={e => setDataFi(e.target.value)} style={{ width: 148 }} />
+            <input
+              type="text"
+              className="f-ctrl"
+              value={dataFiText}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+              style={{ width: 148 }}
+              onChange={e => {
+                setDataFiText(e.target.value);
+                const iso = displayToIso(e.target.value);
+                if (iso) setDataFi(iso);
+                else if (!e.target.value) setDataFi('');
+              }}
+              onBlur={() => { if (dataFi) setDataFiText(isoToDisplay(dataFi)); }}
+            />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
@@ -1308,53 +1614,65 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
         )}
       </div>
 
-      {/* Regles de generació — checklist */}
+      {/* Regles de generació — nova estructura */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head">
           <h3>🤖 Generar horaris intensius amb HorarIA</h3>
         </div>
-        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-          {/* Regla 1: eliminar tardes (sempre actiu) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, opacity: 0.65 }}>
-            <span style={{ fontSize: 16 }}>☑</span>
-            <div>
-              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Eliminar totes les franges de tarda</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Les hores de f5a, f5b, f5c queden buides per a tothom</div>
-            </div>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic', flexShrink: 0 }}>sempre actiu</span>
-          </div>
-
-          {/* Regla 2: TP de tarda — targetes de decisió */}
-          <div style={{ padding: '12px 14px', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 4 }}>
-              🕐 Treball Personal (TP) a la tarda — Què fem?
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 10 }}>
-              Alguns docents tenen TP assignat a les tardes. Cal decidir on es col·loca en jornada intensiva.
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {/* ── Regles automàtiques (col·lapsable) ── */}
+          <button
+            onClick={() => setReglesCollapsed(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0 10px', color: 'var(--ink-3)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}
+          >
+            <span style={{ fontSize: 9, transition: 'transform .15s', display: 'inline-block', transform: reglesCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▼</span>
+            Regles automàtiques
+            <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--green)', fontSize: 10 }}>· sempre actives</span>
+          </button>
+          {!reglesCollapsed && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14, paddingLeft: 4 }}>
               {[
-                { val: 'pati',    icon: '🕐', label: 'Mou al pati del mateix dia',        desc: 'El TP passa al torn de pati si hi ha lloc' },
-                { val: 'mati',    icon: '☀️', label: 'Mou a la primera hora lliure del matí', desc: 'Es busca el primer slot buit del matí' },
-                { val: 'eliminar',icon: '🗑️', label: 'Elimina (sense reubicació)',          desc: 'El TP s\'esborra i apareix a la llista de pendents' },
-                { val: 'altra',   icon: '✍️', label: 'Altra opció (instrucció pròpia)',     desc: 'Escriu com vols que HorarIA gestioni el TP de tarda' },
+                { label: 'Eliminar totes les franges de tarda', desc: 'Les hores f5a, f5b, f5c queden buides per a tothom' },
+                { label: 'Ampliar última classe fins les 13:00', desc: 'Les franges 12:30–13:00 (i4a, i4b) s\'omplen amb l\'activitat de 12:15–12:30' },
+              ].map(r => (
+                <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--green-bg)', borderRadius: 7, border: '1px solid var(--green)', opacity: 0.8 }}>
+                  <span style={{ color: 'var(--green)', fontSize: 14, flexShrink: 0 }}>✓</span>
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>{r.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>{r.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── TREBALL PERSONAL ── */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8, marginTop: 4 }}>Treball Personal</div>
+
+          {/* TP de la tarda */}
+          <div style={{ padding: '12px 14px', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)' }}>🕐 TP de la tarda — on el col·loquem?</span>
+              {counts.tpTarda > 0
+                ? <span style={{ fontSize: 10, background: 'var(--amber-bg,#FFF8E7)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 10, padding: '1px 7px', fontWeight: 600 }}>{counts.tpTarda} docents</span>
+                : <span style={{ fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic' }}>cap docent afectat</span>
+              }
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: counts.tpTarda === 0 ? 0.45 : 1 }}>
+              {[
+                { val: 'pati',    icon: '🕐', label: 'Mou al pati del mateix dia',            desc: 'El TP passa al torn de pati si hi ha lloc' },
+                { val: 'mati',    icon: '☀️', label: 'Mou a la primera hora lliure del matí',  desc: 'Es busca el primer slot buit del matí' },
+                { val: 'eliminar',icon: '🗑️', label: 'Elimina (sense reubicació)',              desc: 'El TP s\'esborra i apareix a la llista de pendents' },
+                { val: 'altra',   icon: '✍️', label: 'Altra opció (instrucció pròpia)',         desc: 'Escriu com vols que HorarIA gestioni el TP de tarda' },
               ].map(({ val, icon, label, desc }) => (
-                <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', borderRadius: 7, cursor: 'pointer', border: `1.5px solid ${regleTpTarda === val ? 'var(--blue)' : 'var(--border)'}`, background: regleTpTarda === val ? 'var(--blue-bg)' : 'var(--bg)', transition: 'all .1s' }}>
+                <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', border: `1.5px solid ${regleTpTarda === val ? 'var(--blue)' : 'var(--border)'}`, background: regleTpTarda === val ? 'var(--blue-bg)' : 'var(--bg)', transition: 'all .1s' }}>
                   <input type="radio" name="tpTarda" value={val} checked={regleTpTarda === val} onChange={() => setRegleTpTarda(val)} style={{ marginTop: 2, accentColor: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: regleTpTarda === val ? 'var(--blue)' : 'var(--ink-2)' }}>{icon} {label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: regleTpTarda === val ? 'var(--blue)' : 'var(--ink-2)' }}>{icon} {label}</div>
                     <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>{desc}</div>
                     {val === 'altra' && regleTpTarda === 'altra' && (
-                      <textarea
-                        className="f-ctrl"
-                        rows={2}
-                        placeholder={'Exemple: "El TP de tarda passa al dimecres a la 3a hora, distribuït equitativament"'}
-                        value={regleTpAltraText}
-                        onChange={e => { e.stopPropagation(); setRegleTpAltraText(e.target.value); }}
-                        onClick={e => e.stopPropagation()}
-                        style={{ width: '100%', resize: 'vertical', marginTop: 8, fontSize: 11 }}
-                      />
+                      <textarea className="f-ctrl" rows={2} placeholder='Exemple: "El TP de tarda passa al dimecres a la 3a hora, distribuït equitativament"' value={regleTpAltraText} onChange={e => { e.stopPropagation(); setRegleTpAltraText(e.target.value); }} onClick={e => e.stopPropagation()} style={{ width: '100%', resize: 'vertical', marginTop: 8, fontSize: 11 }} />
                     )}
                   </div>
                 </label>
@@ -1362,59 +1680,96 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
             </div>
           </div>
 
-          {/* Norma 1+3: No Tallers ni Racons */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: reglesNoTallers ? '#FFF0F0' : 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesNoTallers ? '#E05050' : 'var(--border)'}`, transition: 'all .1s' }}>
-            <input type="checkbox" checked={reglesNoTallers} onChange={e => setReglesNoTallers(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#E05050', flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: 13, color: reglesNoTallers ? '#C03030' : 'var(--ink-2)', fontWeight: 600 }}>🚫 No hi ha Tallers ni Racons</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Elimina "Tallers" i "Racons" de totes les franges i amplia l'activitat anterior</div>
+          {/* TP reduït en intensiva */}
+          <div style={{ padding: '11px 14px', background: tpRetallatActiu ? 'var(--blue-bg)' : 'var(--bg-2)', borderRadius: 8, border: `1px solid ${tpRetallatActiu ? 'var(--blue)' : 'var(--border)'}`, marginBottom: 16, transition: 'all .15s' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: tpRetallatActiu ? 'var(--blue)' : 'var(--ink-2)' }}>⬇ TP reduït en jornada intensiva</span>
+                  {counts.tpRetallat > 0
+                    ? <span style={{ fontSize: 10, background: tpRetallatActiu ? 'var(--blue)' : 'var(--bg-3)', color: tpRetallatActiu ? '#fff' : 'var(--ink-3)', borderRadius: 10, padding: '1px 7px', fontWeight: 600 }}>{counts.tpRetallat} docents</span>
+                    : <span style={{ fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic' }}>cap docent afectat</span>
+                  }
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+                  Jornada sencera / 2/3: <strong>2h → 1h</strong> · Mitja jornada: <strong>1h → 30min</strong><br/>
+                  <span style={{ color: 'var(--ink-4)' }}>Après de generar, se't demanarà on assignar el temps alliberat</span>
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: tpRetallatActiu ? 'var(--blue)' : 'var(--ink-4)', fontWeight: 600 }}>{tpRetallatActiu ? 'Actiu' : 'Off'}</span>
+                <div
+                  onClick={() => setTpRetallatActiu(v => !v)}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: tpRetallatActiu ? 'var(--blue)' : 'var(--bg-3)', border: `1px solid ${tpRetallatActiu ? 'var(--blue)' : 'var(--border)'}`, cursor: 'pointer', position: 'relative', transition: 'all .2s', flexShrink: 0 }}
+                >
+                  <div style={{ position: 'absolute', top: 2, left: tpRetallatActiu ? 18 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .2s' }} />
+                </div>
+              </label>
             </div>
-          </label>
-
-          {/* Norma 4: Compactació 45+45 */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesCompactar45 ? 'var(--blue)' : 'var(--border)'}`, transition: 'all .1s' }}>
-            <input type="checkbox" checked={reglesCompactar45} onChange={e => setReglesCompactar45(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: 13, color: reglesCompactar45 ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>⏱️ Compactació 45+45 post-pati</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Si 1h amb un grup + 30min amb un altre, equilibra a 45min + 45min</div>
-            </div>
-          </label>
-
-          {/* Norma 2: ampliar fins les 13:00 — sempre actiu */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, opacity: 0.65 }}>
-            <span style={{ fontSize: 16 }}>☑</span>
-            <div>
-              <div style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>Ampliar última classe fins les 13:00</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Les franges 12:30–13:00 (i4a, i4b) s'omplen amb l'activitat de 12:15–12:30</div>
-            </div>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic', flexShrink: 0 }}>sempre actiu</span>
           </div>
 
-          {/* Especialistes: equilibrar entre grups */}
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesEquilibraEsp ? 'var(--blue)' : 'var(--border)'}`, transition: 'all .1s' }}>
-            <input type="checkbox" checked={reglesEquilibraEsp} onChange={e => setReglesEquilibraEsp(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <div style={{ fontSize: 13, color: reglesEquilibraEsp ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>↔️ Tots els grups, les mateixes sessions</div>
+          {/* ── FORMAT DEL MATÍ ── */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8 }}>Format del matí</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
+
+            {/* Tallers / Racons */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: reglesNoTallers ? '#FFF0F0' : 'var(--bg-2)', borderRadius: 8, cursor: counts.tallersRacons === 0 ? 'default' : 'pointer', border: `1px solid ${reglesNoTallers ? '#E05050' : 'var(--border)'}`, transition: 'all .1s', opacity: counts.tallersRacons === 0 ? 0.5 : 1 }}>
+              <input type="checkbox" checked={reglesNoTallers} onChange={e => setReglesNoTallers(e.target.checked)} disabled={counts.tallersRacons === 0} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#E05050', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12.5, color: reglesNoTallers ? '#C03030' : 'var(--ink-2)', fontWeight: 600 }}>🚫 No hi ha Tallers ni Racons</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Elimina "Tallers" i "Racons" de totes les franges i amplia l'activitat anterior</div>
+              </div>
+              {counts.tallersRacons > 0
+                ? <span style={{ fontSize: 10, background: reglesNoTallers ? '#FFD0D0' : 'var(--bg-3)', color: reglesNoTallers ? '#C03030' : 'var(--ink-3)', borderRadius: 10, padding: '1px 7px', fontWeight: 600, flexShrink: 0 }}>{counts.tallersRacons} docents</span>
+                : <span style={{ fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic', flexShrink: 0 }}>cap docent</span>
+              }
+            </label>
+
+            {/* Compactació 45+45 */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesCompactar45 ? 'var(--blue)' : 'var(--border)'}`, transition: 'all .1s' }}>
+              <input type="checkbox" checked={reglesCompactar45} onChange={e => setReglesCompactar45(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 12.5, color: reglesCompactar45 ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>⏱️ Compactació 45+45 post-pati</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Si 1h amb un grup + 30min amb un altre, equilibra a 45min + 45min</div>
+              </div>
+            </label>
+          </div>
+
+          {/* ── ESPECIALISTES ── */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8 }}>Especialistes</div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: counts.especialistesDeseq === 0 ? 'default' : 'pointer', border: `1px solid ${reglesEquilibraEsp ? 'var(--blue)' : 'var(--border)'}`, transition: 'all .1s', marginBottom: 16, opacity: counts.especialistesDeseq === 0 ? 0.5 : 1 }}>
+            <input type="checkbox" checked={reglesEquilibraEsp} onChange={e => setReglesEquilibraEsp(e.target.checked)} disabled={counts.especialistesDeseq === 0} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--blue)', flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12.5, color: reglesEquilibraEsp ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 600 }}>↔️ Tots els grups, les mateixes sessions</div>
               <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>Si 3rA té 3 sessions d'EF i 3rB en té 2, la IA redistribueix fins que cap grup tingui més que un altre</div>
             </div>
+            {counts.especialistesDeseq > 0
+              ? <span style={{ fontSize: 10, background: reglesEquilibraEsp ? 'var(--blue-bg)' : 'var(--bg-3)', color: reglesEquilibraEsp ? 'var(--blue)' : 'var(--ink-3)', borderRadius: 10, padding: '1px 7px', fontWeight: 600, flexShrink: 0, marginTop: 2 }}>{counts.especialistesDeseq} desequilibrats</span>
+              : <span style={{ fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic', flexShrink: 0, marginTop: 2 }}>tot equilibrat</span>
+            }
           </label>
 
-          {/* Instruccions lliures */}
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', display: 'block', marginBottom: 6 }}>
-              💬 Instruccions addicionals per a HorarIA <span style={{ fontWeight: 400, fontStyle: 'italic' }}>(opcional)</span>
+          {/* ── IA ADDICIONAL ── */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8 }}>Intel·ligència addicional</div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, color: 'var(--ink-3)', display: 'block', marginBottom: 6 }}>
+              💬 Instruccions específiques per a HorarIA <span style={{ fontStyle: 'italic', fontWeight: 400 }}>(opcional)</span>
             </label>
             <textarea
               className="f-ctrl"
               rows={3}
-              placeholder={'Exemple: "No hi ha Tallers ni Racons amb jornada intensiva. Les tutories de tarda passen al dimecres a la 3a hora."'}
+              placeholder={'Exemple: "Les tutories de tarda passen al dimecres a la 3a hora. Els especialistes comencen per cicle superior."'}
               value={instruccionsLliures}
               onChange={e => setInstruccionsLliures(e.target.value)}
               style={{ width: '100%', resize: 'vertical' }}
             />
+            <div style={{ fontSize: 10, color: 'var(--ink-4)', marginTop: 4 }}>
+              Usa-ho per a casos que els checkboxes no cobreixen. La IA ho interpretarà i aplicarà sobre l'horari generat.
+            </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Botons */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingTop: 4, borderTop: '1px solid var(--border)' }}>
             <button
               className="btn btn-primary"
               onClick={generar}
@@ -1428,17 +1783,12 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
                   </span>
                 : '✨ Generar amb HorarIA'}
             </button>
-            <button
-              className="btn btn-sm"
-              style={{ fontSize: 12, background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)' }}
-              disabled={plantillaSaving}
-              onClick={guardarPlantilla}
-            >
+            <button className="btn btn-sm" style={{ fontSize: 12, background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)' }} disabled={plantillaSaving} onClick={guardarPlantilla}>
               {plantillaSaving ? 'Guardant...' : '💾 Guardar com a plantilla'}
             </button>
           </div>
           {docents.filter(d => d.horari).length === 0 && (
-            <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>Primer puja els horaris normals des de la vista Personal.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 8 }}>Primer puja els horaris normals des de la vista Personal.</div>
           )}
         </div>
       </div>
@@ -2150,6 +2500,232 @@ function HorariInlineIntensiu({ horari, horariAnterior, tpFranges = [], franjes,
   );
 }
 
+function TPRetallatView({ casos, docents, editingMap, escolaId, onConfirm, onDiscard }) {
+  const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+  const DIE_LBL = { dilluns: 'Dilluns', dimarts: 'Dimarts', dimecres: 'Dimecres', dijous: 'Dijous', divendres: 'Divendres' };
+  const DIE_COLOR = { dilluns: 'var(--blue)', dimarts: 'var(--green)', dimecres: 'var(--amber)', dijous: '#7C3AED', divendres: '#E05050' };
+  const DIE_BG    = { dilluns: 'var(--blue-bg)', dimarts: 'var(--green-bg)', dimecres: 'var(--amber-bg)', dijous: '#F5F0FF', divendres: '#FFF0F0' };
+
+  const [assignacions, setAssignacions] = useState(() => casos.map(c => ({ ...c })));
+  const [lastSaved, setLastSaved] = useState(null);
+
+  // Save draft on mount so navigating away before any interaction preserves the state
+  useEffect(() => {
+    if (!escolaId || !casos.length) return;
+    try {
+      const initial = casos.map(c => ({ ...c }));
+      const draft = { editingMap, casos, assignacions: initial, savedAt: new Date().toISOString() };
+      localStorage.setItem(`gd_tp_draft_${escolaId}`, JSON.stringify(draft));
+    } catch {}
+  }, []);
+
+  function setAssignat(idx, val) {
+    setAssignacions(prev => {
+      const next = prev.map((a, i) => i === idx ? { ...a, assignat: val } : a);
+      try {
+        const draft = { editingMap, casos, assignacions: next, savedAt: new Date().toISOString() };
+        localStorage.setItem(`gd_tp_draft_${escolaId}`, JSON.stringify(draft));
+        setLastSaved(new Date());
+      } catch {}
+      return next;
+    });
+  }
+
+  function getGrupsOpcions(cas) {
+    const opts = [];
+    const seen = new Set();
+    for (const d of docents) {
+      if (d.id === cas.docent.id || !d.grup_principal || !editingMap[d.id]) continue;
+      for (const slot of cas.intensivaSlots) {
+        const val = ((editingMap[d.id] || {})[cas.dia]?.[slot] || '').trim();
+        if (!val || /^(tp|lliure|pati|coordinaci|càrrec|suport)/i.test(val)) continue;
+        const gnom = d.grup_principal;
+        if (!seen.has(gnom)) {
+          seen.add(gnom);
+          opts.push({ grup: gnom, tutor: d.nom.split(' ')[0], materia: val.split(/\s*[·/]\s*/)[1] || val });
+        }
+        break;
+      }
+    }
+    const cicleIdx = g => { const s = (g||'').trim(); if (/^[Ii]\d/.test(s)) return 0; const n = parseInt(s.match(/\d+/)?.[0]||'99'); return n<=2?1:n<=4?2:3; };
+    const cd = cicleIdx(cas.docent.grup_principal || '');
+    return opts.sort((a, b) => Math.abs(cicleIdx(a.grup) - cd) - Math.abs(cicleIdx(b.grup) - cd) || a.grup.localeCompare(b.grup, 'ca'));
+  }
+
+  const perDia = DIES.reduce((acc, dia) => {
+    const items = assignacions.map((a, idx) => ({ ...a, idx })).filter(a => a.dia === dia);
+    if (items.length) acc[dia] = items;
+    return acc;
+  }, {});
+
+  const jornadaLabel = j => j === 'mitja' ? 'Mitja jornada' : j === 'dos_tercos' ? '2/3 jornada' : '';
+
+  const tpMinsLabel = mins => mins >= 60 ? `${mins/60}h` : `${mins}min`;
+
+  return (
+    <div>
+      {/* Banner capçalera */}
+      <div style={{ background: 'linear-gradient(135deg, var(--amber-bg) 0%, #FEF9F0 100%)', borderRadius: 12, padding: '16px 18px', marginBottom: 20, border: '1px solid #F0D5A8', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--amber)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>⬇</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>TP retallat — Assigna el temps alliberat</span>
+            <span style={{ fontSize: 11, background: 'var(--amber)', color: '#fff', borderRadius: 20, padding: '2px 10px', fontWeight: 700 }}>
+              {casos.length} {casos.length === 1 ? 'cas' : 'casos'}
+            </span>
+          </div>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.55 }}>
+            En jornada intensiva el TP es redueix. Cada slot alliberat coincideix amb un moment en que el grup del docent ja és amb un especialista. Assigna'l a un grup de suport o deixa'l disponible per cobrir.
+          </p>
+        </div>
+      </div>
+
+      {/* Indicador auto-guardat */}
+      {lastSaved && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>
+          <span>✓</span>
+          <span>Progrés guardat automàticament · {lastSaved.toLocaleTimeString('ca', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span style={{ color: 'var(--ink-4)', fontWeight: 400 }}>— pots tancar i reprendre més tard</span>
+        </div>
+      )}
+
+      {DIES.filter(dia => perDia[dia]).map(dia => (
+        <div key={dia} style={{ marginBottom: 28 }}>
+          {/* Header de dia prominent — sticky mentre es fa scroll */}
+          <div className="tp-dia-sticky" style={{ background: DIE_BG[dia], borderLeft: `5px solid ${DIE_COLOR[dia]}`, borderRadius: '0 10px 10px 0', padding: '12px 18px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 17, fontWeight: 900, color: DIE_COLOR[dia], textTransform: 'uppercase', letterSpacing: '1.5px' }}>
+                {DIE_LBL[dia]}
+              </span>
+              <span style={{ width: 1, height: 18, background: DIE_COLOR[dia], opacity: .3 }} />
+              <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 500 }}>
+                {perDia[dia].filter(c => c.assignat !== 'disponible').length}/{perDia[dia].length} assignats
+              </span>
+            </div>
+            {/* Barra de progrés del dia */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {perDia[dia].map((c, i) => (
+                <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c.assignat !== 'disponible' ? DIE_COLOR[dia] : 'var(--border)', border: `1.5px solid ${c.assignat !== 'disponible' ? DIE_COLOR[dia] : 'var(--border-2,#ccc)'}`, transition: 'background .2s' }} />
+              ))}
+            </div>
+          </div>
+
+          <div className="tp-grid">
+            {perDia[dia].map(cas => {
+              const grupsOpts = getGrupsOpcions(cas);
+              const tpMinsMin = (cas.docent.jornada || 'sencera') === 'mitja' ? 30 : 60;
+              const tpActual = (cas.docent.tp_franges?.length || 0) * 30;
+              const tpNou = tpMinsMin;
+              const color = avatarColor(cas.docent.nom);
+              const isAssigned = cas.assignat !== 'disponible';
+
+              const CICLE_ORDER = ['Infantil', 'Cicle inicial', 'Cicle mitjà', 'Cicle superior'];
+              const cicleLabel = g => { const s=(g||'').trim(); if(/^[Ii]\d/.test(s)) return 'Infantil'; const n=parseInt(s.match(/\d+/)?.[0]||'99'); return n<=2?'Cicle inicial':n<=4?'Cicle mitjà':'Cicle superior'; };
+              const cicleGroups = grupsOpts.reduce((acc, g) => {
+                const c = cicleLabel(g.grup);
+                if (!acc[c]) acc[c] = [];
+                acc[c].push(g);
+                return acc;
+              }, {});
+
+              return (
+                <div key={cas.idx} className="tp-card">
+                  <div className="tp-card-bar" style={{ background: color }} />
+                  <div className="tp-card-body">
+
+                    {/* Zona 1: Docent */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: '50%', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, flexShrink: 0, letterSpacing: '-.5px' }}>
+                        {initials(cas.docent.nom)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {cas.docent.nom}
+                        </div>
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                          {cas.docent.grup_principal && (
+                            <span style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 5, padding: '1px 7px', fontWeight: 700 }}>
+                              {cas.docent.grup_principal}
+                            </span>
+                          )}
+                          {cas.docent.jornada && cas.docent.jornada !== 'sencera' && (
+                            <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid #F0D5A8', borderRadius: 5, padding: '1px 7px', fontWeight: 600 }}>
+                              {jornadaLabel(cas.docent.jornada)}
+                            </span>
+                          )}
+                          {cas.merged && (
+                            <span style={{ fontSize: 10, background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid var(--blue)', borderRadius: 5, padding: '1px 7px', fontWeight: 700 }}>
+                              1h · 2 franges fusionades
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Zona 2: Context */}
+                    <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 8px', color: 'var(--ink-2)' }}>
+                          🕐 {cas.horaLabel}
+                        </span>
+                        {/* TP antes → después */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 11, background: '#FFEAEA', color: '#C0392B', borderRadius: 5, padding: '2px 8px', fontWeight: 700, textDecoration: 'line-through', opacity: .8 }}>
+                            {tpMinsLabel(tpActual)}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>→</span>
+                          <span style={{ fontSize: 11, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 5, padding: '2px 8px', fontWeight: 700 }}>
+                            {tpMinsLabel(tpNou)}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.4 }}>
+                        {cas.especialistaNom
+                          ? <>El grup fa <strong style={{ color: 'var(--ink-2)' }}>{cas.materiaLabel || 'classe'}</strong> amb <strong style={{ color: 'var(--ink-2)' }}>{cas.especialistaNom}</strong></>
+                          : <span style={{ color: 'var(--ink-4)', fontStyle: 'italic' }}>Slot lliure en jornada normal</span>
+                        }
+                      </div>
+                    </div>
+
+                    {/* Zona 3: Assignació */}
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.4px' }}>Assignar a</div>
+                      <select
+                        className={`tp-select${isAssigned ? ' assigned' : ''}`}
+                        value={cas.assignat}
+                        onChange={e => setAssignat(cas.idx, e.target.value)}
+                      >
+                        {CICLE_ORDER.filter(c => cicleGroups[c]?.length).map(cicleNom => (
+                          <optgroup key={cicleNom} label={cicleNom}>
+                            {cicleGroups[cicleNom].map(g => (
+                              <option key={g.grup} value={g.grup}>
+                                Suport {g.grup} · {g.tutor} ({g.materia})
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                        <option value="disponible">⬜ Disponible per cobrir</option>
+                      </select>
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid var(--border)', marginTop: 8, gap: 10, flexWrap: 'wrap' }}>
+        <button className="btn" style={{ minHeight: 44 }} onClick={onDiscard}>← Descartar generació</button>
+        <button className="btn btn-primary" style={{ minHeight: 44 }} onClick={() => onConfirm(assignacions)}>
+          Continuar amb l'horari →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Mostra (i opcionalment edita) l'horari de l'alumnat com a taula dia × franja
 // onCellSave(dia, fid, nouVal) → activa mode edició cel·la a cel·la
 function HorariAlumnatTable({ data, franjes, onCellSave }) {
@@ -2447,10 +3023,38 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
 
   const hasIntensiu = docents.some(d => d.horari_intensiu);
 
+  const TORN_STYLE_MAP = {
+    patiA:     { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
+    patiB_inf: { color: '#2563eb', bg: '#EEF5FF', borderColor: '#BFDBFE' },
+    patiB_pri: { color: '#7C3AED', bg: '#F5F0FF', borderColor: '#DDD6FE' },
+    opatiA:    { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
+    opatiB:    { color: '#2563eb', bg: '#EEF5FF', borderColor: '#BFDBFE' },
+  };
+  const FALLBACK_COLORS = [
+    { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
+    { color: '#2563eb', bg: '#EEF5FF', borderColor: '#BFDBFE' },
+    { color: '#7C3AED', bg: '#F5F0FF', borderColor: '#DDD6FE' },
+    { color: '#d97706', bg: '#FDF3E3', borderColor: '#FCD34D' },
+  ];
+  const getTornStyle = (fId, fIdx) => TORN_STYLE_MAP[fId] || FALLBACK_COLORS[fIdx % 4];
+
+  const DIE_LBL_FULL = { dilluns: 'Dilluns', dimarts: 'Dimarts', dimecres: 'Dimecres', dijous: 'Dijous', divendres: 'Divendres' };
+
+  function addDocentTorn(dia, pid, nom) {
+    if (!nom) return;
+    setTorns(prev => {
+      const nou = JSON.parse(JSON.stringify(prev));
+      if (!nou[dia]) nou[dia] = {};
+      if (!nou[dia][pid]) nou[dia][pid] = [];
+      if (!nou[dia][pid].includes(nom)) nou[dia][pid].push(nom);
+      return nou;
+    });
+  }
+
   return (
     <>
       <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head">
+        <div className="card-head" style={{ flexWrap: 'wrap', gap: 8 }}>
           <h3>🕐 Torns de vigilància de pati</h3>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 11 }} onClick={() => suggerirAutomaticament(false)}>
@@ -2462,7 +3066,7 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
               </button>
             )}
             {baixesActives.length > 0 && (
-              <button className="btn btn-sm" style={{ background: 'var(--red-bg,#fff0f0)', color: 'var(--red)', borderColor: 'var(--red)', fontSize: 11 }} onClick={actualitzarBaixes} title="Substitueix als torns els docents de baixa pel seu substitut">
+              <button className="btn btn-sm" style={{ background: 'var(--red-bg,#fff0f0)', color: 'var(--red)', borderColor: 'var(--red)', fontSize: 11 }} onClick={actualitzarBaixes}>
                 🩹 Actualitzar baixes ({baixesActives.length})
               </button>
             )}
@@ -2474,56 +3078,99 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
             </button>
           </div>
         </div>
-        <div style={{ overflowX: 'auto', padding: '10px 16px' }}>
+
+        <div style={{ padding: '14px 16px' }}>
           {filesTorns.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--ink-3)', padding: '16px 0' }}>No hi ha franges de pati definides per a aquesta escola.</div>
-          ) : (
-            <table style={{ borderCollapse: 'collapse', minWidth: 480 }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '6px 12px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', textAlign: 'left', minWidth: 120 }}>Torn</th>
-                  {DIES_ALL.map(dia => (
-                    <th key={dia} style={{ padding: '6px 10px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 10, fontWeight: 700, color: 'var(--ink-2)', textAlign: 'center', minWidth: 100 }}>{DIE_LBL[dia]}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filesTorns.map(f => (
-                  <tr key={f.id}>
-                    <td style={{ padding: '6px 12px', border: '1px solid var(--border)', background: 'var(--bg-2)', fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', verticalAlign: 'top' }}>
-                      <div>{f.label}</div>
-                      <div style={{ fontSize: 9, color: 'var(--ink-4)' }}>{f.sub}</div>
-                    </td>
+          ) : filesTorns.map((f, fIdx) => {
+            const ts = getTornStyle(f.id, fIdx);
+            const diesCoberts = DIES_ALL.filter(dia => (torns?.[dia]?.[f.id] || []).some(Boolean)).length;
+            const totalAssignats = DIES_ALL.reduce((s, dia) => s + (torns?.[dia]?.[f.id] || []).filter(Boolean).length, 0);
+
+            return (
+              <div key={f.id} className="pati-torn">
+                {/* Header del torn */}
+                <div className="pati-torn-hdr" style={{ background: ts.bg, borderLeft: `5px solid ${ts.color}` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 16, fontWeight: 900, color: ts.color, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        {f.label}
+                      </span>
+                      <span style={{ fontSize: 11, background: ts.color, color: '#fff', borderRadius: 20, padding: '2px 10px', fontWeight: 700, flexShrink: 0 }}>
+                        {f.sub}
+                      </span>
+                    </div>
+                    {totalAssignats > 0 && (
+                      <div style={{ fontSize: 11, color: ts.color, marginTop: 4, fontWeight: 600 }}>
+                        {totalAssignats} docent{totalAssignats > 1 ? 's' : ''} assignat{totalAssignats > 1 ? 's' : ''} en total
+                      </div>
+                    )}
+                  </div>
+                  {/* Indicador de dies coberts */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, color: diesCoberts === 5 ? ts.color : 'var(--ink-3)', fontWeight: 700 }}>
+                      {diesCoberts === 5 ? '✓ ' : ''}{diesCoberts}/5 dies coberts
+                    </span>
+                    <div style={{ display: 'flex', gap: 5 }}>
+                      {DIES_ALL.map(dia => {
+                        const cobert = (torns?.[dia]?.[f.id] || []).some(Boolean);
+                        return (
+                          <div key={dia} title={DIE_LBL_FULL[dia]} style={{ width: 11, height: 11, borderRadius: '50%', background: cobert ? ts.color : 'rgba(0,0,0,.12)', border: `1.5px solid ${cobert ? ts.color : 'rgba(0,0,0,.12)'}`, transition: 'all .2s' }} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grid de dies */}
+                <div className="pati-scroll">
+                  <div className="pati-grid">
                     {DIES_ALL.map(dia => {
-                      const noms = torns?.[dia]?.[f.id] || [];
+                      const allNoms = torns?.[dia]?.[f.id] || [];
+                      const assignats = allNoms.map((nom, idx) => ({ nom, idx })).filter(({ nom }) => nom);
+                      const cobert = assignats.length > 0;
+                      const disponibles = docentsDisponibles.filter(d => !allNoms.includes(d.nom));
+
                       return (
-                        <td key={dia} style={{ padding: '6px 8px', border: '1px solid var(--border)', verticalAlign: 'top', background: noms.filter(Boolean).length ? 'var(--green-bg)' : 'var(--bg)', minWidth: 100 }}>
-                          {noms.map((nom, idx) => (
-                            <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 3, alignItems: 'center' }}>
+                        <div key={dia} className="pati-day" style={{ borderTop: `3px solid ${cobert ? ts.color : 'var(--border)'}` }}>
+                          <div className="pati-day-hdr" style={{ color: cobert ? ts.color : 'var(--ink-3)', background: cobert ? ts.bg : 'var(--bg-2)' }}>
+                            {DIE_LBL_FULL[dia]}
+                          </div>
+                          <div className="pati-day-body">
+                            {assignats.map(({ nom, idx }) => (
+                              <div key={idx} className="pati-chip">
+                                <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarColor(nom), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, flexShrink: 0 }}>
+                                  {initials(nom)}
+                                </div>
+                                <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {nom.split(' ').slice(0, 2).join(' ')}
+                                </span>
+                                <button className="pati-chip-x" onClick={() => eliminarSlot(dia, f.id, idx)}>✕</button>
+                              </div>
+                            ))}
+                            {disponibles.length > 0 && (
                               <select
-                                className="f-ctrl"
-                                value={nom || ''}
-                                onChange={e => setTornDocent(dia, f.id, idx, e.target.value)}
-                                style={{ flex: 1, fontSize: 10, padding: '2px 4px', height: 26 }}
+                                className="pati-add"
+                                style={{ borderColor: ts.color + '55' }}
+                                value=""
+                                onChange={e => addDocentTorn(dia, f.id, e.target.value)}
                               >
-                                <option value="">Selecciona...</option>
-                                {docentsDisponibles.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
+                                <option value="">+ Afegir docent...</option>
+                                {disponibles.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
                               </select>
-                              <button onClick={() => eliminarSlot(dia, f.id, idx)} style={{ fontSize: 10, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--red)', padding: '0 2px', lineHeight: 1 }}>✕</button>
-                            </div>
-                          ))}
-                          <button
-                            onClick={() => afegirSlot(dia, f.id)}
-                            style={{ fontSize: 10, color: 'var(--green)', border: 'none', background: 'none', cursor: 'pointer', padding: '2px 0', lineHeight: 1, fontWeight: 700 }}
-                          >+ Afegir</button>
-                        </td>
+                            )}
+                            {disponibles.length === 0 && assignats.length === 0 && (
+                              <span style={{ fontSize: 11, color: 'var(--ink-4)', fontStyle: 'italic', padding: '4px 2px' }}>Tots assignats</span>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </>
@@ -2936,22 +3583,40 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   const ciclesDetectats = useMemo(() => detectarCiclesGrups([...grupsSeleccionats]), [grupsSeleccionats]);
   const recomanacio = useMemo(() => calcRecomanacioRatio(numAlumnes, ciclesDetectats, tipusActivitat), [numAlumnes, ciclesDetectats, tipusActivitat]);
 
+  const isWeekend = (() => { const dw = new Date(date + 'T12:00:00').getDay(); return dw === 0 || dw === 6; })();
+
   return (
     <>
+      {/* Banner èxit */}
       {savedOk && (
-        <div style={{ padding: '10px 14px', background: 'var(--green-bg)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 14, fontSize: 13, lineHeight: 1.5 }}>
-          ✅ <strong>{savedOk.count} avis{savedOk.count !== 1 ? 'os' : ''} creats</strong> per la sortida "{savedOk.title}"
-          {savedOk.dies > 1
-            ? ` (${fmtData(savedOk.date)} – ${fmtData(savedOk.dateFi)} · ${savedOk.dies} dies)`
-            : ` (${fmtData(savedOk.date)})`}.
-          La IA ja sap quins grups surten. Gestiona les cobertures des de <strong>Avisos</strong>.
+        <div style={{ background: 'linear-gradient(135deg, var(--green-bg) 0%, #F0FDF4 100%)', border: '1px solid var(--green-mid)', borderRadius: 12, padding: '16px 18px', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>✅</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', marginBottom: 4 }}>
+              {savedOk.count} avís{savedOk.count !== 1 ? 'os' : ''} creats per "{savedOk.title}"
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+              {savedOk.dies > 1
+                ? `${fmtData(savedOk.date)} – ${fmtData(savedOk.dateFi)} · ${savedOk.dies} dies`
+                : fmtData(savedOk.date)}
+              {' · '}La IA ja sap quins grups surten. Gestiona les cobertures des de <strong>Avisos</strong>.
+            </div>
+          </div>
+          <button onClick={() => setSavedOk(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
         </div>
       )}
 
+      {/* ── FORMULARI ── */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head"><h3>🚌 Nova sortida escolar</h3></div>
-        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'end' }}>
+
+        {/* Pas 1: Bàsics */}
+        <div className="sortida-step">
+          <div className="sortida-step-hdr">
+            <div className="sortida-step-num">1</div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)' }}>Dades bàsiques</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'end', marginBottom: 10 }}>
             <div>
               <label className="f-label">Nom de la sortida</label>
               <input className="f-ctrl" placeholder="Ex: Visita al Museu, Colònies 5è..." value={title} onChange={e => setTitle(e.target.value)} />
@@ -2965,136 +3630,119 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
               <InputDataDMY value={dateFi} min={date} onChange={iso => setDateFi(iso)} style={{ width: 130 }} />
             </div>
           </div>
-
+          {isWeekend && <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600, marginBottom: 8 }}>⚠ La data seleccionada és cap de setmana.</div>}
           <div>
-            <label className="f-label">Descripció de l'activitat <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(opcional)</span></label>
-            <textarea
-              className="f-ctrl"
-              placeholder="Explica de què va la sortida, itinerari, observacions..."
-              rows={3}
-              value={descripcio}
-              onChange={e => setDescripcio(e.target.value)}
-              style={{ resize: 'vertical', minHeight: 72 }}
-            />
+            <label className="f-label">Descripció <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}>(opcional)</span></label>
+            <textarea className="f-ctrl" placeholder="Explica de què va la sortida, itinerari, observacions..." rows={2} value={descripcio} onChange={e => setDescripcio(e.target.value)} style={{ resize: 'vertical', minHeight: 60 }} />
           </div>
+        </div>
 
-          <div>
-            <label className="f-label">Tipus d'activitat</label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              {[['sortida', '🚌 Sortida'], ['colonies', '🏕️ Colònies']].map(([val, lab]) => (
-                <button key={val} type="button" className="btn btn-sm"
-                  style={tipusActivitat === val
-                    ? { background: 'var(--blue)', color: '#fff', border: 'none', fontWeight: 700 }
-                    : { background: 'var(--bg-2)', borderColor: 'var(--border)' }}
-                  onClick={() => setTipusActivitat(val)}>{lab}</button>
-              ))}
-            </div>
+        {/* Pas 2: Tipus i document */}
+        <div className="sortida-step">
+          <div className="sortida-step-hdr">
+            <div className="sortida-step-num">2</div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)' }}>Tipus i document</span>
           </div>
-
-          <div>
-            <label className="f-label">Document adjunt <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(opcional · PDF, Word...)</span></label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 10px', border: '1px dashed var(--border)', borderRadius: 6, fontSize: 12, color: 'var(--ink-3)', background: 'var(--bg-2)' }}>
-              <span>📎</span>
-              {docSortida
-                ? <span style={{ flex: 1, color: 'var(--ink)', fontWeight: 500 }}>{docSortida.name}</span>
-                : <span style={{ flex: 1 }}>Puja un document amb l'organització de la sortida...</span>
-              }
-              {docSortida && (
-                <button type="button" onClick={e => { e.preventDefault(); setDocSortida(null); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
-              )}
-              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg" style={{ display: 'none' }}
-                onChange={e => setDocSortida(e.target.files[0] || null)} />
-            </label>
-            {analitzantDoc && (
-              <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--blue)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid var(--blue)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
-                Analitzant document amb IA...
-              </div>
-            )}
-            {!analitzantDoc && numAlumnes && (
-              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--green-dark, var(--green))', fontWeight: 600 }}>
-                📊 {numAlumnes} alumnes detectats al document
-              </div>
-            )}
-            {!analitzantDoc && demanaManual && (
-              <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--amber-bg)', border: '1px solid var(--border)', borderRadius: 6 }}>
-                <div style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 600, marginBottom: 6 }}>
-                  ⚠ No s'ha pogut detectar el nombre d'alumnes al document. Introdueix-lo manualment:
-                </div>
-                <input
-                  type="number" min="1" className="f-ctrl"
-                  style={{ width: 100 }}
-                  placeholder="Ex: 47"
-                  value={numAlumnesInput}
-                  onChange={e => { setNumAlumnesInput(e.target.value); setNumAlumnes(parseInt(e.target.value, 10) || null); }}
-                />
-              </div>
-            )}
-            {recomanacio && (
-              <div style={{ marginTop: 8, padding: '10px 12px', background: docentsAniran.size >= recomanacio.recomanats ? 'var(--green-bg)' : 'var(--amber-bg)', border: '1px solid var(--border)', borderRadius: 6 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>
-                  📋 Recomanació de ràtio ({tipusActivitat === 'colonies' ? 'colònies' : 'sortida'})
-                </div>
-                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', marginBottom: 4 }}>
-                  {numAlumnes} alumnes · {ciclesDetectats.map(c => CICLE_LABEL[c] || c).join(' + ')} · Ràtio {recomanacio.ratio}:1{ciclesDetectats.length > 1 ? ' (el més restrictiu)' : ''}
-                </div>
-                {docentsAniran.size >= recomanacio.recomanats
-                  ? <div style={{ fontSize: 12, color: 'var(--green-dark, var(--green))', fontWeight: 600 }}>✓ Cobert — tens {docentsAniran.size} professionals, mínim {recomanacio.recomanats}</div>
-                  : <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚠ Calen mínim {recomanacio.recomanats} professionals — tens {docentsAniran.size}, falten {recomanacio.recomanats - docentsAniran.size}</div>
-                }
-              </div>
-            )}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {[['sortida', '🚌', 'Sortida'], ['colonies', '🏕️', 'Colònies']].map(([val, ico, lab]) => (
+              <button key={val} type="button"
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 8, border: `2px solid ${tipusActivitat === val ? 'var(--blue)' : 'var(--border)'}`, background: tipusActivitat === val ? 'var(--blue-bg)' : 'var(--bg-2)', color: tipusActivitat === val ? 'var(--blue)' : 'var(--ink-2)', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all .15s' }}
+                onClick={() => setTipusActivitat(val)}>
+                <span>{ico}</span><span>{lab}</span>
+                {tipusActivitat === val && <span style={{ fontSize: 10 }}>✓</span>}
+              </button>
+            ))}
           </div>
-
-          {(() => { const dw = new Date(date + 'T12:00:00').getDay(); return dw === 0 || dw === 6; })() && (
-            <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚠ La data seleccionada és cap de setmana.</div>
-          )}
-
-          <div>
-            <label className="f-label">Grups que van de sortida</label>
-            {allGrups.length === 0
-              ? <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>Primer puja els horaris dels tutors des de Personal.</p>
-              : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {allGrups.map(g => (
-                    <button key={g} className="btn btn-sm"
-                      style={grupsSeleccionats.has(g)
-                        ? { background: 'var(--blue)', color: '#fff', border: 'none', fontWeight: 700 }
-                        : { background: 'var(--bg-2)', borderColor: 'var(--border)' }
-                      }
-                      onClick={() => toggleGrup(g)}
-                    >{g}</button>
-                  ))}
-                </div>
-              )
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', border: `1.5px dashed ${docSortida ? 'var(--blue)' : 'var(--border)'}`, borderRadius: 8, fontSize: 12, color: docSortida ? 'var(--blue)' : 'var(--ink-3)', background: docSortida ? 'var(--blue-bg)' : 'var(--bg-2)', transition: 'all .15s' }}>
+            <span style={{ fontSize: 18 }}>📎</span>
+            {docSortida
+              ? <span style={{ flex: 1, fontWeight: 600 }}>{docSortida.name}</span>
+              : <span style={{ flex: 1 }}>Adjunta un document (PDF, Word, imatge...)</span>
             }
+            {docSortida
+              ? <button type="button" onClick={e => { e.preventDefault(); setDocSortida(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 16, lineHeight: 1, padding: 0 }}>✕</button>
+              : <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>opcional</span>
+            }
+            <input type="file" accept=".pdf,.doc,.docx,.png,.jpg" style={{ display: 'none' }} onChange={e => setDocSortida(e.target.files[0] || null)} />
+          </label>
+          {analitzantDoc && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--blue)', display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', border: '2px solid var(--blue)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+              Analitzant alumnes amb IA...
+            </div>
+          )}
+          {!analitzantDoc && numAlumnes && (
+            <div style={{ marginTop: 8, padding: '8px 12px', background: 'var(--green-bg)', border: '1px solid var(--green-mid)', borderRadius: 7, fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
+              📊 {numAlumnes} alumnes detectats al document
+            </div>
+          )}
+          {!analitzantDoc && demanaManual && (
+            <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--amber-bg)', border: '1px solid #F0D5A8', borderRadius: 7 }}>
+              <div style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 600, marginBottom: 8 }}>⚠ No s'ha pogut detectar el nombre d'alumnes. Introdueix-lo:</div>
+              <input type="number" min="1" className="f-ctrl" style={{ width: 110 }} placeholder="Ex: 47" value={numAlumnesInput} onChange={e => { setNumAlumnesInput(e.target.value); setNumAlumnes(parseInt(e.target.value, 10) || null); }} />
+            </div>
+          )}
+          {recomanacio && (
+            <div style={{ marginTop: 8, padding: '10px 14px', background: docentsAniran.size >= recomanacio.recomanats ? 'var(--green-bg)' : 'var(--amber-bg)', border: `1px solid ${docentsAniran.size >= recomanacio.recomanats ? 'var(--green-mid)' : '#F0D5A8'}`, borderRadius: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3 }}>📋 Ràtio recomanada ({tipusActivitat === 'colonies' ? 'colònies' : 'sortida'})</div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 5 }}>
+                {numAlumnes} alumnes · {ciclesDetectats.map(c => CICLE_LABEL[c] || c).join(' + ')} · {recomanacio.ratio}:1{ciclesDetectats.length > 1 ? ' (el més restrictiu)' : ''}
+              </div>
+              {docentsAniran.size >= recomanacio.recomanats
+                ? <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Ràtio coberta — {docentsAniran.size} professionals, mínim {recomanacio.recomanats}</div>
+                : <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚠ Calen {recomanacio.recomanats} professionals — en falten {recomanacio.recomanats - docentsAniran.size}</div>
+              }
+            </div>
+          )}
+        </div>
+
+        {/* Pas 3: Grups */}
+        <div className="sortida-step">
+          <div className="sortida-step-hdr">
+            <div className="sortida-step-num">3</div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)' }}>Grups que surten</span>
+            {grupsSeleccionats.size > 0 && <span style={{ fontSize: 11, background: 'var(--blue)', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{grupsSeleccionats.size} seleccionat{grupsSeleccionats.size > 1 ? 's' : ''}</span>}
           </div>
+          {allGrups.length === 0
+            ? <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>Primer puja els horaris dels tutors des de Personal.</p>
+            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {allGrups.map(g => (
+                  <button key={g} className={`grup-pill${grupsSeleccionats.has(g) ? ' actiu' : ''}`} onClick={() => toggleGrup(g)}>{g}</button>
+                ))}
+              </div>
+          }
         </div>
       </div>
 
+      {/* ── QUI VA ── */}
       {grupsSeleccionats.size > 0 && (
         <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-head">
-            <h3>👥 Qui va a la sortida</h3>
-            <span className="sp sp-blue">{docentsAniran.size} docents</span>
+          {/* Capçalera */}
+          <div className="card-head" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <h3>👥 Qui va a la sortida</h3>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>Tutors/es: van amb el grup, sense cobertura. Acompanyants extra: cal cobrir les seves franges.</div>
+            </div>
+            <span style={{ fontSize: 11, background: 'var(--blue)', color: '#fff', borderRadius: 20, padding: '3px 12px', fontWeight: 700, alignSelf: 'center' }}>{docentsAniran.size} seleccionats</span>
           </div>
 
-          <div style={{ padding: '7px 14px', background: 'var(--blue-bg)', borderBottom: '1px solid var(--border)', fontSize: 11.5, color: 'var(--blue)' }}>
-            ℹ️ Tutors/es: avís sense cobertura del grup (surten amb els alumnes). Acompanyants extra: cal cobrir les seves franges habituals.
-          </div>
-
+          {/* Tutors */}
           {tutorsDeGrups.length > 0 && (
             <>
-              <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
-                Tutors/es dels grups · Surten amb els alumnes
+              <div className="sortida-ppl-hdr" style={{ '--sph-color': '#16a34a', '--sph-bg': 'var(--green-bg)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '.8px' }}>Tutors/es del grup</span>
+                  <span style={{ fontSize: 10, background: '#16a34a', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{tutorsDeGrups.length}</span>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Surten amb els alumnes · sense cobertura</span>
               </div>
               {tutorsDeGrups.map(d => (
-                <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} isTutor leaveStatus={estatBaixa(d.nom)} />
+                <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} isTutor leaveStatus={estatBaixa(d.nom)} rowColor="#16a34a" rowBg="var(--green-bg)" />
               ))}
             </>
           )}
 
+          {/* Especialistes */}
           {especialistesSuggerits.length > 0 && (() => {
             const ambDia = especialistesSuggerits.filter(e => e.dayGroupSlots > 0);
             const nomesSetmana = especialistesSuggerits.filter(e => e.dayGroupSlots === 0);
@@ -3105,34 +3753,29 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
               <>
                 {ambDia.length > 0 && (
                   <>
-                    <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--green-bg)', borderBottom: '1px solid var(--border)' }}>
-                      🎯 Especialistes de la sortida · Menys cobertura necessària
+                    <div className="sortida-ppl-hdr" style={{ '--sph-color': '#2563eb', '--sph-bg': 'var(--blue-bg)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '.8px' }}>🎯 Millor opció</span>
+                        <span style={{ fontSize: 10, background: '#2563eb', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{ambDia.length}</span>
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Especialistes amb sessions del grup durant la sortida</span>
                     </div>
                     {ambDia.slice(0, 8).map(({ d, count, dayGroupSlots, leaveStatus }) => (
-                      <SortidaDocentsRow
-                        key={d.id} d={d}
-                        selected={docentsAniran.has(d.nom)}
-                        onToggle={() => toggleDocent(d.nom)}
-                        leaveStatus={leaveStatus}
-                        dayGroupSlots={dayGroupSlots}
-                        hint={`${dayGroupSlots} fr. amb ${grupsLabel} ${periodeLabel} · ${count} sessions/setm.`}
-                      />
+                      <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} dayGroupSlots={dayGroupSlots} hint={`${dayGroupSlots} fr. amb ${grupsLabel} ${periodeLabel} · ${count} sessions/setm.`} rowColor="#2563eb" rowBg="var(--blue-bg)" />
                     ))}
                   </>
                 )}
                 {nomesSetmana.length > 0 && (
                   <>
-                    <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
-                      Especialistes per afinitat setmanal
+                    <div className="sortida-ppl-hdr" style={{ '--sph-color': 'var(--ink-3)', '--sph-bg': 'var(--bg-2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.8px' }}>Per afinitat setmanal</span>
+                        <span style={{ fontSize: 10, background: 'var(--ink-3)', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{nomesSetmana.length}</span>
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>No tenen sessions amb el grup durant la sortida</span>
                     </div>
                     {nomesSetmana.slice(0, 6).map(({ d, count, leaveStatus }) => (
-                      <SortidaDocentsRow
-                        key={d.id} d={d}
-                        selected={docentsAniran.has(d.nom)}
-                        onToggle={() => toggleDocent(d.nom)}
-                        leaveStatus={leaveStatus}
-                        hint={`${count} sessions/setm. amb ${grupsLabel}`}
-                      />
+                      <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} hint={`${count} sessions/setm. amb ${grupsLabel}`} rowColor="var(--ink-2)" rowBg="var(--bg-2)" />
                     ))}
                   </>
                 )}
@@ -3140,86 +3783,69 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             );
           })()}
 
-          {/* Acompanyants manuals ja afegits */}
+          {/* Manuals afegits */}
           {docentsManualsAfegits.length > 0 && (
             <>
-              <div style={{ padding: '5px 16px 4px', fontSize: 9.5, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--purple-bg)', borderBottom: '1px solid var(--border)' }}>
-                Acompanyants afegits manualment
+              <div className="sortida-ppl-hdr" style={{ '--sph-color': 'var(--purple)', '--sph-bg': 'var(--purple-bg)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '.8px' }}>Afegits manualment</span>
+                  <span style={{ fontSize: 10, background: 'var(--purple)', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{docentsManualsAfegits.length}</span>
+                </div>
               </div>
               {docentsManualsAfegits.map(nom => {
                 const d = docents.find(x => x.nom === nom) || { nom, rol: '', grup_principal: '' };
-                return (
-                  <SortidaDocentsRow key={nom} d={d} selected onToggle={() => toggleDocent(nom)} leaveStatus={estatBaixa(nom)} isManual />
-                );
+                return <SortidaDocentsRow key={nom} d={d} selected onToggle={() => toggleDocent(nom)} leaveStatus={estatBaixa(nom)} isManual rowColor="var(--purple)" rowBg="var(--purple-bg)" />;
               })}
             </>
           )}
 
-          {/* Botó afegir acompanyant manual */}
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+          {/* Botó afegir manual */}
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
             {!showAcompanyantPicker ? (
-              <button
-                className="btn btn-sm"
-                style={{ background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)', fontWeight: 600 }}
-                onClick={() => setShowAcompanyantPicker(true)}
-              >
+              <button className="btn btn-sm" style={{ background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)', fontWeight: 600 }} onClick={() => setShowAcompanyantPicker(true)}>
                 + Afegir acompanyant per criteri personal
               </button>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--purple)' }}>Cerca un docent del centre</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)' }}>Cerca un docent del centre</div>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--ink-3)', pointerEvents: 'none' }}>🔍</span>
-                  <input
-                    autoFocus
-                    className="f-ctrl"
-                    style={{ paddingLeft: 28 }}
-                    placeholder="Nom del docent..."
-                    value={acompanyantSearch}
-                    onChange={e => setAcompanyantSearch(e.target.value)}
-                  />
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--ink-3)', pointerEvents: 'none' }}>🔍</span>
+                  <input autoFocus className="f-ctrl" style={{ paddingLeft: 32 }} placeholder="Nom del docent..." value={acompanyantSearch} onChange={e => setAcompanyantSearch(e.target.value)} />
                 </div>
-                <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)' }}>
-                  {docentsManualsDisponibles.length === 0 && (
-                    <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--ink-3)' }}>Cap docent coincident</div>
-                  )}
+                <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface)', overflow: 'hidden' }}>
+                  {docentsManualsDisponibles.length === 0 && <div style={{ padding: '14px 16px', fontSize: 12, color: 'var(--ink-3)' }}>Cap docent coincident</div>}
                   {docentsManualsDisponibles.map(d => {
                     const jaAfegit = docentsAniran.has(d.nom);
                     const ls = estatBaixa(d.nom);
                     return (
-                      <div key={d.id}
-                        onClick={() => !jaAfegit && afegirManual(d.nom)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: jaAfegit ? 'default' : 'pointer', background: jaAfegit ? 'var(--bg-2)' : undefined, opacity: jaAfegit ? 0.5 : 1 }}
+                      <div key={d.id} onClick={() => !jaAfegit && afegirManual(d.nom)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', cursor: jaAfegit ? 'default' : 'pointer', opacity: jaAfegit ? 0.45 : 1, transition: 'background .1s' }}
                       >
-                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                          {initials(d.nom)}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12.5, fontWeight: 500 }}>{d.nom}</div>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{initials(d.nom)}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.nom}</div>
                           <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>{rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}</div>
                         </div>
                         {ls?.status === 'pendent' && <span style={{ fontSize: 9, color: 'var(--amber)', fontWeight: 700, flexShrink: 0 }}>⚠ Permís</span>}
-                        {jaAfegit ? <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>Ja afegit</span> : <span style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 700 }}>+</span>}
+                        <span style={{ fontSize: 12, color: jaAfegit ? 'var(--ink-3)' : 'var(--purple)', fontWeight: 700, flexShrink: 0 }}>{jaAfegit ? '✓' : '+'}</span>
                       </div>
                     );
                   })}
                 </div>
-                <button className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => { setShowAcompanyantPicker(false); setAcompanyantSearch(''); }}>
-                  Tancar
-                </button>
+                <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => { setShowAcompanyantPicker(false); setAcompanyantSearch(''); }}>Tancar</button>
               </div>
             )}
           </div>
 
-          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {!title.trim() && (
-              <div style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600 }}>⚠ Introdueix el nom de la sortida per poder confirmar.</div>
-            )}
-            {ambEmailCount > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 500 }}>✉ S'enviarà correu a {ambEmailCount} participant{ambEmailCount !== 1 ? 's' : ''} amb correu configurat.</div>
-            )}
-            <button className="btn btn-primary btn-full" onClick={confirmarSortida} disabled={saving || !title.trim()}>
-              {saving ? 'Creant avisos i enviant correus...' : `🚌 Crear ${docentsAniran.size} avís${docentsAniran.size !== 1 ? 'os' : ''} i registrar sortida`}
+          {/* Confirmació */}
+          <div style={{ padding: '14px 16px', background: 'var(--bg-2)', borderTop: '2px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {!title.trim() && <div style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>⚠ Introdueix el nom de la sortida per poder confirmar.</div>}
+            {ambEmailCount > 0 && <div style={{ fontSize: 11.5, color: 'var(--blue)', fontWeight: 500 }}>✉ S'enviarà correu a {ambEmailCount} participant{ambEmailCount !== 1 ? 's' : ''} amb correu configurat.</div>}
+            <button className="btn btn-primary btn-full" style={{ minHeight: 46, fontSize: 14 }} onClick={confirmarSortida} disabled={saving || !title.trim()}>
+              {saving
+                ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ display: 'inline-block', width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,.4)', borderTopColor: '#fff', animation: 'spin .8s linear infinite' }} />Creant avisos i enviant correus...</span>
+                : `🚌 Crear ${docentsAniran.size} avís${docentsAniran.size !== 1 ? 'os' : ''} i registrar sortida`
+              }
             </button>
           </div>
         </div>
@@ -3228,40 +3854,38 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
   );
 }
 
-function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStatus, hint, dayGroupSlots }) {
+function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStatus, hint, dayGroupSlots, rowColor = 'var(--blue)', rowBg = 'var(--blue-bg)' }) {
   const isBaixa   = leaveStatus?.status === 'baixa';
   const isPendent = leaveStatus?.status === 'pendent';
   const fmtFi = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
+  const avatBg = (isBaixa || isPendent) ? 'var(--amber)' : selected ? rowColor : avatarColor(d.nom);
 
   return (
     <div
-      onClick={onToggle}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
-        borderBottom: '1px solid var(--border)',
-        background: isBaixa ? 'var(--amber-bg)' : isPendent ? 'var(--amber-bg)' : selected ? 'var(--blue-bg)' : undefined,
-        cursor: 'pointer', transition: 'background .1s',
-        opacity: isBaixa ? 0.65 : 1,
-      }}
+      onClick={isBaixa ? undefined : onToggle}
+      className={`sortida-row${selected ? ' sel' : ''}${isBaixa ? ' baixa' : ''}`}
+      style={{ '--row-color': rowColor, '--row-bg': rowBg }}
     >
-      <div style={{ width: 32, height: 32, borderRadius: '50%', background: (isBaixa || isPendent) ? 'var(--amber)' : selected ? 'var(--blue)' : avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', background: avatBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff', flexShrink: 0, transition: 'background .15s' }}>
         {initials(d.nom)}
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: selected ? 600 : 400, color: isBaixa ? 'var(--ink-3)' : isPendent ? 'var(--amber)' : selected ? 'var(--blue)' : 'var(--ink)', textDecoration: isBaixa ? 'line-through' : undefined }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: isBaixa ? 'var(--ink-3)' : isPendent ? 'var(--amber)' : selected ? rowColor : 'var(--ink)', textDecoration: isBaixa ? 'line-through' : undefined, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'color .15s' }}>
           {d.nom}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>
-          {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}
-          {hint && <span style={{ marginLeft: 6, color: dayGroupSlots > 0 ? 'var(--green)' : 'var(--ink-4)' }}>· {hint}</span>}
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span>{rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''}</span>
+          {hint && <span style={{ color: dayGroupSlots > 0 ? 'var(--green)' : 'var(--ink-4)' }}>· {hint}</span>}
         </div>
       </div>
-      {isBaixa   && <span className="sp sp-amber" style={{ fontSize: 9.5, flexShrink: 0 }}>🩹 De baixa</span>}
-      {isPendent && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 7px', fontWeight: 700, whiteSpace: 'nowrap' }}>⚠ Permís fins {fmtFi(leaveStatus.fi)}</span>}
-      {!leaveStatus && dayGroupSlots > 0 && <span style={{ fontSize: 9.5, flexShrink: 0, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 7px', fontWeight: 700 }}>🎯 {dayGroupSlots} fr.</span>}
-      {!leaveStatus && isTutor && <span className="sp sp-blue" style={{ fontSize: 9.5, flexShrink: 0 }}>tutor/a</span>}
-      <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected ? 'var(--blue)' : 'var(--border)'}`, background: selected ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .1s' }}>
-        {selected && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+      <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0 }}>
+        {isBaixa   && <span style={{ fontSize: 9, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 6px', fontWeight: 700, whiteSpace: 'nowrap' }}>🩹 Baixa</span>}
+        {isPendent && <span style={{ fontSize: 9, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 6px', fontWeight: 700, whiteSpace: 'nowrap' }}>⚠ Permís fins {fmtFi(leaveStatus.fi)}</span>}
+        {!leaveStatus && dayGroupSlots > 0 && <span style={{ fontSize: 9, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 6px', fontWeight: 700 }}>🎯 {dayGroupSlots} fr.</span>}
+        {!leaveStatus && isTutor && <span style={{ fontSize: 9, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 6px', fontWeight: 700 }}>tutor/a</span>}
+        <div className="sortida-chk">
+          {selected && <span style={{ fontSize: 10, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+        </div>
       </div>
     </div>
   );
@@ -3822,7 +4446,8 @@ function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSav
   const currFileRef = useRef(null);
   const [loadingCurriculum, setLoadingCurriculum] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [showAlumnatIntensiva, setShowAlumnatIntensiva] = useState(false); // vista intensiva alumnat
+  const [showAlumnatIntensiva, setShowAlumnatIntensiva] = useState(true); // per defecte: format intensiu
+  const [showEquipMestres, setShowEquipMestres] = useState(false); // taula mestres per franja, col·lapsada
 
   // Filtra sempre per escola per evitar que docents d'altres escoles apareguen
   const docentsPropis = useMemo(() =>
@@ -3851,7 +4476,7 @@ function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSav
     const parsed = parseHorariAlumnat(raw);
     setCurriculumText(parsed ? JSON.stringify(parsed, null, 2) : (raw || ''));
     setCurriculumEdit(false);
-    setShowAlumnatIntensiva(false);
+    setShowAlumnatIntensiva(true); // sempre intensiva per defecte
   }, [activeGrup, configIntensiva]);
 
   async function guardarCurriculum() {
@@ -4033,91 +4658,95 @@ Retorna ÚNICAMENT JSON sense cap altre text:
 
       {activeGrup && (
         <div className="card">
-          <div className="card-head">
-            <h3>Horari del {activeGrup}</h3>
+          <div className="card-head" style={{ cursor: 'pointer' }} onClick={() => setShowEquipMestres(o => !o)}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: 'var(--ink-3)', transition: 'transform .2s', display: 'inline-block', transform: showEquipMestres ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+              Equip de mestres al grup · {activeGrup}
+            </h3>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {tutor && <span className="sp sp-green">Tutor/a: {tutor.nom.split(' ')[0]}</span>}
-              {onCellSave && (
+              {onCellSave && showEquipMestres && (
                 <button
                   className="btn btn-sm"
                   style={isEditMode
                     ? { background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 12, fontWeight: 600 }
                     : { background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12, fontWeight: 600 }
                   }
-                  onClick={() => { setIsEditMode(o => !o); setEditing(null); setAddingEntry(null); }}
+                  onClick={e => { e.stopPropagation(); setIsEditMode(o => !o); setEditing(null); setAddingEntry(null); }}
                 >{isEditMode ? '✓ Fet' : '✏️ Editar'}</button>
               )}
-              <span className="sp sp-blue">Professionals al grup per franja</span>
             </div>
           </div>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: 10 }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 440 }}>
-              <thead>
-                <tr>
-                  <th colSpan={2} style={{ ...thS, textAlign: 'left' }}>Franja</th>
-                  {DIES.map(d => <th key={d} style={thS}>{DIE_ABBR[d]}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleFranjes.map(f => {
-                  const grp = horaGroups[f.hora] || [];
-                  const isFirst = grp[0]?.id === f.id;
-                  return (
-                    <tr key={f.id}>
-                      {isFirst && (
-                        <td rowSpan={grp.length} style={{ ...tdS, fontWeight: 700, verticalAlign: 'middle', color: 'var(--ink-2)', width: 56 }}>{f.label}</td>
-                      )}
-                      <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
-                      {DIES.map(dia => {
-                        const entries = grupHorari[dia]?.[f.id] || [];
-                        const primaris = entries.filter(e => !rolBadgeRivo(e, activeGrup));
-                        const suports  = entries.filter(e =>  rolBadgeRivo(e, activeGrup));
-                        const hasCoverage = entries.length > 0;
-                        const isAdding = addingEntry?.dia === dia && addingEntry?.fid === f.id;
-                        return (
-                          <td key={dia} style={{
-                            padding: '3px 4px', border: '1px solid var(--border)',
-                            background: hasCoverage ? 'var(--blue-bg)' : 'var(--bg)',
-                            textAlign: 'center', minWidth: 80, overflow: 'visible',
-                          }}>
-                            {hasCoverage && (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                                {primaris.map(e => renderEntry(e, dia, f.id))}
-                                {suports.map(e => renderEntry(e, dia, f.id))}
-                              </div>
-                            )}
-                            {isAdding ? (
-                              <>
-                                <input
-                                  autoFocus
-                                  list="rivo-grups-docents-list"
-                                  value={addVal}
-                                  onChange={ev => setAddVal(ev.target.value)}
-                                  onBlur={commitAddEntry}
-                                  onKeyDown={ev => { if (ev.key === 'Enter') commitAddEntry(); if (ev.key === 'Escape') { setAddingEntry(null); setAddVal(''); } }}
-                                  placeholder="Nom..."
-                                  style={{ width: 72, border: 'none', outline: '2px solid var(--green)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
-                                />
-                                <datalist id="rivo-grups-docents-list">
-                                  {docentsPropis.map(d => <option key={d.id} value={d.nom} />)}
-                                </datalist>
-                              </>
-                            ) : (
-                              <span
-                                onClick={() => startAddEntry(dia, f.id)}
-                                style={{ fontSize: hasCoverage ? 9 : 12, color: hasCoverage ? 'var(--ink-4)' : 'var(--ink-3)', cursor: 'pointer', display: 'block', padding: '1px 0', lineHeight: 1, opacity: hasCoverage ? 0.4 : 0.6 }}
-                                title="Afegir professional"
-                              >{hasCoverage ? '+' : '+'}</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {showEquipMestres && (
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: 10 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 440 }}>
+                <thead>
+                  <tr>
+                    <th colSpan={2} style={{ ...thS, textAlign: 'left' }}>Franja</th>
+                    {DIES.map(d => <th key={d} style={thS}>{DIE_ABBR[d]}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleFranjes.map(f => {
+                    const grp = horaGroups[f.hora] || [];
+                    const isFirst = grp[0]?.id === f.id;
+                    return (
+                      <tr key={f.id}>
+                        {isFirst && (
+                          <td rowSpan={grp.length} style={{ ...tdS, fontWeight: 700, verticalAlign: 'middle', color: 'var(--ink-2)', width: 56 }}>{f.label}</td>
+                        )}
+                        <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
+                        {DIES.map(dia => {
+                          const entries = grupHorari[dia]?.[f.id] || [];
+                          const primaris = entries.filter(e => !rolBadgeRivo(e, activeGrup));
+                          const suports  = entries.filter(e =>  rolBadgeRivo(e, activeGrup));
+                          const hasCoverage = entries.length > 0;
+                          const isAdding = addingEntry?.dia === dia && addingEntry?.fid === f.id;
+                          return (
+                            <td key={dia} style={{
+                              padding: '3px 4px', border: '1px solid var(--border)',
+                              background: hasCoverage ? 'var(--blue-bg)' : 'var(--bg)',
+                              textAlign: 'center', minWidth: 80, overflow: 'visible',
+                            }}>
+                              {hasCoverage && (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                  {primaris.map(e => renderEntry(e, dia, f.id))}
+                                  {suports.map(e => renderEntry(e, dia, f.id))}
+                                </div>
+                              )}
+                              {isAdding ? (
+                                <>
+                                  <input
+                                    autoFocus
+                                    list="rivo-grups-docents-list"
+                                    value={addVal}
+                                    onChange={ev => setAddVal(ev.target.value)}
+                                    onBlur={commitAddEntry}
+                                    onKeyDown={ev => { if (ev.key === 'Enter') commitAddEntry(); if (ev.key === 'Escape') { setAddingEntry(null); setAddVal(''); } }}
+                                    placeholder="Nom..."
+                                    style={{ width: 72, border: 'none', outline: '2px solid var(--green)', borderRadius: 2, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 9, textAlign: 'center', padding: '2px', color: 'var(--ink)' }}
+                                  />
+                                  <datalist id="rivo-grups-docents-list">
+                                    {docentsPropis.map(d => <option key={d.id} value={d.nom} />)}
+                                  </datalist>
+                                </>
+                              ) : (
+                                <span
+                                  onClick={() => startAddEntry(dia, f.id)}
+                                  style={{ fontSize: hasCoverage ? 9 : 12, color: hasCoverage ? 'var(--ink-4)' : 'var(--ink-3)', cursor: 'pointer', display: 'block', padding: '1px 0', lineHeight: 1, opacity: hasCoverage ? 0.4 : 0.6 }}
+                                  title="Afegir professional"
+                                >{hasCoverage ? '+' : '+'}</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -4205,7 +4834,8 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, c
   const [dragOver, setDragOver] = useState(false);
   const [addingEntry, setAddingEntry] = useState(null); // { dia, fid }
   const [addVal, setAddVal] = useState('');
-  const [showAlumnatIntensiva, setShowAlumnatIntensiva] = useState(false); // vista intensiva alumnat
+  const [showAlumnatIntensiva, setShowAlumnatIntensiva] = useState(true); // per defecte: format intensiu
+  const [showEquipMestresOriol, setShowEquipMestresOriol] = useState(false);
 
   function startGroupEdit(nom, dia, fid, currentVal) {
     setAddingEntry(null);
@@ -4246,7 +4876,7 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, c
     const parsed = parseHorariAlumnat(raw);
     setCurriculumText(parsed ? JSON.stringify(parsed, null, 2) : (raw || ''));
     setCurriculumEdit(false);
-    setShowAlumnatIntensiva(false);
+    setShowAlumnatIntensiva(true); // sempre intensiva per defecte
   }, [selectedGrup, configIntensiva]);
 
   async function guardarCurriculum() {
@@ -4350,24 +4980,26 @@ Retorna ÚNICAMENT JSON sense cap altre text:
       </div>
 
       <div className="card">
-        <div className="card-head">
-          <h3>Horari del {selectedGrup}</h3>
+        <div className="card-head" style={{ cursor: 'pointer' }} onClick={() => setShowEquipMestresOriol(o => !o)}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)', transition: 'transform .2s', display: 'inline-block', transform: showEquipMestresOriol ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+            Equip de mestres al grup · {selectedGrup}
+          </h3>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {tutor && <span className="sp sp-blue">Tutor/a: {tutor.nom.split(' ')[0]}</span>}
-            {onCellSave && (
+            {onCellSave && showEquipMestresOriol && (
               <button
                 className="btn btn-sm"
                 style={isEditMode
                   ? { background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 12, fontWeight: 600 }
                   : { background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12, fontWeight: 600 }
                 }
-                onClick={() => { setIsEditMode(o => !o); setEditing(null); }}
+                onClick={e => { e.stopPropagation(); setIsEditMode(o => !o); setEditing(null); }}
               >{isEditMode ? '✓ Fet' : '✏️ Editar'}</button>
             )}
-            <span className="sp sp-blue">Professionals assignats per franja</span>
           </div>
         </div>
-        {docents.length === 0 ? (
+        {showEquipMestresOriol && (docents.length === 0 ? (
           <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
             No hi ha docents carregats. Primer puja els horaris des de la vista Personal.
           </div>
@@ -4491,7 +5123,7 @@ Retorna ÚNICAMENT JSON sense cap altre text:
               </tbody>
             </table>
           </div>
-        )}
+        ))}
       </div>
 
       {/* Horari de l'alumnat */}
