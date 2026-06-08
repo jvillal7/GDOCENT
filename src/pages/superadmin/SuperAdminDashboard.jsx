@@ -767,6 +767,259 @@ function filterBtnStyle(active, color, small = false) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Pestanya: Alertes de l'agent vigilant
+// ═══════════════════════════════════════════════════════════════════════════════
+const GRAV_COLOR  = { critical: '#dc2626', warning: '#d97706', info: '#3b82f6' };
+const GRAV_BG     = { critical: '#fef2f2', warning: '#fffbeb', info: '#eff6ff' };
+const GRAV_BORDER = { critical: '#fca5a5', warning: '#fcd34d', info: '#bfdbfe' };
+const TIPUS_LABEL = {
+  ia_errors_propostes: '🤖 Errors propostes IA',
+  ia_errors_xat:       '💬 Errors xat Horaria',
+  horari_buit:         '📋 Docent sense horari',
+  tutor_sense_grup:    '👤 Tutor sense grup',
+};
+
+function AlertesTab({ schools }) {
+  const [alertes,    setAlertes]    = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
+  const [filtrEscola,   setFiltrEscola]   = useState('tots');
+  const [filtrGravetat, setFiltrGravetat] = useState('tots');
+  const [filtrResolt,   setFiltrResolt]   = useState('pendents');
+  const [resolving,  setResolving]  = useState(new Set());
+
+  const schoolMap = Object.fromEntries(schools.map(e => [e.id, e]));
+
+  async function loadAlertes() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await supa(
+        'agent_alerts?select=id,escola_id,tipus,gravetat,titol,missatge,metadata,resolt,creat_el&order=creat_el.desc&limit=300'
+      );
+      setAlertes(data || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function marcarResolt(id) {
+    setResolving(s => new Set([...s, id]));
+    try {
+      const jwt = getSaJwt();
+      await fetch(`${SUPA_URL}/rest/v1/agent_alerts?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPA_KEY,
+          Authorization: `Bearer ${jwt || SUPA_KEY}`,
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ resolt: true }),
+      });
+      setAlertes(a => (a || []).map(al => al.id === id ? { ...al, resolt: true } : al));
+    } catch {
+      // refresh to get real state
+      loadAlertes();
+    } finally {
+      setResolving(s => { const n = new Set(s); n.delete(id); return n; });
+    }
+  }
+
+  useEffect(() => { loadAlertes(); }, []);
+
+  const tous = alertes || [];
+  const filtered = tous.filter(a => {
+    if (filtrEscola !== 'tots' && a.escola_id !== filtrEscola) return false;
+    if (filtrGravetat !== 'tots' && a.gravetat !== filtrGravetat) return false;
+    if (filtrResolt === 'pendents' && a.resolt) return false;
+    if (filtrResolt === 'resolts' && !a.resolt) return false;
+    return true;
+  });
+
+  const pendentsCount = tous.filter(a => !a.resolt).length;
+  const criticsCount  = tous.filter(a => a.gravetat === 'critical' && !a.resolt).length;
+  const warningsCount = tous.filter(a => a.gravetat === 'warning' && !a.resolt).length;
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 24px 48px' }}>
+      {/* Capçalera */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>
+            🔔 Alertes de l'agent vigilant
+          </h2>
+          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+            {alertes === null ? 'Carregant…'
+              : `${tous.length} alertes totals · ${pendentsCount} pendents · executa cada nit a les 5:00 UTC`}
+          </p>
+        </div>
+        <button onClick={loadAlertes} disabled={loading} style={{
+          padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+          background: '#1e293b', color: '#fff', border: 'none', cursor: 'pointer',
+        }}>{loading ? '⟳ Carregant…' : '⟳ Actualitzar'}</button>
+      </div>
+
+      {/* KPIs ràpids */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+        <KPICard icon="🔔" label="Pendents"
+          value={pendentsCount}
+          color={pendentsCount > 0 ? '#dc2626' : '#22c55e'}
+          sub={pendentsCount === 0 ? 'Tot en ordre' : 'requereix revisió'} />
+        {criticsCount > 0 && (
+          <KPICard icon="🚨" label="Crítiques" value={criticsCount} color="#dc2626" sub="alta prioritat" />
+        )}
+        {warningsCount > 0 && (
+          <KPICard icon="⚠️" label="Warnings" value={warningsCount} color="#d97706" sub="reviseu aviat" />
+        )}
+        <KPICard icon="📋" label="Historial total" value={tous.length} color="#6b7280" sub="totes les escoles" />
+      </div>
+
+      {error && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', background: '#fef2f2',
+          border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, color: '#dc2626' }}>
+          Error: {error}
+        </div>
+      )}
+
+      {/* Filtres escola */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button onClick={() => setFiltrEscola('tots')}
+          style={filterBtnStyle(filtrEscola === 'tots', '#1e293b')}>
+          Totes ({tous.length})
+        </button>
+        {schools.map(e => {
+          const n = tous.filter(a => a.escola_id === e.id).length;
+          if (!n) return null;
+          return (
+            <button key={e.id}
+              onClick={() => setFiltrEscola(filtrEscola === e.id ? 'tots' : e.id)}
+              style={filterBtnStyle(filtrEscola === e.id, e._color)}>
+              {e.nom.replace('CEIP ', '').replace('CEE ', '').replace(' - HorariaPro', '')} ({n})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filtres gravetat + estat */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[
+          { key: 'tots',     label: 'Tota gravetat' },
+          { key: 'critical', label: '🚨 Crítiques' },
+          { key: 'warning',  label: '⚠️ Warnings' },
+          { key: 'info',     label: 'ℹ️ Info' },
+        ].map(f => (
+          <button key={f.key} onClick={() => setFiltrGravetat(f.key)}
+            style={filterBtnStyle(filtrGravetat === f.key, GRAV_COLOR[f.key] || '#1e293b', true)}>
+            {f.label}
+          </button>
+        ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          {[
+            { key: 'pendents', label: '🔔 Pendents' },
+            { key: 'tots',     label: 'Totes' },
+            { key: 'resolts',  label: '✅ Resoltes' },
+          ].map(f => (
+            <button key={f.key} onClick={() => setFiltrResolt(f.key)}
+              style={filterBtnStyle(filtrResolt === f.key, '#6b7280', true)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Llista d'alertes */}
+      {loading && alertes === null ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af', fontSize: 14 }}>
+          Carregant alertes…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 14 }}>
+          {pendentsCount === 0 && filtrResolt === 'pendents' ? (
+            <div>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+              <div style={{ color: '#22c55e', fontWeight: 700 }}>Cap alerta pendent</div>
+              <div style={{ color: '#9ca3af', fontSize: 12, marginTop: 6 }}>
+                El sistema funciona correctament — l'agent no ha detectat cap incidència
+              </div>
+            </div>
+          ) : (
+            <div style={{ color: '#9ca3af' }}>Cap alerta trobada amb els filtres actuals</div>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtered.map(al => {
+            const escola = schoolMap[al.escola_id];
+            const sc = escola?._color || '#6b7280';
+            const gc = GRAV_COLOR[al.gravetat] || '#6b7280';
+            const gb = GRAV_BG[al.gravetat]    || '#fff';
+            const gbord = GRAV_BORDER[al.gravetat] || '#e5e7eb';
+            return (
+              <div key={al.id} style={{
+                background: al.resolt ? '#f9fafb' : gb,
+                border: `1px solid ${al.resolt ? '#e5e7eb' : gbord}`,
+                borderRadius: 12, padding: '14px 16px',
+                opacity: al.resolt ? 0.65 : 1,
+                transition: 'opacity .2s',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.4 }}>
+                    {al.gravetat === 'critical' ? '🚨' : al.gravetat === 'warning' ? '⚠️' : 'ℹ️'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: al.resolt ? '#6b7280' : '#1e293b' }}>
+                        {al.titol}
+                      </span>
+                      <span style={{
+                        fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 700,
+                        background: gc + '22', color: gc, border: `1px solid ${gc}44`,
+                        textTransform: 'uppercase',
+                      }}>{al.gravetat}</span>
+                      <span style={{
+                        fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 700,
+                        background: sc + '22', color: sc, border: `1px solid ${sc}44`,
+                      }}>{escola?.codi?.toUpperCase() || escola?.nom?.slice(0, 12) || '?'}</span>
+                      <span style={{
+                        fontSize: 10, padding: '2px 8px', borderRadius: 10,
+                        background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb',
+                      }}>{TIPUS_LABEL[al.tipus] || al.tipus}</span>
+                    </div>
+                    <p style={{ fontSize: 13, color: al.resolt ? '#9ca3af' : '#374151',
+                      margin: '0 0 6px', lineHeight: 1.55 }}>
+                      {al.missatge}
+                    </p>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                      {fmtDate(al.creat_el)}
+                      {al.resolt && <span style={{ color: '#22c55e', fontWeight: 600 }}> · ✅ Resolt</span>}
+                    </div>
+                  </div>
+                  {!al.resolt && (
+                    <button
+                      onClick={() => marcarResolt(al.id)}
+                      disabled={resolving.has(al.id)}
+                      style={{
+                        flexShrink: 0, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        background: '#f0fdf4', border: '1px solid #86efac', color: '#166534',
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >{resolving.has(al.id) ? '…' : '✓ Resolt'}</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Dashboard principal
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SuperAdminDashboard() {
@@ -972,8 +1225,9 @@ export default function SuperAdminDashboard() {
           {/* Pestanyes */}
           <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,.08)', borderRadius: 8, padding: 2 }}>
             {[
-              { id: 'resum', label: '📊 Resum' },
-              { id: 'logs',  label: '💬 Logs Xat' },
+              { id: 'resum',   label: '📊 Resum' },
+              { id: 'logs',    label: '💬 Logs Xat' },
+              { id: 'alertes', label: '🔔 Alertes' },
             ].map(t => (
               <button key={t.id} onClick={() => setTab(t.id)} style={{
                 padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
@@ -1021,6 +1275,9 @@ export default function SuperAdminDashboard() {
 
       {/* Pestanya Logs Xat */}
       {tab === 'logs' && <LogsTab schools={schools} />}
+
+      {/* Pestanya Alertes agent vigilant */}
+      {tab === 'alertes' && <AlertesTab schools={schools} />}
 
       {/* Pestanya Resum */}
       {tab === 'resum' && <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 48px' }}>
