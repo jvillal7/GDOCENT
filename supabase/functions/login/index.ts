@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
         status: 200, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
       });
     }
-    const ADMIN_EMAIL = 'horaria.admin@gmail.com';
+    const ADMIN_EMAIL = 'jorgevillalba764@gmail.com';
     if (email === ADMIN_EMAIL) {
       return new Response(JSON.stringify({ type: 'superadmin' }), {
         status: 200, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
