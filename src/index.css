@@ -323,6 +323,7 @@ textarea.f-ctrl{resize:vertical;min-height:80px}
 /* TP RETALLAT GRID */
 .tp-grid{display:grid;grid-template-columns:1fr;gap:10px}
 .tp-dia-sticky{position:sticky;top:54px;z-index:10}
+.intensiva-panell-sticky{top:54px}
 .tp-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;transition:box-shadow .15s}
 .tp-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08)}
 .tp-card-bar{width:5px;flex-shrink:0;border-radius:0}
@@ -375,4 +376,5 @@ textarea.f-ctrl{resize:vertical;min-height:80px}
   .login-hero{width:38%;flex-shrink:0;padding:64px 40px;min-height:100vh;display:flex;align-items:flex-start}
   .login-body{flex:1;padding:60px 48px;justify-content:center}
   .tp-dia-sticky{top:80px}
+  .intensiva-panell-sticky{top:80px}
 }

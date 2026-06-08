@@ -942,6 +942,7 @@ function calcularCasosTPRetallat(docents, editingMap, normalFranjes, baixes) {
 
   for (const d of docents) {
     if (!d.horari || !d.tp_franges?.length || !d.grup_principal) continue;
+    if (d.rol === 'directiu') continue; // l'equip directiu no entra en la redistribució de TP retallat
     if (baixaActiva.has(d.nom.toLowerCase().trim())) continue;
 
     // Count actual morning TP in the generated intensive schedule (after minimum enforcement)
@@ -1091,6 +1092,35 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     } catch {}
   }, [escola?.id]);
 
+  // Restaurar sessió d'edició de jornada intensiva en curs (si l'usuari ha navegat fora i ha tornat)
+  useEffect(() => {
+    if (!escola?.id) return;
+    try {
+      const raw = localStorage.getItem(`gd_intensiva_sessio_${escola.id}`);
+      if (raw) {
+        const sess = JSON.parse(raw);
+        if (sess?.editingMap) {
+          setEditingMap(sess.editingMap);
+          setCanvisAnteriors(sess.canvisAnteriors || {});
+          setTornsPati(sess.tornsPati || null);
+          setTpPendents(sess.tpPendents || []);
+          setResumGeneracio(sess.resumGeneracio || '');
+          setTpRetallatCasos(sess.tpRetallatCasos || []);
+          setTpRetallatMode(!!sess.tpRetallatMode);
+        }
+      }
+    } catch {}
+  }, [escola?.id]);
+
+  // Persistir la sessió d'edició mentre hi ha generació en curs, per no perdre el treball en navegar fora
+  useEffect(() => {
+    if (!escola?.id || !editingMap) return;
+    try {
+      const sess = { editingMap, canvisAnteriors, tornsPati, tpPendents, resumGeneracio, tpRetallatCasos, tpRetallatMode, savedAt: new Date().toISOString() };
+      localStorage.setItem(`gd_intensiva_sessio_${escola.id}`, JSON.stringify(sess));
+    } catch {}
+  }, [escola?.id, editingMap, canvisAnteriors, tornsPati, tpPendents, resumGeneracio, tpRetallatCasos, tpRetallatMode]);
+
   // Counts contextuals (memòria per evitar recàlcul continu)
   const counts = useMemo(() => {
     const DIES = ['dilluns','dimarts','dimecres','dijous','divendres'];
@@ -1107,7 +1137,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     }).length;
 
     const tpRetallat = docents.filter(d => {
-      if (!d.tp_franges?.length || !d.grup_principal) return false;
+      if (d.rol === 'directiu' || !d.tp_franges?.length || !d.grup_principal) return false;
       const tpMins = d.tp_franges.length * 30;
       const nouMins = (d.jornada || 'sencera') === 'mitja' ? 30 : 60;
       return tpMins > nouMins;
@@ -1138,12 +1168,17 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   const [reglesCompactar45, setReglesCompactar45] = useState(cfg.regles?.compactar45 || false);
   const [instruccionsLliures, setInstruccionsLliures] = useState(cfg.regles?.instruccionsLliures || '');
   const [plantillaSaving, setPlantillaSaving] = useState(false);
-  // Importar horari passat
+  // Normes IA — jornada intensiva (criteris organitzatius persistents, propis d'aquest apartat)
+  const [normesIntensiva, setNormesIntensiva] = useState(cfg.normes_intensiva || []);
+  const [normaEditing, setNormaEditing] = useState(null); // index | 'new' | null
+  const [normaDraft, setNormaDraft]     = useState('');
+  const [normesSaving, setNormesSaving] = useState(false);
+  // Importar horaris d'anys anteriors (multi-document → detecció de patrons)
   const importFileRef = useRef(null);
   const [detectant, setDetectant]   = useState(false);
-  const [importBase64, setImportBase64] = useState(null);
-  const [importMime, setImportMime]     = useState(null);
+  const [importDocs, setImportDocs] = useState([]); // [{ id, nom, base64, mime, estat: 'pendent'|'analitzant'|'llegit'|'error', resultat, error }]
   const [dragImport, setDragImport] = useState(false);
+  const [veureDetallDocs, setVeureDetallDocs] = useState(false);
 
   // Sync local state quan canvia la config externa
   useEffect(() => {
@@ -1153,6 +1188,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
       setDataIniciText(isoToDisplay(configIntensiva.data_inici || ''));
       setDataFiText(isoToDisplay(configIntensiva.data_fi || ''));
       setActiu(configIntensiva.actiu || false);
+      setNormesIntensiva(configIntensiva.normes_intensiva || []);
       if (configIntensiva.regles) {
         setRegleTpTarda(configIntensiva.regles.tpTarda || 'pati');
         setRegleTpAltraText(configIntensiva.regles.tpAltraText || '');
@@ -1188,28 +1224,164 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     finally { setPlantillaSaving(false); }
   }
 
-  async function handleImportFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      setImportBase64(ev.target.result.split(',')[1]);
-      setImportMime(file.type || 'application/pdf');
-    };
-    reader.readAsDataURL(file);
+  // ── Normes IA — jornada intensiva ──────────────────────────────────────
+  // Llista persistent de criteris organitzatius (com "Normes IA" de cobertures, però
+  // específica d'aquest apartat). Es guarda a config_intensiva.normes_intensiva i s'aplica
+  // automàticament a cada generació, sense que calga retranscriure-la cada curs.
+  async function persistirNormesIntensiva(novaLlista) {
+    setNormesSaving(true);
+    try {
+      const nova = { ...cfg, normes_intensiva: novaLlista };
+      await api.saveConfigIntensiva(nova);
+      onConfigChange(nova);
+      setNormesIntensiva(novaLlista);
+      showToast('✓ Normes guardades');
+    } catch (e) { showToast('Error guardant normes: ' + e.message); }
+    finally { setNormesSaving(false); }
+  }
+
+  function startNovaNorma() { setNormaDraft(''); setNormaEditing('new'); }
+  function startEditNorma(i) { setNormaDraft(normesIntensiva[i]); setNormaEditing(i); }
+  function cancelEditNorma() { setNormaEditing(null); setNormaDraft(''); }
+
+  async function confirmEditNorma() {
+    if (!normaDraft.trim()) return;
+    const novaLlista = normaEditing === 'new'
+      ? [...normesIntensiva, normaDraft.trim()]
+      : normesIntensiva.map((n, i) => i === normaEditing ? normaDraft.trim() : n);
+    setNormaEditing(null);
+    setNormaDraft('');
+    await persistirNormesIntensiva(novaLlista);
+  }
+
+  async function eliminarNormaIntensiva(i) {
+    await persistirNormesIntensiva(normesIntensiva.filter((_, idx) => idx !== i));
+  }
+
+  // Trasllada els patrons consolidats (detectats dels documents pujats) a la llista
+  // permanent de normes, com a frases llegibles — evitant duplicats.
+  async function guardarPatronsComNormes() {
+    if (!patronsConsolidats) return;
+    const frases = [];
+    for (const r of patronsConsolidats.regles) {
+      if (r.key === 'tpTarda') {
+        const txt = { pati: 'El TP de tarda es trasllada al pati', mati: 'El TP de tarda es trasllada al matí', eliminar: 'El TP de tarda s\'elimina en jornada intensiva' }[r.valor];
+        if (txt) frases.push(txt);
+      } else if (r.key === 'noTallers' && r.valor) frases.push('Els tallers/racons no es fan en jornada intensiva');
+      else if (r.key === 'compactar45' && r.valor) frases.push('Les sessions es compacten en blocs més llargs per encabir-les al matí');
+      else if (r.key === 'equilibrarEspecialistes' && r.valor) frases.push('Es reparteixen/equilibren les sessions dels especialistes entre grups');
+    }
+    frases.push(...patronsConsolidats.notes);
+    const novesUniques = frases.filter(f => !normesIntensiva.includes(f));
+    if (!novesUniques.length) { showToast('Aquests patrons ja estan guardats com a normes'); return; }
+    await persistirNormesIntensiva([...normesIntensiva, ...novesUniques]);
+  }
+
+  function afegirFitxersImport(files) {
+    const arr = Array.from(files || []);
+    if (!arr.length) return;
+    const nous = arr.map(file => ({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      nom: file.name,
+      base64: null,
+      mime: file.type || 'application/pdf',
+      estat: 'pendent',
+      resultat: null,
+      error: null,
+    }));
+    setImportDocs(prev => [...prev, ...nous]);
+    arr.forEach((file, i) => {
+      const reader = new FileReader();
+      const docId = nous[i].id;
+      reader.onload = ev => {
+        const base64 = ev.target.result.split(',')[1];
+        setImportDocs(prev => prev.map(doc => doc.id === docId ? { ...doc, base64 } : doc));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function handleImportFile(e) {
+    afegirFitxersImport(e.target.files);
     e.target.value = '';
   }
 
-  async function detectarRegles() {
-    if (!importBase64) return;
+  function eliminarDocImport(id) {
+    setImportDocs(prev => prev.filter(doc => doc.id !== id));
+  }
+
+  async function detectarPatrons() {
+    const pendents = importDocs.filter(doc => doc.base64 && doc.estat !== 'llegit');
+    if (!pendents.length) return;
     setDetectant(true);
     try {
-      const result = await extractarReglesIntensiuPDF(importBase64, importMime);
-      if (result.tpTarda) setRegleTpTarda(result.tpTarda);
-      if (result.instruccionsLliures) setInstruccionsLliures(result.instruccionsLliures);
-      showToast(`✓ Regles detectades: ${result.resum || 'OK'}`);
-    } catch (e) { showToast('Error detectant regles: ' + e.message); }
-    finally { setDetectant(false); }
+      for (const doc of pendents) {
+        setImportDocs(prev => prev.map(d => d.id === doc.id ? { ...d, estat: 'analitzant', error: null } : d));
+        try {
+          const resultat = await extractarReglesIntensiuPDF(doc.base64, doc.mime);
+          setImportDocs(prev => prev.map(d => d.id === doc.id ? { ...d, estat: 'llegit', resultat } : d));
+        } catch (e) {
+          setImportDocs(prev => prev.map(d => d.id === doc.id ? { ...d, estat: 'error', error: e.message } : d));
+        }
+      }
+      showToast('✓ Documents analitzats');
+    } finally { setDetectant(false); }
+  }
+
+  // Consolida els resultats dels documents llegits: per a cada criteri, busca el valor
+  // majoritari i quants documents hi coincideixen (per mostrar-ho com a "patró" amb confiança)
+  const patronsConsolidats = useMemo(() => {
+    const llegits = importDocs.filter(d => d.estat === 'llegit' && d.resultat);
+    if (!llegits.length) return null;
+
+    function consolidarCriteri(key, label, aplicaA) {
+      const valors = llegits
+        .map(d => ({ doc: d.nom, valor: d.resultat[key] }))
+        .filter(v => v.valor !== null && v.valor !== undefined && v.valor !== 'null');
+      if (!valors.length) return null;
+      const recompte = {};
+      valors.forEach(v => { const k = String(v.valor); recompte[k] = (recompte[k] || 0) + 1; });
+      const [millorValor, millorCount] = Object.entries(recompte).sort((a, b) => b[1] - a[1])[0];
+      const docsCoincidents = valors.filter(v => String(v.valor) === millorValor).map(v => v.doc);
+      const docsDiscrepants = valors.filter(v => String(v.valor) !== millorValor);
+      return {
+        key, label, aplicaA,
+        valor: millorValor === 'true' ? true : millorValor === 'false' ? false : millorValor,
+        coincidencia: `${millorCount}/${llegits.length}`,
+        total: llegits.length, count: millorCount,
+        avis: docsDiscrepants.length ? `Detectat de manera diferent a: ${docsDiscrepants.map(v => `${v.doc} (${v.valor})`).join(', ')}` : null,
+        docsCoincidents,
+      };
+    }
+
+    const regles = [
+      consolidarCriteri('tpTarda', 'TP de tarda → es trasllada a', 'Gestió del TP de tarda'),
+      consolidarCriteri('noTallers', 'Tallers/Racons no es fan en intensiva', 'No fer tallers'),
+      consolidarCriteri('compactar45', 'Les sessions es compacten en blocs més llargs', 'Compactar sessions'),
+      consolidarCriteri('equilibrarEspecialistes', 'Es reparteixen/equilibren les sessions dels especialistes', 'Equilibrar especialistes'),
+    ].filter(Boolean);
+
+    const notes = llegits.map(d => (d.resultat.notes || '').trim()).filter(Boolean);
+
+    return { regles, notes, totalDocs: llegits.length };
+  }, [importDocs]);
+
+  function aplicarPatronsAlFormulari() {
+    if (!patronsConsolidats) return;
+    for (const r of patronsConsolidats.regles) {
+      if (r.key === 'tpTarda') setRegleTpTarda(r.valor);
+      else if (r.key === 'noTallers') setReglesNoTallers(!!r.valor);
+      else if (r.key === 'compactar45') setReglesCompactar45(!!r.valor);
+      else if (r.key === 'equilibrarEspecialistes') setReglesEquilibraEsp(!!r.valor);
+    }
+    if (patronsConsolidats.notes.length) {
+      const text = patronsConsolidats.notes.join('\n');
+      setInstruccionsLliures(prev => {
+        const actual = (prev || '').trim();
+        return actual ? `${actual}\n\n${text}` : text;
+      });
+    }
+    showToast('✓ Patrons aplicats al formulari de generació');
   }
 
   async function generar() {
@@ -1238,6 +1410,15 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
       let instruccionsEfectives = regleTpTarda === 'altra' && regleTpAltraText.trim()
         ? `GESTIÓ DEL TP DE TARDA: ${regleTpAltraText.trim()}\n\n${instruccionsLliures}`
         : instruccionsLliures;
+
+      // Normes permanents del centre per a la jornada intensiva (es desen una vegada i
+      // s'apliquen sempre, sense que la cap d'estudis les haja de retranscriure cada curs)
+      if (normesIntensiva.length) {
+        const normesText = `CRITERIS HABITUALS D'AQUEST CENTRE PER A LA JORNADA INTENSIVA:\n${normesIntensiva.map(n => `- ${n}`).join('\n')}`;
+        instruccionsEfectives = instruccionsEfectives.trim()
+          ? `${normesText}\n\n${instruccionsEfectives}`
+          : normesText;
+      }
 
       // Equilibri d'especialistes: instruccions concretes amb slots exactes
       if (reglesEquilibraEsp) {
@@ -1384,7 +1565,8 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
         map[d.id] = converted;
 
         // Si tpTarda no és 'pati' ni 'mati', mostra els TP pendents
-        if (regleTpTarda === 'eliminar') {
+        // (usem tpTardaEfectiu perquè 'altra' es processa internament com 'eliminar')
+        if (tpTardaEfectiu === 'eliminar') {
           const tpSlots = [];
           for (const dia of DIES_ALL) {
             for (const fid of tardesIds) {
@@ -1427,6 +1609,7 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
         try { await api.savePatiTorns({ torns: tornsPati, generat: new Date().toISOString().split('T')[0] }); } catch {}
       }
       showToast(`✓ Horaris intensius guardats (${n} docents)`);
+      try { localStorage.removeItem(`gd_intensiva_sessio_${escola.id}`); } catch {}
       setEditingMap(null);
       setTpPendents([]);
       setResumGeneracio('');
@@ -1440,6 +1623,7 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
   const docentAmbIntensiu = docents.filter(d => d.horari_intensiu).length;
 
   function descartarTot() {
+    try { localStorage.removeItem(`gd_intensiva_sessio_${escola.id}`); } catch {}
     setEditingMap(null);
     setTpPendents([]);
     setResumGeneracio('');
@@ -1612,6 +1796,60 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
             ✓ Jornada intensiva activa del {new Date(dataInici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })} al {new Date(dataFi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })}
           </div>
         )}
+      </div>
+
+      {/* Normes IA — jornada intensiva (criteris organitzatius persistents d'aquest centre, propis d'aquest apartat) */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head">
+          <h3>📋 Normes de la jornada intensiva</h3>
+          {normesIntensiva.length > 0 && <span className="sp sp-purple">{normesIntensiva.length} norma{normesIntensiva.length === 1 ? '' : 's'}</span>}
+        </div>
+        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {normesIntensiva.length === 0 ? (
+            <div style={{ fontSize: 13.5, color: 'var(--ink-3)' }}>
+              Igual que les <strong>Normes IA</strong> guien les propostes de cobertura, aquestes normes són els criteris propis d'aquest centre per organitzar la jornada intensiva (ex: "El TP de tarda es trasllada al matí"). Es desen una vegada i s'apliquen automàticament cada curs quan generes l'horari amb HorarIA — no cal repetir-les. Pots escriure-les a mà o "Detectar patrons" a partir d'horaris d'anys anteriors (més avall) i guardar-los aquí amb un clic.
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>
+              Aquests criteris s'apliquen automàticament cada vegada que generes l'horari intensiu amb HorarIA.
+            </div>
+          )}
+
+          {normesIntensiva.length === 0 && normaEditing === null && (
+            <div style={{ fontSize: 13, color: 'var(--ink-4)', fontStyle: 'italic', padding: '8px 0' }}>Encara no hi ha cap norma guardada per a aquest centre.</div>
+          )}
+
+          {normesIntensiva.map((norma, i) => (
+            normaEditing === i ? (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input className="f-ctrl" style={{ flex: 1, fontSize: 13.5 }} value={normaDraft} onChange={e => setNormaDraft(e.target.value)} autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') confirmEditNorma(); if (e.key === 'Escape') cancelEditNorma(); }} />
+                <button className="btn btn-sm" style={{ fontSize: 13 }} disabled={normesSaving} onClick={confirmEditNorma}>✓</button>
+                <button className="btn btn-sm" style={{ fontSize: 13 }} onClick={cancelEditNorma}>✕</button>
+              </div>
+            ) : (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 13px', background: 'var(--bg)', borderRadius: 7, border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 14, color: 'var(--purple)', flexShrink: 0 }}>•</span>
+                <span style={{ fontSize: 13.5, color: 'var(--ink-2)', flex: 1 }}>{norma}</span>
+                <button className="btn btn-sm" style={{ fontSize: 12.5, flexShrink: 0 }} onClick={() => startEditNorma(i)}>✎ Editar</button>
+                <button className="btn btn-sm" style={{ fontSize: 12.5, color: 'var(--red)', borderColor: 'var(--red)', flexShrink: 0 }} disabled={normesSaving} onClick={() => eliminarNormaIntensiva(i)}>🗑</button>
+              </div>
+            )
+          ))}
+
+          {normaEditing === 'new' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input className="f-ctrl" style={{ flex: 1, fontSize: 13.5 }} placeholder="Ex: El TP de tarda es trasllada al matí" value={normaDraft} onChange={e => setNormaDraft(e.target.value)} autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') confirmEditNorma(); if (e.key === 'Escape') cancelEditNorma(); }} />
+              <button className="btn btn-sm" style={{ fontSize: 13 }} disabled={normesSaving} onClick={confirmEditNorma}>✓ Afegir</button>
+              <button className="btn btn-sm" style={{ fontSize: 13 }} onClick={cancelEditNorma}>Cancel·lar</button>
+            </div>
+          ) : (
+            <button className="btn btn-sm" style={{ fontSize: 13, fontWeight: 600, alignSelf: 'flex-start', background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)' }} onClick={startNovaNorma}>
+              ＋ Afegir norma
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Regles de generació — nova estructura */}
@@ -1793,45 +2031,140 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
         </div>
       </div>
 
-      {/* Importar horari de l'any passat */}
+      {/* Importar horaris d'anys anteriors */}
       <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head"><h3>📂 Importar horari de l'any passat</h3></div>
+        <div className="card-head"><h3>📂 Importar horaris d'anys anteriors</h3></div>
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>
-            Puja el PDF o una imatge de l'horari intensiu de l'any passat. La IA detectarà automàticament les regles que s'aplicaven.
+          <div style={{ fontSize: 13.5, color: 'var(--ink-3)' }}>
+            Puja un o diversos horaris intensius de cursos anteriors (sense límit). Com més documents, millor podrà la IA detectar quins criteris es repeteixen any rere any (en lloc de fiar-se d'un sol document).
           </div>
-          <input ref={importFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={handleImportFile} />
-          <div
-            style={{ border: `2px dashed ${dragImport ? 'var(--blue)' : importBase64 ? 'var(--green)' : 'var(--border-2)'}`, borderRadius: 8, padding: '20px 16px', textAlign: 'center', cursor: 'pointer', background: dragImport ? 'var(--blue-bg)' : importBase64 ? 'var(--green-bg)' : 'var(--bg)', transition: 'all .15s' }}
-            onClick={() => importFileRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); setDragImport(true); }}
-            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragImport(false); }}
-            onDrop={e => {
-              e.preventDefault(); setDragImport(false);
-              const file = e.dataTransfer.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = ev => { setImportBase64(ev.target.result.split(',')[1]); setImportMime(file.type || 'application/pdf'); };
-              reader.readAsDataURL(file);
-            }}
-          >
-            {dragImport
-              ? <><div style={{ fontSize: 22, marginBottom: 4 }}>📂</div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--blue)' }}>Deixa anar el fitxer</div></>
-              : <><div style={{ fontSize: 22, marginBottom: 4 }}>{importBase64 ? '✅' : '📄'}</div><div style={{ fontSize: 13, color: 'var(--ink-3)' }}>{importBase64 ? 'Fitxer carregat — prem "Detectar regles"' : 'Clica o arrossega el PDF o imatge'}</div></>
-            }
+          <input ref={importFileRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={handleImportFile} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {importDocs.map(doc => (
+              <div key={doc.id} style={{
+                width: 150, padding: '10px 10px 8px', borderRadius: 8, textAlign: 'center', position: 'relative',
+                border: `1.5px solid ${doc.estat === 'llegit' ? 'var(--green)' : doc.estat === 'error' ? 'var(--red)' : doc.estat === 'analitzant' ? 'var(--blue)' : 'var(--border-2)'}`,
+                background: doc.estat === 'llegit' ? 'var(--green-bg)' : doc.estat === 'error' ? 'var(--red-bg)' : doc.estat === 'analitzant' ? 'var(--blue-bg)' : 'var(--bg)',
+              }}>
+                <button
+                  onClick={() => eliminarDocImport(doc.id)}
+                  title="Eliminar"
+                  style={{ position: 'absolute', top: 4, right: 4, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-4)', fontSize: 13, lineHeight: 1, padding: 2 }}
+                >✕</button>
+                <div style={{ fontSize: 22, marginBottom: 4 }}>
+                  {doc.estat === 'llegit' ? '✅' : doc.estat === 'error' ? '⚠️' : doc.estat === 'analitzant' ? '⏳' : '📄'}
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={doc.nom}>{doc.nom}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 2 }}>
+                  {doc.estat === 'pendent' && 'Pendent'}
+                  {doc.estat === 'analitzant' && 'Analitzant...'}
+                  {doc.estat === 'llegit' && (doc.resultat?.resum || 'Llegit')}
+                  {doc.estat === 'error' && (doc.error || 'Error')}
+                </div>
+              </div>
+            ))}
+            <div
+              onClick={() => importFileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setDragImport(true); }}
+              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragImport(false); }}
+              onDrop={e => {
+                e.preventDefault(); setDragImport(false);
+                afegirFitxersImport(e.dataTransfer.files);
+              }}
+              style={{
+                width: 150, padding: '10px', borderRadius: 8, textAlign: 'center', cursor: 'pointer',
+                border: `2px dashed ${dragImport ? 'var(--blue)' : 'var(--border-2)'}`,
+                background: dragImport ? 'var(--blue-bg)' : 'var(--bg)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                color: dragImport ? 'var(--blue)' : 'var(--ink-3)', minHeight: 80,
+              }}
+            >
+              <div style={{ fontSize: 22, marginBottom: 4 }}>{dragImport ? '📂' : '➕'}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{dragImport ? 'Deixa anar' : 'Afegir document'}</div>
+            </div>
           </div>
-          {importBase64 && (
+          {importDocs.some(d => d.base64 && d.estat !== 'llegit') && (
             <button
               className="btn btn-sm"
-              style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontWeight: 600 }}
+              style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontWeight: 600, alignSelf: 'flex-start', fontSize: 13 }}
               disabled={detectant}
-              onClick={detectarRegles}
+              onClick={detectarPatrons}
             >
-              {detectant ? '⏳ Analitzant...' : '🤖 Detectar regles automàticament'}
+              {detectant ? '⏳ Analitzant...' : `🤖 Detectar patrons (${importDocs.filter(d => d.base64).length} document${importDocs.filter(d => d.base64).length === 1 ? '' : 's'})`}
             </button>
           )}
         </div>
       </div>
+
+      {/* Patrons consolidats detectats entre els documents pujats */}
+      {patronsConsolidats && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head">
+            <h3>🧠 Patrons detectats</h3>
+            <span className="sp sp-blue">{patronsConsolidats.totalDocs} document{patronsConsolidats.totalDocs === 1 ? '' : 's'} analitzat{patronsConsolidats.totalDocs === 1 ? '' : 's'}</span>
+          </div>
+          <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {patronsConsolidats.regles.length === 0 && (
+              <div style={{ fontSize: 13.5, color: 'var(--ink-3)' }}>No s'ha pogut deduir cap criteri clar dels documents pujats.</div>
+            )}
+            {patronsConsolidats.regles.map(r => {
+              const ple = r.count === r.total;
+              const valorText = r.key === 'tpTarda'
+                ? { pati: 'es fa durant el pati', mati: 'es passa al matí', eliminar: 'desapareix' }[r.valor] || r.valor
+                : (r.valor ? 'sí' : 'no');
+              return (
+                <div key={r.key} style={{ padding: '11px 13px', borderRadius: 7, border: `1px solid ${ple ? 'var(--green)' : 'var(--amber)'}`, background: ple ? 'var(--green-bg)' : 'var(--amber-bg)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ color: ple ? 'var(--green)' : 'var(--amber)', fontSize: 15 }}>{ple ? '✓' : '⚠'}</span>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-2)' }}>{r.label}{r.key === 'tpTarda' ? `: ${valorText}` : (r.valor ? '' : ' — no')}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: ple ? 'var(--green)' : 'var(--amber)' }}>coincidència {r.coincidencia}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 4 }}>↳ s'aplicarà a «{r.aplicaA}» del formulari de baix</div>
+                  {r.avis && <div style={{ fontSize: 12.5, color: 'var(--amber)', marginTop: 4 }}>⚠ {r.avis} — revisa-ho abans d'aplicar</div>}
+                </div>
+              );
+            })}
+            {patronsConsolidats.notes.length > 0 && (
+              <div style={{ padding: '12px 14px', borderRadius: 7, border: '1px solid var(--purple)', background: 'var(--purple-bg)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 16 }}>💡</span>
+                  <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--ink-2)' }}>Altres criteris detectats</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {patronsConsolidats.notes.map((n, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '8px 12px', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 15, color: 'var(--purple)', flexShrink: 0, lineHeight: 1.3 }}>•</span>
+                      <span style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>{n}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontWeight: 600, fontSize: 13 }} onClick={aplicarPatronsAlFormulari}>
+                📋 Aplicar aquests patrons al formulari de baix
+              </button>
+              <button className="btn btn-sm" style={{ background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)', fontWeight: 600, fontSize: 13 }} onClick={guardarPatronsComNormes}>
+                💾 Guardar com a normes permanents
+              </button>
+              <button className="btn btn-sm" style={{ fontSize: 13 }} onClick={() => setVeureDetallDocs(v => !v)}>
+                🔍 {veureDetallDocs ? 'Amagar detall per document' : 'Veure detall per document'}
+              </button>
+            </div>
+            {veureDetallDocs && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {importDocs.filter(d => d.estat === 'llegit').map(d => (
+                  <div key={d.id} style={{ padding: '10px 14px', background: 'var(--bg)', borderRadius: 7, border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 3 }}>📄 {d.nom}</div>
+                    <div style={{ fontSize: 13.5, color: 'var(--ink-3)', lineHeight: 1.45 }}>{d.resultat?.resum || '—'}</div>
+                    {d.resultat?.notes && <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4, fontStyle: 'italic', lineHeight: 1.45 }}>{d.resultat.notes}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Llista docents amb/sense intensiu */}
       {docentAmbIntensiu > 0 && (
@@ -2161,7 +2494,7 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
   return (
     <>
       {/* Capçalera enganxosa — disseny responsive */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '10px 14px 8px', marginBottom: 12 }}>
+      <div className="intensiva-panell-sticky" style={{ position: 'sticky', zIndex: 20, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '10px 14px 8px', marginBottom: 12 }}>
 
         {/* Fila 1: toggle PROFESSIONALS / GRUPS (ample complet) */}
         <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden', marginBottom: 8 }}>

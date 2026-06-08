@@ -51,6 +51,11 @@ grant usage, select on sequence public.login_attempts_id_seq to service_role;
 -- ── INCORPORACIONS ── Accés denegat a anon/authenticated (superadmin via service_role)
 revoke all on public.incorporacions from anon, authenticated;
 
+-- ── AGENT_ALERTS ── Només superadmin (RLS). Escriptura via service_role (Edge Function agent-watchdog)
+revoke all on public.agent_alerts from anon, authenticated;
+grant select, update (resolt) on public.agent_alerts to authenticated;
+grant all on public.agent_alerts to service_role;
+
 -- =============================================================================
 -- PLANTILLA per a NOVES TAULES: sempre afegir escola_id + RLS
 -- =============================================================================
