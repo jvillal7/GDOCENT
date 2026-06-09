@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
         status: 429, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
       });
     }
-    if (pin !== SA_PIN) {
+    if (pin.toUpperCase() !== SA_PIN.toUpperCase()) {
       await recordAttempt(supabase, ip, saKey, false);
       return new Response(JSON.stringify({ error: 'PIN incorrecte' }), {
         status: 401, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
