@@ -348,8 +348,8 @@ export default function LoginFlow() {
               })}
             </div>
 
-            {/* Accés administrador per correu */}
-            <AdminEmailAccess />
+            {/* Accés superadmin directe */}
+            <SuperAdminAccess />
           </div>
         )}
 
@@ -471,79 +471,20 @@ export default function LoginFlow() {
   );
 }
 
-function AdminEmailAccess() {
-  const [email,   setEmail]   = useState('');
-  const [shake,   setShake]   = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  function handleKey(e) { if (e.key === 'Enter') tryAccess(); }
-
-  async function tryAccess() {
-    const val = email.trim().toLowerCase();
-    if (!val) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${SUPA_URL}/functions/v1/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY },
-        body: JSON.stringify({ grup: 'check_email', email: val }),
-      });
-      const data = await res.json();
-      if (data.type === 'superadmin') {
-        window.location.href = window.location.pathname + '?superadmin=1';
-      } else if (data.type === 'school') {
-        const nom = (data.escola.nom || '').toLowerCase();
-        const key = nom.includes('oriol') ? 'oriol' : nom.includes('demo') ? 'demo' : 'rivo';
-        window.location.href = window.location.pathname + '?escola=' + key;
-      } else {
-        setShake(true);
-        setTimeout(() => setShake(false), 600);
-      }
-    } catch {
-      setShake(true);
-      setTimeout(() => setShake(false), 600);
-    } finally {
-      setLoading(false);
-    }
-  }
-
+function SuperAdminAccess() {
   return (
-    <div style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-      <p style={{ fontSize: 11.5, color: 'var(--ink-4)', textAlign: 'center', marginBottom: 10 }}>
-        Accés administrador
-      </p>
-      <div style={{ display: 'flex', gap: 8, animation: shake ? 'sa-shake .4s ease' : 'none' }}>
-        <input
-          type="email"
-          placeholder="correu@exemple.com"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          onKeyDown={handleKey}
-          style={{
-            flex: 1, padding: '10px 14px', borderRadius: 10,
-            border: '1px solid var(--border)', fontSize: 13,
-            background: 'var(--bg-2)', color: 'var(--ink)',
-            outline: 'none', fontFamily: 'inherit',
-          }}
-        />
-        <button
-          onClick={tryAccess}
-          style={{
-            padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-            background: 'var(--ink)', color: 'var(--surface)',
-            border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-          }}
-        >→</button>
-      </div>
-      <style>{`
-        @keyframes sa-shake {
-          0%,100% { transform: translateX(0); }
-          20%      { transform: translateX(-6px); }
-          40%      { transform: translateX(6px); }
-          60%      { transform: translateX(-4px); }
-          80%      { transform: translateX(4px); }
-        }
-      `}</style>
+    <div style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 16, textAlign: 'center' }}>
+      <button
+        onClick={() => { window.location.href = window.location.pathname + '?superadmin=1'; }}
+        style={{
+          fontSize: 11, fontWeight: 600, color: 'var(--ink-4)',
+          background: 'none', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
+          fontFamily: 'inherit', letterSpacing: '.04em',
+        }}
+      >
+        ⚙ SuperAdmin
+      </button>
     </div>
   );
 }
