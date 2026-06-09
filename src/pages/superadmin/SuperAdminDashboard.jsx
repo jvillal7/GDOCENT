@@ -1026,7 +1026,7 @@ export default function SuperAdminDashboard() {
   const [pin,           setPin]           = useState('');
   const [showPin,       setShowPin]       = useState(false);
   const [auth,          setAuth]          = useState(() => sessionStorage.getItem(AUTH_KEY) === '1');
-  const [pinError,      setPinError]      = useState(false);
+  const [pinError,      setPinError]      = useState('');   // string amb el missatge d'error
   const [schools,       setSchools]       = useState([]);
   const [statsMap,      setStatsMap]      = useState({});   // escolaId → stats
   const [loadingMap,    setLoadingMap]    = useState({});   // escolaId → bool
@@ -1042,24 +1042,25 @@ export default function SuperAdminDashboard() {
   // ── Auth ────────────────────────────────────────────────────────────────────
   async function handlePinSubmit(e) {
     e.preventDefault();
+    setPinError('');
     try {
-      const res = await fetch(`${SUPA_URL}/functions/v1/login`, {
+      const url = `${SUPA_URL}/functions/v1/login`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY },
         body: JSON.stringify({ grup: 'superadmin', pin }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setPinError(true);
+        setPinError(data.error || `Error ${res.status}`);
         setPin('');
         return;
       }
       sessionStorage.setItem('gd_sa_jwt', data.jwt);
       sessionStorage.setItem(AUTH_KEY, '1');
       setAuth(true);
-      setPinError(false);
-    } catch {
-      setPinError(true);
+    } catch (err) {
+      setPinError(`Error de xarxa: ${err.message}`);
       setPin('');
     }
   }
@@ -1173,7 +1174,7 @@ export default function SuperAdminDashboard() {
                 type={showPin ? 'text' : 'password'}
                 placeholder="PIN d'accés"
                 value={pin}
-                onChange={e => { setPin(e.target.value.toUpperCase()); setPinError(false); }}
+                onChange={e => { setPin(e.target.value.toUpperCase()); setPinError(''); }}
                 autoFocus
                 autoCapitalize="characters"
                 autoCorrect="off"
@@ -1198,7 +1199,7 @@ export default function SuperAdminDashboard() {
               >{showPin ? '🙈' : '👁️'}</button>
             </div>
             {pinError && (
-              <div style={{ fontSize: 12, color: '#f87171', textAlign: 'center' }}>PIN incorrecte</div>
+              <div style={{ fontSize: 12, color: '#f87171', textAlign: 'center', wordBreak: 'break-word' }}>{pinError}</div>
             )}
             <button type="submit" style={{
               padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 700,
