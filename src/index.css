@@ -48,24 +48,24 @@
 [data-theme="dark"] .slot-chip.all-day{color:var(--bg);border-color:var(--ink)}
 [data-theme="dark"] .sdu-av,[data-theme="dark"] .du-av{background:var(--bg-3) !important}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{font-size:15px}
-body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+html{font-size:15px;overflow-x:hidden}
+body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;overscroll-behavior:none;overflow-x:hidden}
 
 /* ── LOGIN ── */
-#login{min-height:100vh;display:flex;flex-direction:column;background:var(--bg)}
-.login-hero{background:#0a1a0f;padding:48px 28px 36px;position:relative;overflow:hidden}
-.login-hero::before{content:'';position:absolute;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(26,122,78,.35) 0%,transparent 70%);top:-80px;right:-60px;pointer-events:none}
+#login{min-height:100vh;display:flex;flex-direction:column;background:var(--bg);max-width:100vw;overflow-x:hidden}
+.login-hero{background:#0a1a0f;padding:24px 20px 20px;position:relative;overflow:hidden}
+.login-hero::before{content:'';position:absolute;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(26,122,78,.35) 0%,transparent 70%);top:-60px;right:-40px;pointer-events:none}
 .hero-text{position:relative;z-index:1}
 .hero-text p{font-size:12.5px;color:rgba(255,255,255,.4);margin-top:8px}
-.login-body{flex:1;padding:28px 20px 40px;display:flex;flex-direction:column;gap:12px}
-.login-body h2{font-family:Georgia,serif;font-size:20px;font-weight:400;margin-bottom:2px}
+.login-body{flex:1;padding:20px 16px 32px;display:flex;flex-direction:column;gap:10px}
+.login-body h2{font-family:Georgia,serif;font-size:19px;font-weight:400;margin-bottom:2px}
 .login-step{display:none;animation:fadeUp .3s ease-out forwards}
 .login-step.active{display:block}
-.school-logo-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
-.school-logo-btn{background:#fff;border:2px solid var(--border-2);border-radius:16px;padding:20px;cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.02)}
+.school-logo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.school-logo-btn{background:#fff;border:2px solid var(--border-2);border-radius:14px;padding:14px 8px;cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.02);width:100%;min-width:0}
 .school-logo-btn:active{border-color:var(--ink);transform:scale(.97)}
-.school-logo-btn img{width:100%;height:80px;object-fit:contain}
-.fallback-logo-text{font-size:14px;font-weight:bold;color:var(--ink);text-align:center;margin-top:10px}
+.school-logo-btn img{width:100%;height:56px;object-fit:contain}
+.fallback-logo-text{font-size:11px;font-weight:700;color:var(--ink);text-align:center;margin-top:8px;line-height:1.3;word-break:break-word}
 .role-cards{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px}
 .role-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;width:100%;cursor:pointer;transition:background .1s,transform .1s;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,.02)}
 .role-card:active{background:var(--bg);transform:scale(.99)}
@@ -375,6 +375,10 @@ textarea.f-ctrl{resize:vertical;min-height:80px}
   #login{flex-direction:row;min-height:100vh}
   .login-hero{width:38%;flex-shrink:0;padding:64px 40px;min-height:100vh;display:flex;align-items:flex-start}
   .login-body{flex:1;padding:60px 48px;justify-content:center}
+  .school-logo-grid{grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  .school-logo-btn{padding:20px;border-radius:16px}
+  .school-logo-btn img{height:80px}
+  .fallback-logo-text{font-size:14px;margin-top:10px}
   .tp-dia-sticky{top:80px}
   .intensiva-panell-sticky{top:80px}
 }

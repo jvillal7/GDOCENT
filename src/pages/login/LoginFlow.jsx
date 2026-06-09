@@ -319,7 +319,7 @@ export default function LoginFlow() {
                 const url = `${window.location.origin}${window.location.pathname}?escola=${key}`;
                 const open = linkOpen === key;
                 return (
-                  <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <button className="school-logo-btn" onClick={() => selectSchool(key)}>
                       {src
                         ? <img src={src} alt={alt} onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
@@ -328,19 +328,22 @@ export default function LoginFlow() {
                     </button>
                     <button
                       onClick={() => setLinkOpen(open ? null : key)}
-                      style={{ fontSize: 11, color: 'var(--ink-4)', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}
+                      style={{ fontSize: 10, color: 'var(--ink-4)', background: 'none', border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                     >
-                      🔗 Enllaç accés
+                      🔗
                     </button>
                     {open && (
-                      <div style={{ width: '100%', background: 'var(--bg-2)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <span style={{ fontSize: 11, color: 'var(--ink-3)', wordBreak: 'break-all', lineHeight: 1.5 }}>{url}</span>
-                        <button
-                          onClick={() => { navigator.clipboard.writeText(url); setLinkOpen(null); }}
-                          style={{ fontSize: 11.5, fontWeight: 600, background: '#000', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 0', cursor: 'pointer', fontFamily: 'inherit' }}
-                        >
-                          Copiar enllaç
-                        </button>
+                      <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,.45)' }} onClick={() => setLinkOpen(null)}>
+                        <div style={{ background: 'var(--surface)', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 480, padding: '20px 20px 32px', boxShadow: '0 -4px 32px rgba(0,0,0,.18)' }} onClick={e => e.stopPropagation()}>
+                          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Enllaç d'accés — {alt}</p>
+                          <span style={{ fontSize: 12, color: 'var(--ink-3)', wordBreak: 'break-all', lineHeight: 1.5, display: 'block', marginBottom: 14 }}>{url}</span>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(url); setLinkOpen(null); }}
+                            style={{ width: '100%', fontSize: 14, fontWeight: 600, background: '#000', color: '#fff', border: 'none', borderRadius: 10, padding: '14px 0', cursor: 'pointer', fontFamily: 'inherit' }}
+                          >
+                            Copiar enllaç
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
