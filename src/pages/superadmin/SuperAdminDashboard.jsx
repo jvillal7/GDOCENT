@@ -1024,6 +1024,7 @@ function AlertesTab({ schools }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SuperAdminDashboard() {
   const [pin,           setPin]           = useState('');
+  const [showPin,       setShowPin]       = useState(false);
   const [auth,          setAuth]          = useState(() => sessionStorage.getItem(AUTH_KEY) === '1');
   const [pinError,      setPinError]      = useState(false);
   const [schools,       setSchools]       = useState([]);
@@ -1167,19 +1168,35 @@ export default function SuperAdminDashboard() {
             HorariaPro · Panell de control
           </div>
           <form onSubmit={handlePinSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <input
-              type="password"
-              placeholder="PIN d'accés"
-              value={pin}
-              onChange={e => { setPin(e.target.value); setPinError(false); }}
-              autoFocus
-              style={{
-                padding: '12px 16px', borderRadius: 12, fontSize: 16, textAlign: 'center',
-                border: pinError ? '2px solid #ef4444' : '2px solid rgba(255,255,255,.2)',
-                background: 'rgba(255,255,255,.08)', color: '#fff',
-                outline: 'none', letterSpacing: '.15em',
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPin ? 'text' : 'password'}
+                placeholder="PIN d'accés"
+                value={pin}
+                onChange={e => { setPin(e.target.value.toUpperCase()); setPinError(false); }}
+                autoFocus
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                style={{
+                  width: '100%', padding: '12px 44px 12px 16px', borderRadius: 12,
+                  fontSize: 16, textAlign: 'center',
+                  border: pinError ? '2px solid #ef4444' : '2px solid rgba(255,255,255,.2)',
+                  background: 'rgba(255,255,255,.08)', color: '#fff',
+                  outline: 'none', letterSpacing: '.2em', boxSizing: 'border-box',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPin(v => !v)}
+                style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 18, color: 'rgba(255,255,255,.5)', padding: 0,
+                }}
+              >{showPin ? '🙈' : '👁️'}</button>
+            </div>
             {pinError && (
               <div style={{ fontSize: 12, color: '#f87171', textAlign: 'center' }}>PIN incorrecte</div>
             )}
