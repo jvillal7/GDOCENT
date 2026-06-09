@@ -1216,89 +1216,76 @@ export default function SuperAdminDashboard() {
   }
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
+  const TABS = [
+    { id: 'resum',   label: 'Resum',   icon: '📊' },
+    { id: 'logs',    label: 'Logs',    icon: '💬' },
+    { id: 'alertes', label: 'Alertes', icon: '🔔' },
+  ];
+
   return (
     <div style={{
       minHeight: '100vh',
       background: 'var(--bg,#f8fafc)',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      paddingTop: 52,
+      paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
     }}>
-      {/* Topbar */}
+      {/* ── Capçalera fixa ─────────────────────────────────────────────── */}
       <div style={{
-        position: 'sticky', top: 0, zIndex: 100,
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
         background: 'rgba(15,23,42,.97)', backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         borderBottom: '1px solid rgba(255,255,255,.08)',
-        padding: '0 24px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        height: 56,
+        height: 52,
+        display: 'flex', alignItems: 'center',
+        padding: '0 16px', gap: 10,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20 }}>🛡️</span>
-          <div>
-            <span style={{ fontWeight: 800, color: '#fff', fontSize: 15 }}>HorariaPro</span>
-            <span style={{ color: 'rgba(255,255,255,.4)', margin: '0 8px' }}>/</span>
-            <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13 }}>SuperAdmin Dashboard</span>
-          </div>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>🛡️</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>HorariaPro</span>
+          <span style={{ color: 'rgba(255,255,255,.35)', margin: '0 6px', fontSize: 12 }}>/</span>
+          <span style={{ color: 'rgba(255,255,255,.6)', fontSize: 12 }}>SuperAdmin</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Pestanyes */}
-          <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,.08)', borderRadius: 8, padding: 2 }}>
-            {[
-              { id: 'resum',   label: '📊 Resum' },
-              { id: 'logs',    label: '💬 Logs Xat' },
-              { id: 'alertes', label: '🔔 Alertes' },
-            ].map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{
-                padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                border: 'none', cursor: 'pointer',
-                background: tab === t.id ? '#4285F4' : 'transparent',
-                color: tab === t.id ? '#fff' : 'rgba(255,255,255,.5)',
-                transition: 'all .15s', whiteSpace: 'nowrap',
-              }}>{t.label}</button>
-            ))}
-          </div>
-
-          {tab === 'resum' && (<>
+        {/* Controls de període + actualitzar (visibles a dalt en pantalla gran) */}
+        {tab === 'resum' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {lastRefresh && (
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,.3)', display: 'none' }}
+                className="sa-desktop-only">
                 {lastRefresh.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
-            <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,.08)', borderRadius: 8, padding: 2 }}>
+            <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,.08)', borderRadius: 7, padding: 2 }}>
               {[7, 30, 90].map(d => (
                 <button key={d} onClick={() => setPeriod(d)} style={{
-                  padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  padding: '4px 9px', borderRadius: 5, fontSize: 11, fontWeight: 600,
                   border: 'none', cursor: 'pointer',
                   background: period === d ? '#7c3aed' : 'transparent',
                   color: period === d ? '#fff' : 'rgba(255,255,255,.5)',
-                  transition: 'all .15s',
                 }}>{d}d</button>
               ))}
             </div>
             <button onClick={loadAll} disabled={globalLoading} style={{
-              padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+              padding: '5px 10px', borderRadius: 7, fontSize: 11, fontWeight: 600,
               background: 'rgba(66,133,244,.2)', border: '1px solid rgba(66,133,244,.4)',
-              color: '#93c5fd', cursor: 'pointer',
-            }}>{globalLoading ? '⟳ Carregant…' : '⟳ Actualitzar'}</button>
-          </>)}
-          <button
-            onClick={() => { sessionStorage.removeItem(AUTH_KEY); window.location.href = '/'; }}
-            style={{
-              padding: '6px 12px', borderRadius: 8, fontSize: 12,
-              background: 'transparent', border: '1px solid rgba(255,255,255,.15)',
-              color: 'rgba(255,255,255,.4)', cursor: 'pointer',
-            }}
-          >Sortir</button>
-        </div>
+              color: '#93c5fd', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>{globalLoading ? '⟳…' : '⟳'}</button>
+          </div>
+        )}
+        <button
+          onClick={() => { sessionStorage.removeItem(AUTH_KEY); window.location.href = '/'; }}
+          style={{
+            padding: '5px 10px', borderRadius: 7, fontSize: 11, flexShrink: 0,
+            background: 'transparent', border: '1px solid rgba(255,255,255,.15)',
+            color: 'rgba(255,255,255,.4)', cursor: 'pointer',
+          }}
+        >Sortir</button>
       </div>
 
-      {/* Pestanya Logs Xat */}
-      {tab === 'logs' && <LogsTab schools={schools} />}
-
-      {/* Pestanya Alertes agent vigilant */}
+      {/* ── Contingut ──────────────────────────────────────────────────── */}
+      {tab === 'logs'    && <LogsTab schools={schools} />}
       {tab === 'alertes' && <AlertesTab schools={schools} />}
-
-      {/* Pestanya Resum */}
-      {tab === 'resum' && <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 48px' }}>
+      {tab === 'resum'   && <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px 32px' }}>
 
         {globalError && (
           <div style={{
@@ -1432,7 +1419,31 @@ export default function SuperAdminDashboard() {
         </div>
       </div>}
 
-      {/* Panell de detall */}
+      {/* ── Bottom nav ─────────────────────────────────────────────────── */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
+        background: 'rgba(15,23,42,.97)', backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderTop: '1px solid rgba(255,255,255,.08)',
+        height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        display: 'flex', alignItems: 'center',
+      }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            flex: 1, height: '100%', border: 'none', background: 'transparent',
+            cursor: 'pointer', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 3,
+            color: tab === t.id ? '#4285F4' : 'rgba(255,255,255,.4)',
+            transition: 'color .15s',
+          }}>
+            <span style={{ fontSize: 20 }}>{t.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: tab === t.id ? 700 : 400 }}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Panell de detall escola ────────────────────────────────────── */}
       {tab === 'resum' && selected && (
         <SchoolDetail
           escola={selected}
