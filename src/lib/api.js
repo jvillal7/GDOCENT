@@ -190,6 +190,7 @@ export function makeApi(escolaId) {
     savePatiTorns:      data  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ config_pati: data }), bypassSchoolId: true }),
     getChatCorrections:      ()    => f('chat_corrections?activa=eq.true&order=creat_el.asc'),
     getChatCorrectionsAll:   ()    => f('chat_corrections?order=creat_el.desc'),
+    getChatLogsAmbCorreccions: () => f('chat_logs?select=id,missatges,num_missatges&num_missatges=gte.3&order=creat_el.desc&limit=100'),
     saveChatCorrection:      obj   => f('chat_corrections', { method: 'POST', body: JSON.stringify(obj) }),
     updateChatCorrection:    (id, d) => f(`chat_corrections?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(d), prefer: 'return=minimal' }),
     deleteChatCorrection:    id    => f(`chat_corrections?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' }),

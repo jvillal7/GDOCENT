@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { extractAndSaveCorreccio } from '../../lib/claude';
 import Spinner from '../../components/Spinner';
 
 // ── Normes del sistema ────────────────────────────────────────────────────────
@@ -184,10 +185,12 @@ function NormesPanel({ api, escola, normes, setNormes, showToast }) {
 // ── Normes apreses ────────────────────────────────────────────────────────────
 
 function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) {
-  const [correccions, setCorreccions] = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [nova,        setNova]        = useState('');
-  const [saving,      setSaving]      = useState(false);
+  const [correccions,  setCorreccions]  = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [nova,         setNova]         = useState('');
+  const [saving,       setSaving]       = useState(false);
+  const [analitzant,   setAnalitzant]   = useState(false);
+  const [progres,      setProgres]      = useState(null); // { actual, total }
 
   useEffect(() => {
     if (!api) return;
@@ -196,6 +199,50 @@ function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) 
       .catch(() => setCorreccions([]))
       .finally(() => setLoading(false));
   }, [api]);
+
+  async function analitzarPassades() {
+    if (!escola?.id) return;
+    setAnalitzant(true);
+    setProgres(null);
+    try {
+      // Obtenir logs amb correccions (num_missatges >= 3)
+      const logs = await api.getChatLogsAmbCorreccions().catch(() => []);
+      // Filtrar: han de tenir >1 missatge d'usuari real
+      const logsAmbCors = (logs || []).filter(l => {
+        const missatges = l.missatges || [];
+        const userMsgs = missatges.filter(m => m.role === 'user');
+        return userMsgs.length > 1;
+      });
+      // Excloure els que ja tienen una correcció associada
+      const jaProcessats = new Set((correccions || []).map(c => c.chat_log_id).filter(Boolean));
+      const aProcesar = logsAmbCors.filter(l => !jaProcessats.has(l.id));
+
+      if (aProcesar.length === 0) {
+        setProgres({ actual: 0, total: 0, missatge: 'Totes les converses ja estan analitzades.' });
+        return;
+      }
+
+      setProgres({ actual: 0, total: aProcesar.length, missatge: '' });
+
+      for (let i = 0; i < aProcesar.length; i++) {
+        const log = aProcesar[i];
+        setProgres({ actual: i + 1, total: aProcesar.length, missatge: `Analitzant conversa ${i + 1} de ${aProcesar.length}…` });
+        await extractAndSaveCorreccio(log.missatges || [], escola.id, log.id);
+        // Pausa breu per no sobrecarregar l'API
+        if (i < aProcesar.length - 1) await new Promise(r => setTimeout(r, 800));
+      }
+
+      // Recarregar totes les correccions
+      const novaLlista = await api.getChatCorrectionsAll().catch(() => []);
+      setCorreccions(novaLlista || []);
+      recarregarActives();
+      setProgres({ actual: aProcesar.length, total: aProcesar.length, missatge: `Fet! S'han analitzat ${aProcesar.length} conversa${aProcesar.length > 1 ? 'es' : ''}.` });
+    } catch (e) {
+      setProgres({ actual: 0, total: 0, missatge: `Error: ${e.message}` });
+    } finally {
+      setAnalitzant(false);
+    }
+  }
 
   async function recarregarActives() {
     api.getChatCorrections().then(data => { if (data) setChatCorreccions(data); }).catch(() => {});
@@ -240,6 +287,48 @@ function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Analitzar converses passades */}
+      {(correccions || []).length === 0 && !analitzant && !progres && (
+        <div style={{ padding: '16px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>Cap regla apresa encara</div>
+          <div style={{ fontSize: 12, color: '#a16207', marginBottom: 12 }}>
+            Les regles s'extreuen automàticament quan el xat detecta correccions.<br />
+            Pots analitzar ara les converses passades per extreure les regles acumulades.
+          </div>
+          <button className="btn btn-sm" style={{ background: '#f59e0b', color: '#fff', border: 'none' }} onClick={analitzarPassades}>
+            🔍 Analitzar converses passades
+          </button>
+        </div>
+      )}
+
+      {analitzant && progres && (
+        <div style={{ padding: '14px 16px', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <Spinner size={14} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{progres.missatge}</span>
+          </div>
+          <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: 'var(--ink)', borderRadius: 3, width: progres.total > 0 ? `${(progres.actual / progres.total) * 100}%` : '0%', transition: 'width .4s' }} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 6 }}>{progres.actual} / {progres.total} converses analitzades</div>
+        </div>
+      )}
+
+      {!analitzant && progres && (
+        <div style={{ padding: '12px 16px', background: progres.missatge.startsWith('Error') ? '#fef2f2' : 'var(--green-bg)', border: `1px solid ${progres.missatge.startsWith('Error') ? '#fca5a5' : 'var(--green-mid)'}`, borderRadius: 10, fontSize: 13, color: progres.missatge.startsWith('Error') ? '#dc2626' : 'var(--green)' }}>
+          {progres.missatge}
+        </div>
+      )}
+
+      {/* Botó d'analitzar quan ja hi ha correccions però vols re-analitzar */}
+      {(correccions || []).length > 0 && !analitzant && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button className="btn btn-sm btn-ghost" onClick={analitzarPassades} style={{ fontSize: 11 }}>
+            🔍 Re-analitzar converses passades
+          </button>
+        </div>
+      )}
 
       {/* Afegir manual */}
       <div className="card">
