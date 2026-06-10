@@ -1,8 +1,8 @@
-import { FRANJES, FRANJES_ORIOL } from './constants';
+import { FRANJES, FRANJES_ORIOL, SUPA_URL, SUPA_KEY } from './constants';
 import { callClaudeRaw } from './claude-api';
 import { notifyCobertura } from './api';
 
-export function construirContextXat(escola, docents, normes, isOriol, absenciaContext = null, docentsBlocats = [], baixes = [], decisionsPassades = [], contextIA = '', frangesIA = null, coberturesAvui = []) {
+export function construirContextXat(escola, docents, normes, isOriol, absenciaContext = null, docentsBlocats = [], baixes = [], decisionsPassades = [], contextIA = '', frangesIA = null, coberturesAvui = [], correccionsApreses = []) {
   const FRANJES_ACT = frangesIA || (isOriol ? FRANJES_ORIOL : FRANJES);
   const jefaNom     = isOriol ? 'Mireia' : 'Veronica';
   const dies        = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
@@ -52,9 +52,17 @@ Motiu: ${absenciaContext.motiu || 'no especificat'}`
       }`
     : '';
 
+  const correccionsDesc = correccionsApreses.length
+    ? `\n--- REGLES APRESES D'ERRORS PASSATS ⚠️ MÀXIMA PRIORITAT ---
+ADVERTÈNCIA: Aquests errors s'han comès en el passat i han obligat la cap d'estudis a corregir-te. Segueix-les SEMPRE, per sobre de qualsevol altra consideració:
+${correccionsApreses.map((c, i) => `⛔ REGLA ${i + 1}: ${c.regla}${c.exemple ? `\n   (Error passat: ${c.exemple})` : ''}`).join('\n')}
+---`
+    : '';
+
   return `Ets l'assistent expert en gestió de cobertures de ${escola?.nom || 'HORARIA'}.
 La cap d'estudis ${jefaNom} et fa consultes sobre cobertures, disponibilitat de docents i organització.
 Respon sempre en català. Respostes CURTES i DIRECTES, sense introduccions ni explicacions llargues.
+${correccionsDesc}
 
 FORMAT DE RESPOSTA OBLIGATORI quan proposes cobertura:
 ⚠️ ORDRE ESTRICTE DE SORTIDA — segueix exactament aquest ordre, sense excepcions:
@@ -269,4 +277,55 @@ export async function aplicarPropostaChat(avis, proposta, chatMsgs, { api, escol
   });
 
   return { esFutura, grupDestí: grupFallback };
+}
+
+// Extreu una regla apresa de la conversa (fire-and-forget)
+export async function extractAndSaveCorreccio(messages, escolaId, chatLogId = null) {
+  const reals = messages.filter(m => !m._local);
+  const userMsgs = reals.filter(m => m.role === 'user');
+  if (userMsgs.length < 2) return; // sense correccions
+
+  const conversaTxt = reals.map(m => `[${m.role === 'user' ? 'CAP D\'ESTUDIS' : 'IA'}]: ${m.content.replace(/<proposta>[\s\S]*?<\/proposta>/gi, '[proposta JSON]').trim()}`).join('\n\n');
+
+  const prompt = `Analitza aquesta conversa de xat de gestió de cobertures escolars on la cap d'estudis ha hagut de corregir una proposta inicial de la IA.
+
+CONVERSA:
+${conversaTxt}
+
+Tasca: Extreu UNA regla concisa que eviti que la IA cometi el MATEIX error en futures ocasions similars.
+La regla ha de ser una instrucció directa, específica i accionable (màxim 2 línies).
+Si no pots identificar clarament un error corregible, retorna null.
+
+Respon ÚNICAMENT amb JSON vàlid, res més:
+{"regla": "instrucció clara de què no s'ha de fer o com actuar en aquest cas", "exemple": "descripció breu de l'error comès"}
+
+O si no hi ha error clar: {"regla": null}`;
+
+  try {
+    const raw = await callClaudeRaw([{ role: 'user', content: prompt }], 300);
+    const m = /\{[\s\S]*\}/.exec(raw);
+    if (!m) return;
+    const parsed = JSON.parse(m[0]);
+    if (!parsed.regla) return;
+
+    const jwt = (() => { try { return sessionStorage.getItem('gd_jwt') || null; } catch { return null; } })();
+    await fetch(`${SUPA_URL}/rest/v1/chat_corrections`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${jwt || SUPA_KEY}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({
+        escola_id: escolaId,
+        regla: parsed.regla,
+        exemple: parsed.exemple || null,
+        auto: true,
+        confirmada: false,
+        activa: false,
+        chat_log_id: chatLogId || null,
+      }),
+    });
+  } catch { /* silencioso — no bloqueja mai el flux */ }
 }

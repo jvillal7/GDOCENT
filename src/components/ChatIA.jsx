@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { xatIA, logChat } from '../lib/claude';
+import { xatIA, logChat, extractAndSaveCorreccio } from '../lib/claude';
 import { fmtData } from '../lib/utils';
 import Spinner from './Spinner';
 
@@ -200,6 +200,13 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
       num_missatges: missatgesNet.length,
       error_msg: lastErrorRef.current || null,
     });
+    // Si s'ha aprovat amb correccions (>1 missatge usuari), extreu regla apresa
+    if (resultat === 'aprovada') {
+      const userCount = missatgesNet.filter(m => m.role === 'user').length;
+      if (userCount > 1) {
+        extractAndSaveCorreccio(msgsActuals, escolaId, null);
+      }
+    }
   }
 
   async function send() {

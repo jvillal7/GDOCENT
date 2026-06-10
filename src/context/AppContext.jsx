@@ -48,10 +48,11 @@ export function AppProvider({ children }) {
   const [escola, setEscola]   = useState(saved?.escola || null);
   const [role, setRole]       = useState(saved?.role   || null);
   const [page, setPage]       = useState(saved ? (_urlPage || DEFAULT_PAGE[saved.role] || 'ta') : null);
-  const [docents,    setDocents]    = useState([]);
-  const [normes,     setNormes]     = useState('');
-  const [contextIA,  setContextIA]  = useState('');
-  const [frangesIA,  setFrangesIA]  = useState(null);
+  const [docents,          setDocents]          = useState([]);
+  const [normes,           setNormes]           = useState('');
+  const [contextIA,        setContextIA]        = useState('');
+  const [frangesIA,        setFrangesIA]        = useState(null);
+  const [chatCorreccions,  setChatCorreccions]  = useState([]);
   const [toast, setToast]     = useState(null);
   const [chatConfig, setChatConfig] = useState(null);
   const [coverageAppliedAt, setCoverageAppliedAt] = useState(0);
@@ -73,6 +74,7 @@ export function AppProvider({ children }) {
     a.getNormesIA().then(data => { if (data?.[0]?.normes_ia) setNormes(data[0].normes_ia); });
     a.getContextIA().then(data => { if (data?.[0]?.context_ia) setContextIA(data[0].context_ia); });
     a.getFrangesIA().then(data => { if (data?.[0]?.franges_ia) setFrangesIA(data[0].franges_ia); });
+    a.getChatCorrections().then(data => { if (data) setChatCorreccions(data); }).catch(() => {});
   }, [escola?.id]);
 
   const login = useCallback((p, e, r, jwt) => {
@@ -116,11 +118,11 @@ export function AppProvider({ children }) {
   const notifyCoverageApplied = useCallback(() => setCoverageAppliedAt(Date.now()), []);
 
   const value = useMemo(() => ({
-    perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
+    perfil, escola, role, page, docents, normes, contextIA, frangesIA, chatCorreccions, toast, api, darkMode,
     chatConfig, coverageAppliedAt,
-    setPage, setDocents, setNormes, setContextIA, setEscola, login, logout, showToast, toggleDark,
+    setPage, setDocents, setNormes, setContextIA, setEscola, setChatCorreccions, login, logout, showToast, toggleDark,
     openChat, closeChat, minimizeChat, maximizeChat, notifyCoverageApplied,
-  }), [perfil, escola, role, page, docents, normes, contextIA, frangesIA, toast, api, darkMode,
+  }), [perfil, escola, role, page, docents, normes, contextIA, frangesIA, chatCorreccions, toast, api, darkMode,
        chatConfig, coverageAppliedAt, login, logout, showToast, toggleDark,
        openChat, closeChat, minimizeChat, maximizeChat, notifyCoverageApplied]);
 

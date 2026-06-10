@@ -188,5 +188,10 @@ export function makeApi(escolaId) {
     saveHorariIntensiu: (id, h) => { cacheDel(`doc_${escolaId}`); return f(`docents?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ horari_intensiu: h }), prefer: 'return=minimal' }); },
     getPatiTorns:       ()    => f(`escoles?id=eq.${escolaId}&select=config_pati`, { bypassSchoolId: true }),
     savePatiTorns:      data  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ config_pati: data }), bypassSchoolId: true }),
+    getChatCorrections:      ()    => f('chat_corrections?activa=eq.true&order=creat_el.asc'),
+    getChatCorrectionsAll:   ()    => f('chat_corrections?order=creat_el.desc'),
+    saveChatCorrection:      obj   => f('chat_corrections', { method: 'POST', body: JSON.stringify(obj) }),
+    updateChatCorrection:    (id, d) => f(`chat_corrections?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(d), prefer: 'return=minimal' }),
+    deleteChatCorrection:    id    => f(`chat_corrections?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' }),
   };
 }

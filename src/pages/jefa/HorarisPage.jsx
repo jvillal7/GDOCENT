@@ -3751,6 +3751,8 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     const scores = {};
     for (const d of docents) {
       if (tutorIds.has(d.id) || !d.horari) continue;
+      // Exclou vetlladors i educadors dels suggeriments automàtics
+      if (['educador', 'vetllador'].includes(d.rol)) continue;
       if (estatBaixa(d.nom)?.status === 'baixa') continue;
       // Criteri 1: afinitat setmanal (sessions amb els grups al llarg de tota la setmana)
       let count = 0;
@@ -3774,6 +3776,8 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           const vl = (v || '').toLowerCase().trim();
           return vl && vl !== 'lliure' && vl !== 'libre';
         }).length, 0);
+      // Si no té cap franja al centre els dies de la sortida, no el proposes (mitja jornada o no treballa)
+      if (daySlots === 0) continue;
       scores[d.id] = { d, count, daySlots, dayGroupSlots, leaveStatus: estatBaixa(d.nom) };
     }
     // Ordre: primer els que tenen més franges del grup que marxa durant la sortida (menys cobertura),
@@ -4158,7 +4162,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
                         <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.8px' }}>Per afinitat setmanal</span>
                         <span style={{ fontSize: 10, background: 'var(--ink-3)', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{nomesSetmana.length}</span>
                       </div>
-                      <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>No tenen sessions amb el grup durant la sortida</span>
+                      <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>No tenen sessions amb el grup durant la sortida · genera més cobertura</span>
                     </div>
                     {nomesSetmana.slice(0, 6).map(({ d, count, leaveStatus }) => (
                       <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} hint={`${count} sessions/setm. amb ${grupsLabel}`} rowColor="var(--ink-2)" rowBg="var(--bg-2)" />

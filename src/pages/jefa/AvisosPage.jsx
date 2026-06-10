@@ -10,7 +10,7 @@ import Spinner from '../../components/Spinner';
 
 
 export default function AvisosPage() {
-  const { api, docents, normes, contextIA, frangesIA, escola, showToast, openChat } = useApp();
+  const { api, docents, normes, contextIA, frangesIA, chatCorreccions, escola, showToast, openChat } = useApp();
   const isOriol = escola?.nom?.toLowerCase().includes('oriol');
   const [absencies, setAbsencies] = useState(null);
   const [baixes,    setBaixes]    = useState([]);
@@ -494,7 +494,7 @@ export default function AvisosPage() {
     const systemContext = construirContextXat(escola, docents, normes, isOriol, {
       nom: avis.docent_nom, data: avis.data, dia,
       frangesIds: parseFranges(avis.franges), motiu: avis.motiu,
-    }, blocsDescChat, baixes, decisionsInjectades, contextIA, frangesIA, cobsAvui);
+    }, blocsDescChat, baixes, decisionsInjectades, contextIA, frangesIA, cobsAvui, chatCorreccions || []);
 
     const MESOS = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];
     const dataStr = dateObj ? `${dateObj.getDate()} de ${MESOS[dateObj.getMonth()]}` : '';
