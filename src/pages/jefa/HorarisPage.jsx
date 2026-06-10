@@ -3778,14 +3778,49 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
         }).length, 0);
       // Si no té cap franja al centre els dies de la sortida, no el proposes (mitja jornada o no treballa)
       if (daySlots === 0) continue;
-      scores[d.id] = { d, count, daySlots, dayGroupSlots, leaveStatus: estatBaixa(d.nom) };
+      // Per sortides multi-dia: comprova si treballa TOTS els dies (condició per a "Millor opció")
+      const worksAllDays = diesSortida.every(dia =>
+        Object.values(d.horari[dia] || {}).some(v => {
+          const vl = (v || '').toLowerCase().trim();
+          return vl && vl !== 'lliure' && vl !== 'libre';
+        })
+      );
+      // Construeix el text d'horari llegible per a "Millor opció" (ex: "11:30–12:30 Música 4t")
+      const franjaOrderMap = {};
+      const franjaTimeMap = {};
+      franjes.forEach((f, i) => {
+        franjaOrderMap[f.id] = i;
+        const parts = f.sub.split('–');
+        if (parts.length === 2) franjaTimeMap[f.id] = { start: parts[0], end: parts[1] };
+      });
+      const seenSlots = new Set();
+      const groupSlots = [];
+      for (const dia of diesSortida) {
+        for (const [fKey, v] of Object.entries(d.horari[dia] || {})) {
+          if (seenSlots.has(fKey) || !franjaTimeMap[fKey]) continue;
+          for (const g of grupsSeleccionats) {
+            if (matchesGrup(v, g)) { groupSlots.push({ fKey, ...franjaTimeMap[fKey], content: v }); seenSlots.add(fKey); break; }
+          }
+        }
+      }
+      groupSlots.sort((a, b) => (franjaOrderMap[a.fKey] ?? 99) - (franjaOrderMap[b.fKey] ?? 99));
+      const timeRanges = [];
+      let cur = null;
+      for (const s of groupSlots) {
+        if (!cur) { cur = { start: s.start, end: s.end, content: s.content }; }
+        else if (cur.end === s.start) { cur.end = s.end; }
+        else { timeRanges.push(cur); cur = { start: s.start, end: s.end, content: s.content }; }
+      }
+      if (cur) timeRanges.push(cur);
+      const dayHint = timeRanges.map(r => `${r.start}–${r.end} ${r.content}`).join(' · ');
+      scores[d.id] = { d, count, daySlots, dayGroupSlots, worksAllDays, dayHint, leaveStatus: estatBaixa(d.nom) };
     }
     // Ordre: primer els que tenen més franges del grup que marxa durant la sortida (menys cobertura),
     // després per afinitat setmanal, finalment menys slots ocupats durant la sortida
     return Object.values(scores).sort((a, b) =>
       b.dayGroupSlots - a.dayGroupSlots || b.count - a.count || a.daySlots - b.daySlots
     );
-  }, [docents, grupsSeleccionats, diesSortida, tutorsDeGrups, baixes]);
+  }, [docents, grupsSeleccionats, diesSortida, tutorsDeGrups, baixes, franjes]);
 
   // Docents disponibles per afegir manualment (no tutors dels grups, no en els suggerits, no de baixa total)
   const tutorNoms = useMemo(() => new Set(tutorsDeGrups.map(d => d.nom)), [tutorsDeGrups]);
@@ -4132,43 +4167,43 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             </>
           )}
 
-          {/* Especialistes */}
-          {especialistesSuggerits.length > 0 && (() => {
-            const ambDia = especialistesSuggerits.filter(e => e.dayGroupSlots > 0);
-            const nomesSetmana = especialistesSuggerits.filter(e => e.dayGroupSlots === 0);
+          {/* Especialistes — sempre visibles quan hi ha grups seleccionats */}
+          {(() => {
+            // Millor opció: té sessions amb el grup aquell dia I treballa TOTS els dies de la sortida
+            const ambDia = especialistesSuggerits.filter(e => e.dayGroupSlots > 0 && e.worksAllDays);
+            // Per afinitat: la resta (no treballa tots els dies, o no té sessions amb el grup aquell dia concret)
+            const nomesSetmana = especialistesSuggerits.filter(e => !(e.dayGroupSlots > 0 && e.worksAllDays));
             const grupsLabel = [...grupsSeleccionats].join('+');
             const multiDia = diesSortida.length > 1;
             const periodeLabel = multiDia ? `durant la sortida (${diesSortida.length} dies)` : `el ${diesSortida[0] || ''}`;
             return (
               <>
-                {ambDia.length > 0 && (
-                  <>
-                    <div className="sortida-ppl-hdr" style={{ '--sph-color': '#2563eb', '--sph-bg': 'var(--blue-bg)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '.8px' }}>🎯 Millor opció</span>
-                        <span style={{ fontSize: 10, background: '#2563eb', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{ambDia.length}</span>
-                      </div>
-                      <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Especialistes amb sessions del grup durant la sortida</span>
-                    </div>
-                    {ambDia.slice(0, 8).map(({ d, count, dayGroupSlots, leaveStatus }) => (
-                      <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} dayGroupSlots={dayGroupSlots} hint={`${dayGroupSlots} fr. amb ${grupsLabel} ${periodeLabel} · ${count} sessions/setm.`} rowColor="#2563eb" rowBg="var(--blue-bg)" />
-                    ))}
-                  </>
-                )}
-                {nomesSetmana.length > 0 && (
-                  <>
-                    <div className="sortida-ppl-hdr" style={{ '--sph-color': 'var(--ink-3)', '--sph-bg': 'var(--bg-2)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.8px' }}>Per afinitat setmanal</span>
-                        <span style={{ fontSize: 10, background: 'var(--ink-3)', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{nomesSetmana.length}</span>
-                      </div>
-                      <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>No tenen sessions amb el grup durant la sortida · genera més cobertura</span>
-                    </div>
-                    {nomesSetmana.slice(0, 6).map(({ d, count, leaveStatus }) => (
+                <div className="sortida-ppl-hdr" style={{ '--sph-color': '#2563eb', '--sph-bg': 'var(--blue-bg)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '.8px' }}>🎯 Millor opció</span>
+                    {ambDia.length > 0 && <span style={{ fontSize: 10, background: '#2563eb', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{ambDia.length}</span>}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Especialistes amb sessions del grup durant la sortida</span>
+                </div>
+                {ambDia.length === 0
+                  ? <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--ink-4)', fontStyle: 'italic' }}>Cap especialista té sessions amb el grup els dies de la sortida</div>
+                  : ambDia.slice(0, 8).map(({ d, count, dayGroupSlots, dayHint, leaveStatus }) => (
+                      <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} dayGroupSlots={dayGroupSlots} hint={dayHint ? `${dayHint} · ${count} sessions/setm.` : `${dayGroupSlots} fr. amb ${grupsLabel} ${periodeLabel} · ${count} sessions/setm.`} rowColor="#2563eb" rowBg="var(--blue-bg)" />
+                    ))
+                }
+                <div className="sortida-ppl-hdr" style={{ '--sph-color': 'var(--ink-3)', '--sph-bg': 'var(--bg-2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.8px' }}>Per afinitat setmanal</span>
+                    {nomesSetmana.length > 0 && <span style={{ fontSize: 10, background: 'var(--ink-3)', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>{nomesSetmana.length}</span>}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>Professionals amb sessions amb el grup · no disponibles tots els dies o no aquell dia concret</span>
+                </div>
+                {nomesSetmana.length === 0
+                  ? <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--ink-4)', fontStyle: 'italic' }}>Cap especialista disponible per afinitat setmanal</div>
+                  : nomesSetmana.slice(0, 6).map(({ d, count, leaveStatus }) => (
                       <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} hint={`${count} sessions/setm. amb ${grupsLabel}`} rowColor="var(--ink-2)" rowBg="var(--bg-2)" />
-                    ))}
-                  </>
-                )}
+                    ))
+                }
               </>
             );
           })()}
