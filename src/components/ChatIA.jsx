@@ -333,28 +333,40 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
         {/* Input */}
         <div style={{
           padding: '12px 16px', borderTop: '1px solid var(--border)',
-          display: 'flex', gap: 8, flexShrink: 0,
+          display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0,
           background: 'var(--surface)',
         }}>
-          <textarea
-            ref={inputRef}
-            className="f-ctrl"
-            rows={2}
-            placeholder="Escriu el teu missatge... (Enter per enviar)"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={loading}
-            style={{ flex: 1, fontSize: 13, resize: 'none', lineHeight: 1.5 }}
-          />
-          <button
-            className="btn btn-green"
-            style={{ alignSelf: 'flex-end', fontSize: 15, padding: '8px 14px', flexShrink: 0 }}
-            onClick={send}
-            disabled={loading || !input.trim()}
-          >
-            ↑
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <textarea
+              ref={inputRef}
+              className="f-ctrl"
+              rows={2}
+              placeholder="Escriu el teu missatge... (Enter per enviar)"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={loading}
+              style={{ flex: 1, fontSize: 13, resize: 'none', lineHeight: 1.5 }}
+            />
+            <button
+              className="btn btn-green"
+              style={{ alignSelf: 'flex-end', fontSize: 15, padding: '8px 14px', flexShrink: 0 }}
+              onClick={send}
+              disabled={loading || !input.trim()}
+            >
+              ↑
+            </button>
+          </div>
+          {absenciaId && (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: 11.5, color: 'var(--ink-3)', alignSelf: 'flex-start', padding: '3px 8px' }}
+              onClick={() => { guardarLog(messages, 'aprovada', []); onAplicarProposta([], messages); }}
+              disabled={loading}
+            >
+              ✅ No cal cobrir — Tancar absència
+            </button>
+          )}
         </div>
       </div>
     </>
