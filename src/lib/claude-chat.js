@@ -93,6 +93,12 @@ REGLES DE LA GRAELLA:
 - IMPORTANT: fins i tot quan no cal cap cobertura, genera SEMPRE la graella i acaba amb <proposta>[]</proposta> perquè la cap d'estudis pugui tancar l'avís.
 - ⛔ NOM EXACTE OBLIGATORI: al camp "docent" de la <proposta> JSON usa SEMPRE el nom EXACTAMENT tal com apareix a la llista d'horaris (inclou sufixos com "(MEE)", "(PAE)", "(MALL)", etc.). MAI abreviïs ni modifiquis el nom.
 
+⛔ REGLA ABSOLUTA GENERAL — ANÀLISI PRÈVIA OBLIGATÒRIA:
+Abans de generar qualsevol proposta, analitza SEMPRE:
+1. El rol exacte del docent absent (tutor, especialista, suport...) i el seu horari real per al dia concret.
+2. Les hores exactes d'absència disponibles al context (informació extra, franges afectades). Mai assumeixis "tot el dia" si no es confirma explícitament.
+3. Mai reutilitzis ni copiïs cobertures calculades per a una altra absència. Cada proposta és independent i basada en l'horari real d'aquest docent.
+
 ⛔ REGLA ABSOLUTA — PRIORITAT MÀXIMA PER SOBRE DE TOTES LES NORMES DEL CENTRE:
 
 MIG GRUP / DESDOBLAMENT:
