@@ -185,12 +185,14 @@ function NormesPanel({ api, escola, normes, setNormes, showToast }) {
 // ── Normes apreses ────────────────────────────────────────────────────────────
 
 function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) {
-  const [correccions,  setCorreccions]  = useState(null);
-  const [loading,      setLoading]      = useState(true);
-  const [nova,         setNova]         = useState('');
-  const [saving,       setSaving]       = useState(false);
-  const [analitzant,   setAnalitzant]   = useState(false);
-  const [progres,      setProgres]      = useState(null); // { actual, total }
+  const [correccions,    setCorreccions]    = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [nova,           setNova]           = useState('');
+  const [saving,         setSaving]         = useState(false);
+  const [analitzant,     setAnalitzant]     = useState(false);
+  const [progres,        setProgres]        = useState(null);
+  const [editingId,      setEditingId]      = useState(null);
+  const [editingDraft,   setEditingDraft]   = useState('');
 
   useEffect(() => {
     if (!api) return;
@@ -252,6 +254,14 @@ function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) 
     await api.updateChatCorrection(id, { confirmada: true, activa: true });
     setCorreccions(prev => prev.map(c => c.id === id ? { ...c, confirmada: true, activa: true } : c));
     recarregarActives();
+  }
+
+  async function guardarEdicio(id) {
+    if (!editingDraft.trim()) return;
+    await api.updateChatCorrection(id, { regla: editingDraft.trim() });
+    setCorreccions(prev => prev.map(c => c.id === id ? { ...c, regla: editingDraft.trim() } : c));
+    setEditingId(null);
+    setEditingDraft('');
   }
 
   async function toggleActiva(c) {
@@ -361,12 +371,32 @@ function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) 
             </p>
             {pendents.map(c => (
               <div key={c.id} style={{ padding: '12px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>{c.regla}</div>
-                {c.exemple && <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8 }}>Error detectat: {c.exemple}</div>}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn btn-sm btn-green" onClick={() => confirmar(c.id)}>✓ Confirmar i activar</button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => eliminar(c.id)}>✕ Descartar</button>
-                </div>
+                {editingId === c.id ? (
+                  <>
+                    <textarea
+                      className="f-ctrl"
+                      rows={3}
+                      autoFocus
+                      value={editingDraft}
+                      onChange={e => setEditingDraft(e.target.value)}
+                      style={{ fontSize: 13, lineHeight: 1.5, resize: 'vertical', marginBottom: 8, background: '#fffde7' }}
+                    />
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-sm btn-green" onClick={() => guardarEdicio(c.id)} disabled={!editingDraft.trim()}>✓ Guardar canvis</button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => { setEditingId(null); setEditingDraft(''); }}>Cancel·lar</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>{c.regla}</div>
+                    {c.exemple && <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8 }}>Error detectat: {c.exemple}</div>}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-sm btn-green" onClick={() => confirmar(c.id)}>✓ Confirmar i activar</button>
+                      <button className="btn btn-sm btn-ghost" style={{ color: 'var(--blue)' }} onClick={() => { setEditingId(c.id); setEditingDraft(c.regla); }}>✏️ Editar</button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => eliminar(c.id)}>✕ Descartar</button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
