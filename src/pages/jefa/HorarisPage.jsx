@@ -4041,18 +4041,20 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             <div className="sortida-step-num">1</div>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-2)' }}>Dades bàsiques</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'end', marginBottom: 10 }}>
+          <div className="sortida-basiques">
             <div>
               <label className="f-label">Nom de la sortida</label>
               <input className="f-ctrl" placeholder="Ex: Visita al Museu, Colònies 5è..." value={title} onChange={e => setTitle(e.target.value)} />
             </div>
-            <div>
-              <label className="f-label">Data inici</label>
-              <InputDataDMY value={date} onChange={iso => { setDate(iso); if (iso > dateFi) setDateFi(iso); }} style={{ width: 130 }} />
-            </div>
-            <div>
-              <label className="f-label">Data fi</label>
-              <InputDataDMY value={dateFi} min={date} onChange={iso => setDateFi(iso)} style={{ width: 130 }} />
+            <div className="sortida-dates-row">
+              <div>
+                <label className="f-label">Data inici</label>
+                <InputDataDMY value={date} onChange={iso => { setDate(iso); if (iso > dateFi) setDateFi(iso); }} style={{ width: 130 }} />
+              </div>
+              <div>
+                <label className="f-label">Data fi</label>
+                <InputDataDMY value={dateFi} min={date} onChange={iso => setDateFi(iso)} style={{ width: 130 }} />
+              </div>
             </div>
           </div>
           {isWeekend && <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600, marginBottom: 8 }}>⚠ La data seleccionada és cap de setmana.</div>}
@@ -4188,8 +4190,8 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
                 {ambDia.length === 0
                   ? <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--ink-4)', fontStyle: 'italic' }}>Cap especialista té sessions amb el grup els dies de la sortida</div>
                   : ambDia.slice(0, 8).map(({ d, count, dayGroupSlots, dayHint, leaveStatus }) => (
-                      <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} dayGroupSlots={dayGroupSlots} hint={dayHint ? `${dayHint} · ${count} sessions/setm.` : `${dayGroupSlots} fr. amb ${grupsLabel} ${periodeLabel} · ${count} sessions/setm.`} rowColor="#2563eb" rowBg="var(--blue-bg)" />
-                    ))
+                    <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} dayGroupSlots={dayGroupSlots} hint={dayHint ? `${dayHint} · ${count} sessions/setm.` : `${dayGroupSlots} fr. amb ${grupsLabel} ${periodeLabel} · ${count} sessions/setm.`} rowColor="#2563eb" rowBg="var(--blue-bg)" />
+                  ))
                 }
                 <div className="sortida-ppl-hdr" style={{ '--sph-color': 'var(--ink-3)', '--sph-bg': 'var(--bg-2)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4201,8 +4203,8 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
                 {nomesSetmana.length === 0
                   ? <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--ink-4)', fontStyle: 'italic' }}>Cap especialista disponible per afinitat setmanal</div>
                   : nomesSetmana.slice(0, 6).map(({ d, count, leaveStatus }) => (
-                      <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} hint={`${count} sessions/setm. amb ${grupsLabel}`} rowColor="var(--ink-2)" rowBg="var(--bg-2)" />
-                    ))
+                    <SortidaDocentsRow key={d.id} d={d} selected={docentsAniran.has(d.nom)} onToggle={() => toggleDocent(d.nom)} leaveStatus={leaveStatus} hint={`${count} sessions/setm. amb ${grupsLabel}`} rowColor="var(--ink-2)" rowBg="var(--bg-2)" />
+                  ))
                 }
               </>
             );
@@ -4649,7 +4651,7 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docent
       </div>
 
       {/* Fila 2: Motiu + Dates */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div className="baixa-fila2">
         <div>
           <label className="f-label">Dates d'inici i fi prevista</label>
           <div style={{ display: 'flex', gap: 8 }}>

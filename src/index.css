@@ -361,6 +361,18 @@ textarea.f-ctrl{resize:vertical;min-height:80px}
 .grup-pill{padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--bg-2);color:var(--ink-2);transition:all .15s;min-height:34px}
 .grup-pill.actiu{background:var(--blue);color:#fff;border-color:var(--blue)}
 
+/* BAIXES FORM — responsive grid */
+.baixa-fila2{display:grid;grid-template-columns:1fr;gap:10px}
+/* SORTIDES BASIQUES — responsive layout */
+.sortida-basiques{display:flex;flex-direction:column;gap:10px;align-items:stretch;margin-bottom:10px}
+.sortida-dates-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+@media(min-width:600px){
+  .baixa-fila2{grid-template-columns:1fr 1fr}
+  .sortida-basiques{flex-direction:row;align-items:flex-end}
+  .sortida-basiques>div:first-child{flex:1;min-width:0}
+  .sortida-dates-row{display:flex;gap:10px}
+}
+
 /* DESKTOP OVERRIDES */
 @media(min-width:768px){
   .modal-overlay{align-items:center}
