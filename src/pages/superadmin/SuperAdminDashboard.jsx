@@ -38,6 +38,24 @@ async function supa(path) {
   return res.json();
 }
 
+async function supaMutate(method, path, body = null) {
+  const jwt = getSaJwt();
+  const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPA_KEY,
+      Authorization: `Bearer ${jwt || SUPA_KEY}`,
+      Prefer: 'return=minimal',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => res.status);
+    throw new Error(`[supaMutate] ${res.status} — ${path}: ${txt}`);
+  }
+}
+
 // ── Utilitats ─────────────────────────────────────────────────────────────────
 function isoAgo(days) {
   return new Date(Date.now() - days * 86_400_000).toISOString().split('T')[0];
@@ -779,6 +797,149 @@ const TIPUS_LABEL = {
   tutor_sense_grup:    '👤 Tutor sense grup',
 };
 
+function CorreccionsTab({ schools }) {
+  const [correccions, setCorreccions] = useState(null);
+  const [loading,     setLoading]     = useState(false);
+  const [filtrEscola, setFiltrEscola] = useState('tots');
+  const [filtrEstat,  setFiltrEstat]  = useState('tots'); // 'tots' | 'pendents' | 'actives' | 'inactives'
+
+  const schoolMap = Object.fromEntries(schools.map(e => [e.id, e]));
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await supa('chat_corrections?order=creat_el.desc&limit=500');
+      setCorreccions(data || []);
+    } catch { setCorreccions([]); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function confirmar(id) {
+    await supaMutate('PATCH', `chat_corrections?id=eq.${id}`, { confirmada: true, activa: true });
+    setCorreccions(prev => prev.map(c => c.id === id ? { ...c, confirmada: true, activa: true } : c));
+  }
+  async function toggleActiva(c) {
+    await supaMutate('PATCH', `chat_corrections?id=eq.${c.id}`, { activa: !c.activa });
+    setCorreccions(prev => prev.map(x => x.id === c.id ? { ...x, activa: !c.activa } : x));
+  }
+  async function eliminar(id) {
+    await supaMutate('DELETE', `chat_corrections?id=eq.${id}`);
+    setCorreccions(prev => prev.filter(c => c.id !== id));
+  }
+
+  const filtered = (correccions || []).filter(c => {
+    if (filtrEscola !== 'tots' && c.escola_id !== filtrEscola) return false;
+    if (filtrEstat === 'pendents'  && c.confirmada) return false;
+    if (filtrEstat === 'actives'   && (!c.confirmada || !c.activa)) return false;
+    if (filtrEstat === 'inactives' && (!c.confirmada || c.activa)) return false;
+    return true;
+  });
+
+  const pendents  = (correccions || []).filter(c => !c.confirmada);
+  const actives   = (correccions || []).filter(c => c.confirmada && c.activa);
+  const inactives = (correccions || []).filter(c => c.confirmada && !c.activa);
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 24px 48px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>🧠 Regles apreses d'errors</h2>
+          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+            {correccions === null ? 'Carregant…' : `${pendents.length} pendents · ${actives.length} actives · ${inactives.length} inactives`}
+          </p>
+        </div>
+        <button onClick={load} disabled={loading} style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: '#1e293b', color: '#fff', border: 'none', cursor: 'pointer' }}>
+          {loading ? '…' : '↺ Actualitzar'}
+        </button>
+      </div>
+
+      {/* Filtres */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <select
+          value={filtrEscola}
+          onChange={e => setFiltrEscola(e.target.value)}
+          style={{ padding: '6px 10px', borderRadius: 8, fontSize: 12, border: '1px solid #e2e8f0', background: '#fff' }}
+        >
+          <option value="tots">Totes les escoles</option>
+          {schools.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+        </select>
+        {[
+          { id: 'tots',      label: `Totes (${(correccions||[]).length})` },
+          { id: 'pendents',  label: `Pendents (${pendents.length})`,  color: '#92400e' },
+          { id: 'actives',   label: `Actives (${actives.length})`,    color: '#166534' },
+          { id: 'inactives', label: `Inactives (${inactives.length})` },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFiltrEstat(f.id)} style={{
+            padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: filtrEstat === f.id ? 700 : 400,
+            background: filtrEstat === f.id ? '#1e293b' : '#f1f5f9',
+            color: filtrEstat === f.id ? '#fff' : (f.color || '#64748b'),
+            border: 'none', cursor: 'pointer',
+          }}>{f.label}</button>
+        ))}
+      </div>
+
+      {loading && correccions === null ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: '#6b7280' }}>Carregant…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: '#6b7280', fontSize: 14 }}>Cap regla amb aquest filtre.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.map(c => {
+            const escola = schoolMap[c.escola_id];
+            const sc = escola?._color || '#6b7280';
+            const isPendent = !c.confirmada;
+            const isActiva  = c.confirmada && c.activa;
+            return (
+              <div key={c.id} style={{
+                padding: '14px 16px', borderRadius: 12,
+                background: isPendent ? '#fffbeb' : isActiva ? '#f0fdf4' : '#f8fafc',
+                border: `1px solid ${isPendent ? '#fde68a' : isActiva ? '#bbf7d0' : '#e2e8f0'}`,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: sc, color: '#fff', fontWeight: 700 }}>
+                        {escola?.codi?.toUpperCase() || escola?.nom?.slice(0,8) || '?'}
+                      </span>
+                      <span style={{ fontSize: 10, color: isPendent ? '#92400e' : isActiva ? '#166534' : '#64748b', fontWeight: 600 }}>
+                        {isPendent ? '🔔 Pendent' : isActiva ? '✓ Activa' : '⏸ Inactiva'}
+                      </span>
+                      <span style={{ fontSize: 10, color: '#94a3b8' }}>{c.auto ? 'Auto-detectada' : 'Manual'} · {c.creat_el?.slice(0,10)}</span>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: c.exemple ? 4 : 0 }}>
+                      ⛔ {c.regla}
+                    </div>
+                    {c.exemple && (
+                      <div style={{ fontSize: 11, color: '#64748b' }}>Error original: {c.exemple}</div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {isPendent && (
+                      <button onClick={() => confirmar(c.id)} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: '#22c55e', color: '#fff', border: 'none', cursor: 'pointer' }}>
+                        ✓ Confirmar
+                      </button>
+                    )}
+                    {c.confirmada && (
+                      <button onClick={() => toggleActiva(c)} style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, background: '#f1f5f9', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#475569' }}>
+                        {c.activa ? '⏸' : '▶'}
+                      </button>
+                    )}
+                    <button onClick={() => eliminar(c.id)} style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, background: '#fef2f2', border: '1px solid #fca5a5', cursor: 'pointer', color: '#dc2626' }}>
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AlertesTab({ schools }) {
   const [alertes,    setAlertes]    = useState(null);
   const [loading,    setLoading]    = useState(false);
@@ -1217,9 +1378,10 @@ export default function SuperAdminDashboard() {
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
   const TABS = [
-    { id: 'resum',   label: 'Resum',   icon: '📊' },
-    { id: 'logs',    label: 'Logs',    icon: '💬' },
-    { id: 'alertes', label: 'Alertes', icon: '🔔' },
+    { id: 'resum',       label: 'Resum',   icon: '📊' },
+    { id: 'logs',        label: 'Logs',    icon: '💬' },
+    { id: 'correccions', label: 'Regles',  icon: '🧠' },
+    { id: 'alertes',     label: 'Alertes', icon: '🔔' },
   ];
 
   return (
@@ -1283,8 +1445,9 @@ export default function SuperAdminDashboard() {
       </div>
 
       {/* ── Contingut ──────────────────────────────────────────────────── */}
-      {tab === 'logs'    && <LogsTab schools={schools} />}
-      {tab === 'alertes' && <AlertesTab schools={schools} />}
+      {tab === 'logs'        && <LogsTab schools={schools} />}
+      {tab === 'correccions' && <CorreccionsTab schools={schools} />}
+      {tab === 'alertes'     && <AlertesTab schools={schools} />}
       {tab === 'resum'   && <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px 32px' }}>
 
         {globalError && (
