@@ -370,8 +370,8 @@ export async function analitzarInfoExtra(notes, base64Pdf, nomsDocents = []) {
     type: 'text',
     text: `Ets l'assistent de la cap d'estudis d'una escola de primària. Avui és ${avui}.
 
-${notesLine}TASCA: Identifica TOTA persona del centre que avui NO estarà disponible o no podrà cobrir absències. Inclou QUALSEVOL cas:
-- Permís personal o sindical (p.ex. "Jorge té un permís avui")
+${notesLine}TASCA: Identifica TOTA persona del centre que NO estarà disponible o no podrà cobrir absències (avui o en la data esmentada al text). Inclou QUALSEVOL cas:
+- Permís personal o sindical (p.ex. "Lidia té un permís el dia 15")
 - Malaltia o baixa
 - Reunió fora del centre (CRP, inspecció, formació...)
 - Sortida o colònies amb alumnes
@@ -387,6 +387,8 @@ Camp "ambGrup":
 - false → surt sense alumnes (permís, reunió, formació, malaltia)
 
 Camp "grups_fora": grups que surten físicament del centre (ex: ["3rA","4tA"]). Buit [] si no n'hi ha.
+
+DATES: Si el text indica una data concreta (ex: "el dia 15", "demà", "el dilluns que ve", "el 20 de juny"), usa-la per a data_inici i data_fi en format AAAA-MM-DD. Si no s'especifica cap data, usa avui (${avui}).
 
 Respon ÚNICAMENT en JSON:
 {"titol":"màx 3 paraules","resum":"1-2 frases","docentsBlocats":[{"nom":"Nom Cognom","hores":"tot el dia","ambGrup":false}],"grups_fora":[],"context":"nota breu per a la IA de cobertures","data_inici":"${avui}","data_fi":"${avui}"}`,
