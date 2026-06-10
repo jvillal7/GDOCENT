@@ -127,7 +127,7 @@ function NormesPanel({ api, escola, normes, setNormes, showToast }) {
           <h3>Normes específiques del centre</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {editing !== 'new' && (
-              <button className="btn btn-sm" style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green)', fontSize: 13, fontWeight: 600, padding: '6px 14px' }} onClick={startNew}>
+              <button className="btn btn-sm" style={{ background: 'var(--green)', color: '#fff', borderColor: 'var(--green)', fontSize: 14, fontWeight: 700, padding: '7px 18px', borderRadius: 8 }} onClick={startNew}>
                 + Nova norma
               </button>
             )}
@@ -187,8 +187,6 @@ function NormesPanel({ api, escola, normes, setNormes, showToast }) {
 function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) {
   const [correccions,    setCorreccions]    = useState(null);
   const [loading,        setLoading]        = useState(true);
-  const [nova,           setNova]           = useState('');
-  const [saving,         setSaving]         = useState(false);
   const [analitzant,     setAnalitzant]     = useState(false);
   const [progres,        setProgres]        = useState(null);
   const [editingId,      setEditingId]      = useState(null);
@@ -277,18 +275,6 @@ function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) 
     recarregarActives();
   }
 
-  async function afegirManual() {
-    if (!nova.trim() || !escola?.id) return;
-    setSaving(true);
-    try {
-      const saved = await api.saveChatCorrection({ escola_id: escola.id, regla: nova.trim(), auto: false, confirmada: true, activa: true });
-      const nova_entry = saved?.[0] || { id: Date.now(), regla: nova.trim(), activa: true, confirmada: true, auto: false, creat_el: new Date().toISOString() };
-      setCorreccions(prev => [nova_entry, ...(prev || [])]);
-      setNova('');
-      recarregarActives();
-    } finally { setSaving(false); }
-  }
-
   if (loading) return <div style={{ padding: '40px 0', textAlign: 'center' }}><Spinner /></div>;
 
   const pendents  = (correccions || []).filter(c => !c.confirmada);
@@ -333,30 +319,14 @@ function NormesApresPanel({ api, escola, chatCorreccions, setChatCorreccions }) 
 
       {/* Botó d'analitzar quan ja hi ha correccions però vols re-analitzar */}
       {(correccions || []).length > 0 && !analitzant && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button className="btn btn-sm btn-ghost" onClick={analitzarPassades} style={{ fontSize: 11 }}>
-            🔍 Re-analitzar converses passades
-          </button>
-        </div>
+        <button
+          className="btn btn-full"
+          style={{ padding: '13px 16px', fontSize: 14, fontWeight: 700, background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer' }}
+          onClick={analitzarPassades}
+        >
+          🔍 Re-analitzar converses passades
+        </button>
       )}
-
-      {/* Afegir manual */}
-      <div className="card">
-        <div className="card-head"><h3>Afegir regla manualment</h3></div>
-        <div style={{ padding: '8px 16px 14px' }}>
-          <textarea
-            className="f-ctrl"
-            rows={2}
-            placeholder='Ex: "Mai proposar X per a cobertures de matí si ja té suport a la franja"'
-            value={nova}
-            onChange={e => setNova(e.target.value)}
-            style={{ width: '100%', fontSize: 13, resize: 'none', marginBottom: 8 }}
-          />
-          <button className="btn btn-green btn-sm" onClick={afegirManual} disabled={saving || !nova.trim()}>
-            {saving ? <Spinner size={12} /> : '+ Afegir regla'}
-          </button>
-        </div>
-      </div>
 
       {/* Pendents de confirmació */}
       {pendents.length > 0 && (

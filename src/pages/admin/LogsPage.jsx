@@ -143,7 +143,7 @@ export default function LogsPage() {
 
   return (
     <div className="page-hdr" style={{ maxWidth: 800 }}>
-      <h1 style={{ marginBottom: 4 }}>Logs del xat IA</h1>
+      <h1 style={{ marginBottom: 4 }}>Registre HorarIA</h1>
       <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 16 }}>
         Registre de totes les converses amb Horaria · {logs.length} converses
       </p>
