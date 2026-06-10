@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import mammoth from 'mammoth';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, FRANJES_ORIOL, FRANJES_INTENSIVA, MAP_NORMAL_TO_INTENSIVA, FRANJES_INTENSIVA_ORIOL, MAP_ORIOL_TO_INTENSIVA, DIES, GRUPS_ORIOL, COORDINADORS_CICLE, MOTIUS_ABSENCIA, esMotuiATRI, MOTIUS_AMB_JUSTIFICANT } from '../../lib/constants';
-import { initials, oriolInitials, avatarColor, rolLabel, normGrup } from '../../lib/utils';
+import { initials, oriolInitials, avatarColor, rolLabel, normGrup, fmtData } from '../../lib/utils';
 import { extractHorariFromPDF, generarHorarisIntensius, extractarReglesIntensiuPDF } from '../../lib/claude';
 import { callClaudeRaw, callClaude } from '../../lib/claude-api';
 import { uploadFitxer, sendEmail } from '../../lib/api';
@@ -14,41 +14,43 @@ const ESPECIALISTES_GRUPS = ['Anglès', 'EF', 'Música', 'EI suport'];
 const PAE_ROLS = ['educador', 'vetllador', 'tei', 'suport'];
 
 const NIVELLS = [
-  { key: 'dir',  label: 'Equip Directiu',               match: (g, d) => d.rol === 'directiu',
+  {
+    key: 'dir', label: 'Equip Directiu', match: (g, d) => d.rol === 'directiu',
     sort: (a, b) => {
       const ord = { 'directora': 0, 'director': 0, "cap d'estudis": 1, 'secretaria': 2 };
-      return (ord[(a.d.grup_principal||'').toLowerCase()] ?? 9) - (ord[(b.d.grup_principal||'').toLowerCase()] ?? 9);
+      return (ord[(a.d.grup_principal || '').toLowerCase()] ?? 9) - (ord[(b.d.grup_principal || '').toLowerCase()] ?? 9);
     }
   },
-  { key: 'tutors_cee', label: 'Tutors/es',             match: (g, d) => d.rol === 'tutor' && (/^G\d+/i.test((g||'').trim()) || /^MxI$/i.test((g||'').trim())),
+  {
+    key: 'tutors_cee', label: 'Tutors/es', match: (g, d) => d.rol === 'tutor' && (/^G\d+/i.test((g || '').trim()) || /^MxI$/i.test((g || '').trim())),
     sort: (a, b) => {
-      const g2n = g => /^MxI$/i.test((g||'').trim()) ? 999 : parseInt((g||'').match(/\d+/)?.[0] || '99');
+      const g2n = g => /^MxI$/i.test((g || '').trim()) ? 999 : parseInt((g || '').match(/\d+/)?.[0] || '99');
       return g2n(a.d.grup_principal) - g2n(b.d.grup_principal);
     }
   },
-  { key: 'i3',   label: 'I3',                          match: (g)    => /^I3/i.test((g||'').trim()) },
-  { key: 'i4',   label: 'I4',                          match: (g)    => /^I4/i.test((g||'').trim()) },
-  { key: 'i5',   label: 'I5',                          match: (g)    => /^I5/i.test((g||'').trim()) },
-  { key: 'p1',   label: '1r',                          match: (g)    => /^1/i.test((g||'').trim()) },
-  { key: 'p2',   label: '2n',                          match: (g)    => /^2/i.test((g||'').trim()) },
-  { key: 'p3',   label: '3r',                          match: (g)    => /^3/i.test((g||'').trim()) },
-  { key: 'p4',   label: '4t',                          match: (g)    => /^4/i.test((g||'').trim()) },
-  { key: 'p5',   label: '5è',                          match: (g)    => /^5/i.test((g||'').trim()) },
-  { key: 'p6',   label: '6è',                          match: (g)    => /^6/i.test((g||'').trim()) },
-  { key: 'ef',   label: 'Especialistes · Educació Física', match: (g) => g === 'EF' },
-  { key: 'ang',  label: 'Especialistes · Anglès',          match: (g) => g === 'Anglès' },
-  { key: 'mus',  label: 'Especialistes · Música',          match: (g) => /^música$/i.test((g||'').trim()) },
-  { key: 'eis',  label: 'Especialistes · EI Suport',       match: (g) => g === 'EI suport' },
-  { key: 'siei', label: 'MESI / SIEI',                     match: (g, d) => d.rol === 'ee' || /MESI|SIEI/i.test(g||'') },
-  { key: 'mall',  label: 'Especialista · Audició i Llenguatge', match: (g, d) => /MALL/i.test(d.nom || '') },
-  { key: 'estim',   label: "Especialista · Estimulació",    match: (g, d) => /ESTIM/i.test(d.nom || '') },
-  { key: 'evip',    label: 'Especialista · Educació Artística', match: (g, d) => /EVIP/i.test(d.nom || '') },
-  { key: 'msuport', label: 'Mestres de Suport',            match: (g, d) => d.rol === 'msuport' },
-  { key: 'pae',     label: 'Suport d\'Educació Especial',  match: (g, d) => ['educador','vetllador','tei','suport'].includes(d.rol) },
-  { key: 'ee',   label: 'Altres',                          match: () => true },
+  { key: 'i3', label: 'I3', match: (g) => /^I3/i.test((g || '').trim()) },
+  { key: 'i4', label: 'I4', match: (g) => /^I4/i.test((g || '').trim()) },
+  { key: 'i5', label: 'I5', match: (g) => /^I5/i.test((g || '').trim()) },
+  { key: 'p1', label: '1r', match: (g) => /^1/i.test((g || '').trim()) },
+  { key: 'p2', label: '2n', match: (g) => /^2/i.test((g || '').trim()) },
+  { key: 'p3', label: '3r', match: (g) => /^3/i.test((g || '').trim()) },
+  { key: 'p4', label: '4t', match: (g) => /^4/i.test((g || '').trim()) },
+  { key: 'p5', label: '5è', match: (g) => /^5/i.test((g || '').trim()) },
+  { key: 'p6', label: '6è', match: (g) => /^6/i.test((g || '').trim()) },
+  { key: 'ef', label: 'Especialistes · Educació Física', match: (g) => g === 'EF' },
+  { key: 'ang', label: 'Especialistes · Anglès', match: (g) => g === 'Anglès' },
+  { key: 'mus', label: 'Especialistes · Música', match: (g) => /^música$/i.test((g || '').trim()) },
+  { key: 'eis', label: 'Especialistes · EI Suport', match: (g) => g === 'EI suport' },
+  { key: 'siei', label: 'MESI / SIEI', match: (g, d) => d.rol === 'ee' || /MESI|SIEI/i.test(g || '') },
+  { key: 'mall', label: 'Especialista · Audició i Llenguatge', match: (g, d) => /MALL/i.test(d.nom || '') },
+  { key: 'estim', label: "Especialista · Estimulació", match: (g, d) => /ESTIM/i.test(d.nom || '') },
+  { key: 'evip', label: 'Especialista · Educació Artística', match: (g, d) => /EVIP/i.test(d.nom || '') },
+  { key: 'msuport', label: 'Mestres de Suport', match: (g, d) => d.rol === 'msuport' },
+  { key: 'pae', label: 'Suport d\'Educació Especial', match: (g, d) => ['educador', 'vetllador', 'tei', 'suport'].includes(d.rol) },
+  { key: 'ee', label: 'Altres', match: () => true },
 ];
 
-const COORD_KW = ['coordinació','coordinacio','càrrec','carrec'];
+const COORD_KW = ['coordinació', 'coordinacio', 'càrrec', 'carrec'];
 
 function isCoord(v) { return COORD_KW.some(k => v === k || v.startsWith(k + ' ') || v.startsWith(k + ':') || v.includes(' ' + k)); }
 
@@ -108,10 +110,10 @@ function convertOriolTo15Min(horari30) {
 
 export default function HorarisPage() {
   const { api, escola, setEscola, docents, setDocents, showToast, normes } = useApp();
-  const isOriol  = escola?.nom?.toLowerCase().includes('oriol');
-  const franjes   = isOriol ? FRANJES_ORIOL : FRANJES;
-  const [confirmData, setConfirm]   = useState(null);
-  const [uploads, setUploads]   = useState([]);
+  const isOriol = escola?.nom?.toLowerCase().includes('oriol');
+  const franjes = isOriol ? FRANJES_ORIOL : FRANJES;
+  const [confirmData, setConfirm] = useState(null);
+  const [uploads, setUploads] = useState([]);
   const [expanded, setExpanded] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const confirmResolveRef = useRef(null);
@@ -121,12 +123,12 @@ export default function HorarisPage() {
   const [configIntensiva, setConfigIntensiva] = useState(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [intensiuMode, setIntensiuMode] = useState(new Set());
-  const [baixes,      setBaixes]      = useState([]);
+  const [baixes, setBaixes] = useState([]);
   const [baixesLoaded, setBaixesLoaded] = useState(false);
   const [baixesSaving, setBaixesSaving] = useState(false);
-  const [baixaForm,   setBaixaForm]   = useState(null); // null | 'new' | index
-  const [baixaDraft,  setBaixaDraft]  = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', motiu_detall: '', estat: 'activa' });
-  const [baixaMes,    setBaixaMes]    = useState('actives');
+  const [baixaForm, setBaixaForm] = useState(null); // null | 'new' | index
+  const [baixaDraft, setBaixaDraft] = useState({ absent: '', substitut: '', notes: '', pin: '1234', email: '', data_inici: new Date().toISOString().split('T')[0], data_fi_prevista: '', motiu_detall: '', estat: 'activa' });
+  const [baixaMes, setBaixaMes] = useState('actives');
   const [baixaCobStats, setBaixaCobStats] = useState({});
   const [baixaDeleteConfirm, setBaixaDeleteConfirm] = useState(null); // { idx, b, substitutDocent }
   const [searchDocent, setSearchDocent] = useState('');
@@ -154,7 +156,7 @@ export default function HorarisPage() {
     const nomsActius = new Set(docents.map(d => d.nom.toLowerCase().trim()));
     const netes = baixes.filter(b => nomsActius.has((b.substitut || '').toLowerCase().trim()));
     if (netes.length !== baixes.length) {
-      api.saveBaixes(netes).catch(() => {});
+      api.saveBaixes(netes).catch(() => { });
       setBaixes(netes);
     }
   }, [baixesLoaded, docents.length, baixes.length]);
@@ -232,7 +234,7 @@ export default function HorarisPage() {
             });
             // Si el titular és directiu, sincronitzar el PIN a la taula directius perquè pugui fer login
             if (titular.rol === 'directiu') {
-              await api.syncDirectiuPin(nomSubstitut, baixaDraft.pin.trim()).catch(() => {});
+              await api.syncDirectiuPin(nomSubstitut, baixaDraft.pin.trim()).catch(() => { });
             }
             await reload();
             showToast(`✓ Baixa guardada · ${nomSubstitut} pot fer login al sistema`);
@@ -289,13 +291,12 @@ export default function HorarisPage() {
         })
       );
       setBaixaCobStats(Object.fromEntries(entries));
-    } catch {}
+    } catch { }
   }
 
   function imprimirInforme(baixa, cobCount) {
     const tipusInfo = { label: baixa.motiu_detall || baixa.tipus || 'Malaltia' };
     const dies = duradaDies(baixa);
-    const fmtData = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
     const html = `<!DOCTYPE html><html lang="ca"><head><meta charset="utf-8"><title>Baixa – ${baixa.absent}</title>
 <style>
   body{font-family:Arial,sans-serif;max-width:560px;margin:48px auto;color:#222;line-height:1.5}
@@ -311,7 +312,7 @@ export default function HorarisPage() {
   @media print{body{margin:20px}}
 </style></head><body>
 <h1>Informe de Baixa Laboral</h1>
-<div class="school">${escola?.nom || 'Centre educatiu'} · Generat el ${new Date().toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+<div class="school">${escola?.nom || 'Centre educatiu'} · Generat el ${fmtData(new Date().toISOString().split('T')[0])}</div>
 <table>
   <tr><th>Camp</th><th>Valor</th></tr>
   <tr><td>Docent de baixa</td><td><strong>${baixa.absent}</strong></td></tr>
@@ -384,8 +385,8 @@ export default function HorarisPage() {
   }
 
   async function saveHorari(data) {
-    const nom     = data.nom?.trim();
-    const horari  = data.horari || {};
+    const nom = data.nom?.trim();
+    const horari = data.horari || {};
     const tpFranges = [];
     Object.entries(horari).forEach(([dia, franjes]) => {
       Object.entries(franjes || {}).forEach(([franja, val]) => {
@@ -419,11 +420,11 @@ export default function HorarisPage() {
         ));
       }
       if (data.rol === 'directiu' && data.pin) {
-        api.syncDirectiuPin(nom, data.pin).catch(() => {});
+        api.syncDirectiuPin(nom, data.pin).catch(() => { });
       }
       if (data.grup_principal === "Cap d'Estudis") {
         const emailJefa = data.email?.trim() || null;
-        api.saveEmailNotificacions(emailJefa).catch(() => {});
+        api.saveEmailNotificacions(emailJefa).catch(() => { });
         setEscola(e => ({ ...e, email_notificacions: emailJefa }));
       }
       showToast(`Horari de ${nom} ${existing ? 'actualitzat' : 'afegit'}`);
@@ -533,15 +534,15 @@ export default function HorarisPage() {
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 16 }}>
         {[
-          { key: 'personal',  icon: '👥', title: 'Personal del centre', desc: 'Horaris, correus i accés' },
-          { key: 'grups',     icon: '📚', title: 'Grups',               desc: 'Horaris per grup i aula' },
-          { key: 'intensiva', icon: '🌅', title: 'Intensiva',           desc: 'Jornada intensiva',        dot: configIntensiva?.actiu },
-          { key: 'pati',      icon: '🕐', title: 'Pati',                desc: 'Torns de vigilància' },
-          { key: 'sortides',  icon: '🚌', title: 'Sortides',            desc: 'Gestiona sortides escolars' },
-          { key: 'baixes',    icon: '🩹', title: 'Baixes',              desc: baixes.filter(b => b.estat !== 'tancada').length ? `${baixes.filter(b => b.estat !== 'tancada').length} actives` : 'Cap baixa activa' },
+          { key: 'personal', icon: '👥', title: 'Personal del centre', desc: 'Horaris, correus i accés' },
+          { key: 'grups', icon: '📚', title: 'Grups', desc: 'Horaris per grup i aula' },
+          { key: 'intensiva', icon: '🌅', title: 'Intensiva', desc: 'Jornada intensiva', dot: configIntensiva?.actiu },
+          { key: 'pati', icon: '🕐', title: 'Pati', desc: 'Torns de vigilància' },
+          { key: 'sortides', icon: '🚌', title: 'Sortides', desc: 'Gestiona sortides escolars' },
+          { key: 'baixes', icon: '🩹', title: 'Baixes', desc: baixes.filter(b => b.estat !== 'tancada').length ? `${baixes.filter(b => b.estat !== 'tancada').length} actives` : 'Cap baixa activa' },
         ].map(c => {
           const isActive = viewMode === c.key;
-          const isAmber  = c.key === 'baixes';
+          const isAmber = c.key === 'baixes';
           return (
             <button
               key={c.key}
@@ -665,10 +666,10 @@ export default function HorarisPage() {
 
             {/* KPIs del mes */}
             {baixesDelMes.length > 0 && (() => {
-              const actives  = baixesDelMes.filter(b => b.estat !== 'tancada').length;
+              const actives = baixesDelMes.filter(b => b.estat !== 'tancada').length;
               const tancades = baixesDelMes.filter(b => b.estat === 'tancada').length;
-              const diesTot  = baixesDelMes.reduce((s, b) => s + (duradaDies(b) || 0), 0);
-              const cobsTot  = baixesDelMes.reduce((s, b) => s + (baixaCobStats[b.absent] || 0), 0);
+              const diesTot = baixesDelMes.reduce((s, b) => s + (duradaDies(b) || 0), 0);
+              const cobsTot = baixesDelMes.reduce((s, b) => s + (baixaCobStats[b.absent] || 0), 0);
               return (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: '1px solid var(--border)' }}>
                   {[['Actives', actives, 'var(--amber)'], ['Tancades', tancades, 'var(--ink-3)'], ['Dies totals', diesTot, 'var(--blue)'], ['Cobertures', cobsTot, 'var(--green)']].map(([lbl, val, col]) => (
@@ -730,11 +731,11 @@ export default function HorarisPage() {
                   {/* Dates i stats */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
                     {[
-                      b.data_inici         && ['Inici',       new Date(b.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }), 'var(--ink-2)'],
-                      b.data_fi_prevista   && ['Fi prevista', new Date(b.data_fi_prevista + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }), 'var(--ink-3)'],
-                      b.data_fi_real       && ['Fi real',     new Date(b.data_fi_real + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }), 'var(--green)'],
-                      dies !== null        && ['Durada',       formatDurada(dies), 'var(--amber)'],
-                      cobCount > 0         && ['Cobertures',   String(cobCount), 'var(--blue)'],
+                      b.data_inici && ['Inici', fmtData(b.data_inici, { year: false }), 'var(--ink-2)'],
+                      b.data_fi_prevista && ['Fi prevista', fmtData(b.data_fi_prevista, { year: false }), 'var(--ink-3)'],
+                      b.data_fi_real && ['Fi real', fmtData(b.data_fi_real, { year: false }), 'var(--green)'],
+                      dies !== null && ['Durada', formatDurada(dies), 'var(--amber)'],
+                      cobCount > 0 && ['Cobertures', String(cobCount), 'var(--blue)'],
                     ].filter(Boolean).map(([lbl, val, col]) => (
                       <div key={lbl} style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '6px 10px', background: 'var(--bg-2)', borderRadius: 8, minWidth: 60 }}>
                         <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{lbl}</span>
@@ -766,163 +767,165 @@ export default function HorarisPage() {
 
       {viewMode !== 'grups' && viewMode !== 'intensiva' && viewMode !== 'pati' && viewMode !== 'sortides' && viewMode !== 'baixes' && (<>
 
-      <div className="alert alert-blue">
-        ℹ️ Puja el PDF o una foto (PNG, JPG) de l'horari de cada docent. La IA llegirà l'horari automàticament.
-      </div>
+        <div className="alert alert-blue">
+          ℹ️ Puja el PDF o una foto (PNG, JPG) de l'horari de cada docent. La IA llegirà l'horari automàticament.
+        </div>
 
-      {docents.length > 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-head">
-            <h3>✅ Docents carregats</h3>
-            <span className="sp sp-green">{docents.length} docents</span>
-          </div>
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <span style={{ position: 'absolute', left: 11, fontSize: 15, color: 'var(--ink-3)', pointerEvents: 'none', userSelect: 'none' }}>🔍</span>
-              <input
-                type="search"
-                placeholder="Cercar docent per nom..."
-                value={searchDocent}
-                onChange={e => setSearchDocent(e.target.value)}
-                style={{ paddingLeft: 34, paddingRight: 12, height: 36, border: '1.5px solid var(--border-2)', borderRadius: 20, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 13.5, width: '100%', outline: 'none', color: 'var(--ink)', boxSizing: 'border-box' }}
-              />
-              {searchDocent && (
-                <button onClick={() => setSearchDocent('')} style={{ position: 'absolute', right: 10, border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--ink-3)', lineHeight: 1, padding: 2 }}>✕</button>
-              )}
+        {docents.length > 0 && (
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="card-head">
+              <h3>✅ Docents carregats</h3>
+              <span className="sp sp-green">{docents.length} docents</span>
             </div>
-          </div>
-          {NIVELLS.map(n => {
-            const normSearch = searchDocent.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-            const allItems = n.sort ? [...groups[n.key]].sort(n.sort) : groups[n.key];
-            const items = normSearch
-              ? allItems.filter(({ d }) => (d.nom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(normSearch))
-              : allItems;
-            if (!items.length) return null;
-            return (
-              <div key={n.key}>
-                <div style={{ padding: '8px 16px 4px', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
-                  {n.label}
-                </div>
-                {items.map(({ d }) => {
-                  const isOpen = expanded === (d.id || d.nom);
-                  const teHorari = d.horari && Object.keys(d.horari).length > 0;
-                  const baixa = baixesMap[d.nom.toLowerCase().trim()];
-                  const esSubstitut = substitutMap[d.nom.toLowerCase().trim()];
-                  return (
-                    <div key={d.id || d.nom} style={{ borderBottom: '1px solid var(--border)', background: baixa ? 'var(--amber-bg)' : undefined }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px' }}>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: baixa ? 'var(--amber)' : avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0, opacity: baixa ? 0.7 : 1 }}>
-                          {initials(d.nom)}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 13.5, fontWeight: 500, color: baixa ? 'var(--ink-3)' : undefined, textDecoration: baixa ? 'line-through' : undefined }}>{d.nom}</span>
-                            {baixa && (
-                              <>
-                                <span className="sp sp-amber" style={{ fontSize: 10 }}>🩹 Baixa</span>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>→ {baixa.substitut}</span>
-                              </>
-                            )}
-                            {esSubstitut && (
-                              <span className="sp sp-amber" style={{ fontSize: 10 }}>🔄 Substituint {esSubstitut.absent}</span>
-                            )}
-                            {hasCeepsir(d) && (
-                              <span style={{ fontSize: 9.5, background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>CEEPSIR</span>
-                            )}
-                            {(() => { const cicle = cicleCoordinador(d, isOriol); return cicle ? (
-                              <span style={{ fontSize: 9.5, background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>
-                                Coord. {cicle}
-                              </span>
-                            ) : null; })()}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: 11, fontSize: 15, color: 'var(--ink-3)', pointerEvents: 'none', userSelect: 'none' }}>🔍</span>
+                <input
+                  type="search"
+                  placeholder="Cercar docent per nom..."
+                  value={searchDocent}
+                  onChange={e => setSearchDocent(e.target.value)}
+                  style={{ paddingLeft: 34, paddingRight: 12, height: 36, border: '1.5px solid var(--border-2)', borderRadius: 20, background: 'var(--surface)', fontFamily: 'inherit', fontSize: 13.5, width: '100%', outline: 'none', color: 'var(--ink)', boxSizing: 'border-box' }}
+                />
+                {searchDocent && (
+                  <button onClick={() => setSearchDocent('')} style={{ position: 'absolute', right: 10, border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--ink-3)', lineHeight: 1, padding: 2 }}>✕</button>
+                )}
+              </div>
+            </div>
+            {NIVELLS.map(n => {
+              const normSearch = searchDocent.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+              const allItems = n.sort ? [...groups[n.key]].sort(n.sort) : groups[n.key];
+              const items = normSearch
+                ? allItems.filter(({ d }) => (d.nom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(normSearch))
+                : allItems;
+              if (!items.length) return null;
+              return (
+                <div key={n.key}>
+                  <div style={{ padding: '8px 16px 4px', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
+                    {n.label}
+                  </div>
+                  {items.map(({ d }) => {
+                    const isOpen = expanded === (d.id || d.nom);
+                    const teHorari = d.horari && Object.keys(d.horari).length > 0;
+                    const baixa = baixesMap[d.nom.toLowerCase().trim()];
+                    const esSubstitut = substitutMap[d.nom.toLowerCase().trim()];
+                    return (
+                      <div key={d.id || d.nom} style={{ borderBottom: '1px solid var(--border)', background: baixa ? 'var(--amber-bg)' : undefined }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px' }}>
+                          <div style={{ width: 34, height: 34, borderRadius: '50%', background: baixa ? 'var(--amber)' : avatarColor(d.nom), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0, opacity: baixa ? 0.7 : 1 }}>
+                            {initials(d.nom)}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                              {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges||[]).length} trams TP
-                            </span>
-                            {d.rol === 'tutor' && d.grup_principal?.trim() && (
-                              <span style={{ fontSize: 15, background: 'var(--green-bg)', color: 'var(--green)', borderRadius: 5, padding: '2px 7px', fontWeight: 700 }}>{d.grup_principal.trim()}</span>
-                            )}
-                          </div>
-                          {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
-                          {d.jornada && d.jornada !== 'sencera' && (
-                            <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 4, padding: '1px 6px', fontWeight: 600, display: 'inline-block', marginTop: 2 }}>
-                              🌅 {d.jornada === 'mitja' ? 'Mitja jornada' : '2/3 jornada'}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          {teHorari && (
-                            <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setExpanded(isOpen ? null : (d.id || d.nom))}>
-                              {isOpen ? '▴ Tancar' : '▾ Horari'}
-                            </button>
-                          )}
-                          {teHorari && d.horari_intensiu && (
-                            <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-                              <button
-                                style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: !intensiuMode.has(d.id || d.nom) ? 'var(--ink)' : 'transparent', color: !intensiuMode.has(d.id || d.nom) ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
-                                onClick={() => setIntensiuMode(s => { const n = new Set(s); n.delete(d.id || d.nom); return n; })}
-                              >Normal</button>
-                              <button
-                                style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: intensiuMode.has(d.id || d.nom) ? 'var(--amber)' : 'transparent', color: intensiuMode.has(d.id || d.nom) ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
-                                onClick={() => { setIntensiuMode(s => { const n = new Set(s); n.add(d.id || d.nom); return n; }); setExpanded(d.id || d.nom); }}
-                              >🌅 Intensiu</button>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13.5, fontWeight: 500, color: baixa ? 'var(--ink-3)' : undefined, textDecoration: baixa ? 'line-through' : undefined }}>{d.nom}</span>
+                              {baixa && (
+                                <>
+                                  <span className="sp sp-amber" style={{ fontSize: 10 }}>🩹 Baixa</span>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>→ {baixa.substitut}</span>
+                                </>
+                              )}
+                              {esSubstitut && (
+                                <span className="sp sp-amber" style={{ fontSize: 10 }}>🔄 Substituint {esSubstitut.absent}</span>
+                              )}
+                              {hasCeepsir(d) && (
+                                <span style={{ fontSize: 9.5, background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>CEEPSIR</span>
+                              )}
+                              {(() => {
+                                const cicle = cicleCoordinador(d, isOriol); return cicle ? (
+                                  <span style={{ fontSize: 9.5, background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '.03em' }}>
+                                    Coord. {cicle}
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
-                          )}
-                          <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12 }} onClick={() => setConfirm(d)}>✏️ Editar</button>
-                          <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => confirmarEliminar(d.id, d.nom)}>✕</button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                                {rolLabel(d.rol)}{d.grup_principal ? ` · ${d.grup_principal}` : ''} · {(d.tp_franges || []).length} trams TP
+                              </span>
+                              {d.rol === 'tutor' && d.grup_principal?.trim() && (
+                                <span style={{ fontSize: 15, background: 'var(--green-bg)', color: 'var(--green)', borderRadius: 5, padding: '2px 7px', fontWeight: 700 }}>{d.grup_principal.trim()}</span>
+                              )}
+                            </div>
+                            {d.email && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 1 }}>✉ {d.email}</div>}
+                            {d.jornada && d.jornada !== 'sencera' && (
+                              <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 4, padding: '1px 6px', fontWeight: 600, display: 'inline-block', marginTop: 2 }}>
+                                🌅 {d.jornada === 'mitja' ? 'Mitja jornada' : '2/3 jornada'}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            {teHorari && (
+                              <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setExpanded(isOpen ? null : (d.id || d.nom))}>
+                                {isOpen ? '▴ Tancar' : '▾ Horari'}
+                              </button>
+                            )}
+                            {teHorari && d.horari_intensiu && (
+                              <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+                                <button
+                                  style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: !intensiuMode.has(d.id || d.nom) ? 'var(--ink)' : 'transparent', color: !intensiuMode.has(d.id || d.nom) ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+                                  onClick={() => setIntensiuMode(s => { const n = new Set(s); n.delete(d.id || d.nom); return n; })}
+                                >Normal</button>
+                                <button
+                                  style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: intensiuMode.has(d.id || d.nom) ? 'var(--amber)' : 'transparent', color: intensiuMode.has(d.id || d.nom) ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }}
+                                  onClick={() => { setIntensiuMode(s => { const n = new Set(s); n.add(d.id || d.nom); return n; }); setExpanded(d.id || d.nom); }}
+                                >🌅 Intensiu</button>
+                              </div>
+                            )}
+                            <button className="btn btn-sm" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)', fontSize: 12 }} onClick={() => setConfirm(d)}>✏️ Editar</button>
+                            <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => confirmarEliminar(d.id, d.nom)}>✕</button>
+                          </div>
                         </div>
+                        {isOpen && teHorari && (() => {
+                          const mostrarIntensiu = intensiuMode.has(d.id || d.nom) && d.horari_intensiu;
+                          const horariShow = mostrarIntensiu ? d.horari_intensiu : d.horari;
+                          return <HorariInline horari={horariShow} tpFranges={d.tp_franges} franjes={franjes} onCellSave={mostrarIntensiu ? null : (dia, fid, val) => handleCellSave(d, dia, fid, val)} />;
+                        })()}
                       </div>
-                      {isOpen && teHorari && (() => {
-                        const mostrarIntensiu = intensiuMode.has(d.id || d.nom) && d.horari_intensiu;
-                        const horariShow = mostrarIntensiu ? d.horari_intensiu : d.horari;
-                        return <HorariInline horari={horariShow} tpFranges={d.tp_franges} franjes={franjes} onCellSave={mostrarIntensiu ? null : (dia, fid, val) => handleCellSave(d, dia, fid, val)} />;
-                      })()}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head"><h3>📄 Afegir / Actualitzar horari</h3></div>
-        <div style={{ padding: 16 }}>
-          <div
-            style={{ border: `2px dashed ${dragUpload ? 'var(--blue)' : 'var(--border-2)'}`, borderRadius: 'var(--r)', padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: dragUpload ? 'var(--blue-bg)' : 'var(--bg)', marginBottom: 12, transition: 'all .15s' }}
-            onClick={() => fileRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); setDragUpload(true); }}
-            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragUpload(false); }}
-            onDrop={e => { e.preventDefault(); setDragUpload(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files); }}
-          >
-            <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
-            {dragUpload
-              ? <><div style={{ fontSize: 28, marginBottom: 8 }}>📂</div><div style={{ fontSize: 14, fontWeight: 600, color: 'var(--blue)' }}>Deixa anar el fitxer per pujar-lo</div></>
-              : <><div style={{ fontSize: 28, marginBottom: 8 }}>📄</div><div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF, foto o Word de l'horari</div><div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF · PNG · JPG · DOCX · Pots pujar-ne diversos alhora · o arrossega aquí</div></>
-            }
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
-          {uploads.map(u => (
-            <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 8 }}>
-              {u.status === 'loading' ? <Spinner size={20} /> : u.status === 'done' ? <span>✅</span> : <span>⚠️</span>}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{u.msg}</div>
-              </div>
+        )}
+
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head"><h3>📄 Afegir / Actualitzar horari</h3></div>
+          <div style={{ padding: 16 }}>
+            <div
+              style={{ border: `2px dashed ${dragUpload ? 'var(--blue)' : 'var(--border-2)'}`, borderRadius: 'var(--r)', padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: dragUpload ? 'var(--blue-bg)' : 'var(--bg)', marginBottom: 12, transition: 'all .15s' }}
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setDragUpload(true); }}
+              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragUpload(false); }}
+              onDrop={e => { e.preventDefault(); setDragUpload(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files); }}
+            >
+              <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+              {dragUpload
+                ? <><div style={{ fontSize: 28, marginBottom: 8 }}>📂</div><div style={{ fontSize: 14, fontWeight: 600, color: 'var(--blue)' }}>Deixa anar el fitxer per pujar-lo</div></>
+                : <><div style={{ fontSize: 28, marginBottom: 8 }}>📄</div><div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Puja un PDF, foto o Word de l'horari</div><div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF · PNG · JPG · DOCX · Pots pujar-ne diversos alhora · o arrossega aquí</div></>
+              }
             </div>
-          ))}
-        </div>
-      </div>
-
-      {docents.length > 0 && (
-        <div className="card">
-          <div className="card-head"><h3>💾 Exportar</h3></div>
-          <div style={{ padding: '14px 16px' }}>
-            <button className="btn btn-primary btn-full" onClick={() => exportJSON(docents)}>📋 Exportar JSON dels horaris</button>
+            {uploads.map(u => (
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', marginBottom: 8 }}>
+                {u.status === 'loading' ? <Spinner size={20} /> : u.status === 'done' ? <span>✅</span> : <span>⚠️</span>}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{u.msg}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      )}
-    </>)}
+
+        {docents.length > 0 && (
+          <div className="card">
+            <div className="card-head"><h3>💾 Exportar</h3></div>
+            <div style={{ padding: '14px 16px' }}>
+              <button className="btn btn-primary btn-full" onClick={() => exportJSON(docents)}>📋 Exportar JSON dels horaris</button>
+            </div>
+          </div>
+        )}
+      </>)}
     </>
   );
 }
@@ -937,7 +940,7 @@ function calcularCasosTPRetallat(docents, editingMap, normalFranjes, baixes) {
   // Skip teachers on active leave who have a substitute
   const baixaActiva = new Set(
     (baixes || []).filter(b => b.estat === 'activa' && b.substitut)
-                  .map(b => (b.absent || '').toLowerCase().trim())
+      .map(b => (b.absent || '').toLowerCase().trim())
   );
 
   for (const d of docents) {
@@ -1033,13 +1036,13 @@ function mergeConsecutiusTpCasos(casos, matiFranjes) {
       used.add(i);
       used.add(parella);
       const start = c1.horaLabel.split('–')[0].trim();
-      const end   = c2.horaLabel.split('–').pop().trim();
+      const end = c2.horaLabel.split('–').pop().trim();
       merged.push({
         ...c1,
         horaLabel: `${start}–${end}`,
         intensivaSlots: [...c1.intensivaSlots, ...c2.intensivaSlots],
         especialistaNom: c1.especialistaNom || c2.especialistaNom,
-        materiaLabel:    c1.materiaLabel    || c2.materiaLabel,
+        materiaLabel: c1.materiaLabel || c2.materiaLabel,
         assignat: 'disponible',
         merged: true,
       });
@@ -1059,37 +1062,37 @@ function isoToDisplay(iso) {
 }
 function displayToIso(s) {
   const m = (s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
+  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : '';
 }
 
 function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfigChange, onHorarisSaved, showToast, baixes }) {
   const { escola } = useApp();
   const cfg = configIntensiva || {};
-  const [dataInici, setDataInici]   = useState(cfg.data_inici || '');
-  const [dataFi, setDataFi]         = useState(cfg.data_fi || '');
+  const [dataInici, setDataInici] = useState(cfg.data_inici || '');
+  const [dataFi, setDataFi] = useState(cfg.data_fi || '');
   const [dataIniciText, setDataIniciText] = useState(isoToDisplay(cfg.data_inici || ''));
-  const [dataFiText, setDataFiText]       = useState(isoToDisplay(cfg.data_fi || ''));
-  const [actiu, setActiu]           = useState(cfg.actiu || false);
+  const [dataFiText, setDataFiText] = useState(isoToDisplay(cfg.data_fi || ''));
+  const [actiu, setActiu] = useState(cfg.actiu || false);
   const [generating, setGenerating] = useState(false);
   const [generatingMsg, setGeneratingMsg] = useState('');
-  const [editingMap, setEditingMap]         = useState(null); // { docentId: horariModificat }
+  const [editingMap, setEditingMap] = useState(null); // { docentId: horariModificat }
   const [canvisAnteriors, setCanvisAnteriors] = useState({}); // per diff visual
-  const [tornsPati, setTornsPati]           = useState(null);
-  const [tpPendents, setTpPendents]         = useState([]);
+  const [tornsPati, setTornsPati] = useState(null);
+  const [tpPendents, setTpPendents] = useState([]);
   const [resumGeneracio, setResumGeneracio] = useState('');
-  const [saving, setSaving]                 = useState(false);
-  const [configSaving, setConfigSaving]     = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
   const [tpRetallatCasos, setTpRetallatCasos] = useState([]);
-  const [tpRetallatMode, setTpRetallatMode]   = useState(false);
+  const [tpRetallatMode, setTpRetallatMode] = useState(false);
   const [tpRetallatActiu, setTpRetallatActiu] = useState(cfg.regles?.tpRetallatActiu !== false);
   const [reglesCollapsed, setReglesCollapsed] = useState(true);
-  const [draftBanner, setDraftBanner]         = useState(null);
+  const [draftBanner, setDraftBanner] = useState(null);
   useEffect(() => {
     if (!escola?.id) return;
     try {
       const raw = localStorage.getItem(`gd_tp_draft_${escola.id}`);
       if (raw) setDraftBanner(JSON.parse(raw));
-    } catch {}
+    } catch { }
   }, [escola?.id]);
 
   // Restaurar sessió d'edició de jornada intensiva en curs (si l'usuari ha navegat fora i ha tornat)
@@ -1109,7 +1112,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
           setTpRetallatMode(!!sess.tpRetallatMode);
         }
       }
-    } catch {}
+    } catch { }
   }, [escola?.id]);
 
   // Persistir la sessió d'edició mentre hi ha generació en curs, per no perdre el treball en navegar fora
@@ -1118,12 +1121,12 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     try {
       const sess = { editingMap, canvisAnteriors, tornsPati, tpPendents, resumGeneracio, tpRetallatCasos, tpRetallatMode, savedAt: new Date().toISOString() };
       localStorage.setItem(`gd_intensiva_sessio_${escola.id}`, JSON.stringify(sess));
-    } catch {}
+    } catch { }
   }, [escola?.id, editingMap, canvisAnteriors, tornsPati, tpPendents, resumGeneracio, tpRetallatCasos, tpRetallatMode]);
 
   // Counts contextuals (memòria per evitar recàlcul continu)
   const counts = useMemo(() => {
-    const DIES = ['dilluns','dimarts','dimecres','dijous','divendres'];
+    const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
     const tardesIds = franjes.filter(f => f.hora === 'Tarda' && !f.lliure).map(f => f.id);
     const ESP_KW = ['ef', 'anglès', 'angles', 'música', 'musica'];
 
@@ -1133,7 +1136,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
 
     const tallersRacons = docents.filter(d => {
       if (!d.horari) return false;
-      return DIES.some(dia => Object.values(d.horari[dia] || {}).some(v => /^(tallers|racons)/i.test((v||'').trim())));
+      return DIES.some(dia => Object.values(d.horari[dia] || {}).some(v => /^(tallers|racons)/i.test((v || '').trim())));
     }).length;
 
     const tpRetallat = docents.filter(d => {
@@ -1144,11 +1147,11 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     }).length;
 
     const especialistesDeseq = docents.filter(d => {
-      if (!d.horari || !ESP_KW.some(kw => (d.grup_principal||'').toLowerCase().includes(kw))) return false;
+      if (!d.horari || !ESP_KW.some(kw => (d.grup_principal || '').toLowerCase().includes(kw))) return false;
       const grupsMap = {};
       for (const dia of DIES) {
         for (const v of Object.values(d.horari[dia] || {})) {
-          const val = (v||'').trim();
+          const val = (v || '').trim();
           if (!val || /^(tp|lliure|pati|coordinaci|càrrec|ceepsir)/i.test(val)) continue;
           const g = val.split(/\s*[·/]\s*/)[0].trim();
           if (g) grupsMap[g] = (grupsMap[g] || 0) + 1;
@@ -1161,7 +1164,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
     return { tpTarda, tallersRacons, tpRetallat, especialistesDeseq };
   }, [docents, franjes]);
   // Regles per checklist
-  const [regleTpTarda, setRegleTpTarda]       = useState(cfg.regles?.tpTarda || 'pati');
+  const [regleTpTarda, setRegleTpTarda] = useState(cfg.regles?.tpTarda || 'pati');
   const [regleTpAltraText, setRegleTpAltraText] = useState(cfg.regles?.tpAltraText || '');
   const [reglesEquilibraEsp, setReglesEquilibraEsp] = useState(cfg.regles?.equilibrarEspecialistes || false);
   const [reglesNoTallers, setReglesNoTallers] = useState(cfg.regles?.noTallers || false);
@@ -1171,11 +1174,11 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
   // Normes IA — jornada intensiva (criteris organitzatius persistents, propis d'aquest apartat)
   const [normesIntensiva, setNormesIntensiva] = useState(cfg.normes_intensiva || []);
   const [normaEditing, setNormaEditing] = useState(null); // index | 'new' | null
-  const [normaDraft, setNormaDraft]     = useState('');
+  const [normaDraft, setNormaDraft] = useState('');
   const [normesSaving, setNormesSaving] = useState(false);
   // Importar horaris d'anys anteriors (multi-document → detecció de patrons)
   const importFileRef = useRef(null);
-  const [detectant, setDetectant]   = useState(false);
+  const [detectant, setDetectant] = useState(false);
   const [importDocs, setImportDocs] = useState([]); // [{ id, nom, base64, mime, estat: 'pendent'|'analitzant'|'llegit'|'error', resultat, error }]
   const [dragImport, setDragImport] = useState(false);
   const [veureDetallDocs, setVeureDetallDocs] = useState(false);
@@ -1452,7 +1455,7 @@ function IntensivaView({ docents, franjes, normes, api, configIntensiva, onConfi
 ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
           for (const g of keys) {
             const diff = grupsMap[g].length - target;
-            if (diff > 0)      instrLines.push(`  BUIDA ${diff} slot(s) de "${g}" (ara ${grupsMap[g].length}→${target}). Opcions: ${grupsMap[g].join(', ')}`);
+            if (diff > 0) instrLines.push(`  BUIDA ${diff} slot(s) de "${g}" (ara ${grupsMap[g].length}→${target}). Opcions: ${grupsMap[g].join(', ')}`);
             else if (diff < 0) instrLines.push(`  AFEGEIX ${Math.abs(diff)} slot(s) a "${g}" (ara ${grupsMap[g].length}→${target}). Posa'l a una franja lliure.`);
           }
         }
@@ -1552,10 +1555,10 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
               const vA = converted[dia]['i3a'];
               const vB = converted[dia]['i4a'];
               if (!isSkip(vA) && !isSkip(vB) && vA !== vB
-                  && converted[dia]['i3b'] === vA
-                  && converted[dia]['i3c'] === vA
-                  && converted[dia]['i3d'] === vA
-                  && converted[dia]['i4b'] === vB) {
+                && converted[dia]['i3b'] === vA
+                && converted[dia]['i3c'] === vA
+                && converted[dia]['i3d'] === vA
+                && converted[dia]['i4b'] === vB) {
                 converted[dia]['i3d'] = vB;
               }
             }
@@ -1606,10 +1609,10 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
       const n = Object.keys(editingMap).length;
       // Desar torns de pati si s'han generat
       if (tornsPati) {
-        try { await api.savePatiTorns({ torns: tornsPati, generat: new Date().toISOString().split('T')[0] }); } catch {}
+        try { await api.savePatiTorns({ torns: tornsPati, generat: new Date().toISOString().split('T')[0] }); } catch { }
       }
       showToast(`✓ Horaris intensius guardats (${n} docents)`);
-      try { localStorage.removeItem(`gd_intensiva_sessio_${escola.id}`); } catch {}
+      try { localStorage.removeItem(`gd_intensiva_sessio_${escola.id}`); } catch { }
       setEditingMap(null);
       setTpPendents([]);
       setResumGeneracio('');
@@ -1623,7 +1626,7 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
   const docentAmbIntensiu = docents.filter(d => d.horari_intensiu).length;
 
   function descartarTot() {
-    try { localStorage.removeItem(`gd_intensiva_sessio_${escola.id}`); } catch {}
+    try { localStorage.removeItem(`gd_intensiva_sessio_${escola.id}`); } catch { }
     setEditingMap(null);
     setTpPendents([]);
     setResumGeneracio('');
@@ -1698,7 +1701,7 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 3 }}>Tens una assignació de TP en curs</div>
             <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-              Guardat el {new Date(draftBanner.savedAt).toLocaleDateString('ca', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} · {draftBanner.assignacions?.length || 0} casos
+              Guardat el {fmtData(new Date(draftBanner.savedAt).toISOString().split('T')[0], { weekday: 'long' })} a les {new Date(draftBanner.savedAt).toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' })} · {draftBanner.assignacions?.length || 0} casos
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
@@ -1793,7 +1796,7 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
         </div>
         {actiu && dataInici && dataFi && (
           <div style={{ padding: '0 16px 12px', fontSize: 12.5, color: 'var(--green)' }}>
-            ✓ Jornada intensiva activa del {new Date(dataInici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })} al {new Date(dataFi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })}
+            ✓ Jornada intensiva activa del {fmtData(dataInici, { year: false })} al {fmtData(dataFi, { year: false })}
           </div>
         )}
       </div>
@@ -1899,10 +1902,10 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: counts.tpTarda === 0 ? 0.45 : 1 }}>
               {[
-                { val: 'pati',    icon: '🕐', label: 'Mou al pati del mateix dia',            desc: 'El TP passa al torn de pati si hi ha lloc' },
-                { val: 'mati',    icon: '☀️', label: 'Mou a la primera hora lliure del matí',  desc: 'Es busca el primer slot buit del matí' },
-                { val: 'eliminar',icon: '🗑️', label: 'Elimina (sense reubicació)',              desc: 'El TP s\'esborra i apareix a la llista de pendents' },
-                { val: 'altra',   icon: '✍️', label: 'Altra opció (instrucció pròpia)',         desc: 'Escriu com vols que HorarIA gestioni el TP de tarda' },
+                { val: 'pati', icon: '🕐', label: 'Mou al pati del mateix dia', desc: 'El TP passa al torn de pati si hi ha lloc' },
+                { val: 'mati', icon: '☀️', label: 'Mou a la primera hora lliure del matí', desc: 'Es busca el primer slot buit del matí' },
+                { val: 'eliminar', icon: '🗑️', label: 'Elimina (sense reubicació)', desc: 'El TP s\'esborra i apareix a la llista de pendents' },
+                { val: 'altra', icon: '✍️', label: 'Altra opció (instrucció pròpia)', desc: 'Escriu com vols que HorarIA gestioni el TP de tarda' },
               ].map(({ val, icon, label, desc }) => (
                 <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', border: `1.5px solid ${regleTpTarda === val ? 'var(--blue)' : 'var(--border)'}`, background: regleTpTarda === val ? 'var(--blue-bg)' : 'var(--bg)', transition: 'all .1s' }}>
                   <input type="radio" name="tpTarda" value={val} checked={regleTpTarda === val} onChange={() => setRegleTpTarda(val)} style={{ marginTop: 2, accentColor: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }} />
@@ -1930,7 +1933,7 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
                   }
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-                  Jornada sencera / 2/3: <strong>2h → 1h</strong> · Mitja jornada: <strong>1h → 30min</strong><br/>
+                  Jornada sencera / 2/3: <strong>2h → 1h</strong> · Mitja jornada: <strong>1h → 30min</strong><br />
                   <span style={{ color: 'var(--ink-4)' }}>Après de generar, se't demanarà on assignar el temps alliberat</span>
                 </div>
               </div>
@@ -1950,18 +1953,17 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8 }}>Format del matí</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
 
-            {/* Tallers / Racons */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: reglesNoTallers ? '#FFF0F0' : 'var(--bg-2)', borderRadius: 8, cursor: counts.tallersRacons === 0 ? 'default' : 'pointer', border: `1px solid ${reglesNoTallers ? '#E05050' : 'var(--border)'}`, transition: 'all .1s', opacity: counts.tallersRacons === 0 ? 0.5 : 1 }}>
-              <input type="checkbox" checked={reglesNoTallers} onChange={e => setReglesNoTallers(e.target.checked)} disabled={counts.tallersRacons === 0} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#E05050', flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12.5, color: reglesNoTallers ? '#C03030' : 'var(--ink-2)', fontWeight: 600 }}>🚫 No hi ha Tallers ni Racons</div>
-                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Elimina "Tallers" i "Racons" de totes les franges i amplia l'activitat anterior</div>
-              </div>
-              {counts.tallersRacons > 0
-                ? <span style={{ fontSize: 10, background: reglesNoTallers ? '#FFD0D0' : 'var(--bg-3)', color: reglesNoTallers ? '#C03030' : 'var(--ink-3)', borderRadius: 10, padding: '1px 7px', fontWeight: 600, flexShrink: 0 }}>{counts.tallersRacons} docents</span>
-                : <span style={{ fontSize: 10, color: 'var(--ink-4)', fontStyle: 'italic', flexShrink: 0 }}>cap docent</span>
-              }
-            </label>
+            {/* Tallers / Racons — només si algun docent en té a l'horari */}
+            {counts.tallersRacons > 0 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: reglesNoTallers ? '#FFF0F0' : 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesNoTallers ? '#E05050' : 'var(--border)'}`, transition: 'all .1s' }}>
+                <input type="checkbox" checked={reglesNoTallers} onChange={e => setReglesNoTallers(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#E05050', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, color: reglesNoTallers ? '#C03030' : 'var(--ink-2)', fontWeight: 600 }}>🚫 No hi ha Tallers ni Racons</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>Elimina "Tallers" i "Racons" de totes les franges i amplia l'activitat anterior</div>
+                </div>
+                <span style={{ fontSize: 10, background: reglesNoTallers ? '#FFD0D0' : 'var(--bg-3)', color: reglesNoTallers ? '#C03030' : 'var(--ink-3)', borderRadius: 10, padding: '1px 7px', fontWeight: 600, flexShrink: 0 }}>{counts.tallersRacons} docents</span>
+              </label>
+            )}
 
             {/* Compactació 45+45 */}
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${reglesCompactar45 ? 'var(--blue)' : 'var(--border)'}`, transition: 'all .1s' }}>
@@ -2016,9 +2018,9 @@ ${d.nom} (${d.grup_principal}) — objectiu: ${target} slots/grup:`);
             >
               {generating
                 ? <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,.4)', borderTopColor: '#fff', animation: 'spin .8s linear infinite' }} />
-                    {generatingMsg || '✨ Generant horaris...'}
-                  </span>
+                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,.4)', borderTopColor: '#fff', animation: 'spin .8s linear infinite' }} />
+                  {generatingMsg || '✨ Generant horaris...'}
+                </span>
                 : '✨ Generar amb HorarIA'}
             </button>
             <button className="btn btn-sm" style={{ fontSize: 12, background: 'var(--purple-bg)', color: 'var(--purple)', borderColor: 'var(--purple)' }} disabled={plantillaSaving} onClick={guardarPlantilla}>
@@ -2282,16 +2284,15 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
     const nomEscola = escola?.nom || configIntensiva?.nom_escola || 'Centre educatiu';
     const dates = configIntensiva
       ? (() => {
-          const fmt = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-          return `${fmt(configIntensiva.data_inici)} – ${fmt(configIntensiva.data_fi)}`;
-        })()
+        return `${fmtData(configIntensiva.data_inici)} – ${fmtData(configIntensiva.data_fi)}`;
+      })()
       : '';
 
     // Detectar logo per escola
     const nomLower = nomEscola.toLowerCase();
     const logoFile = nomLower.includes('rivo') ? 'logo_rivo.png'
       : (nomLower.includes('oriol') || nomLower.includes("ca n'")) ? 'logo_canoriol.png'
-      : null;
+        : null;
 
     // Carregar logo com a base64 per incrustar al HTML (funciona off-line i en finestra nova)
     let logoB64 = null;
@@ -2304,7 +2305,7 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
     }
 
     // Color d'acent per l'escola (portada)
-    const isRivo  = nomLower.includes('rivo');
+    const isRivo = nomLower.includes('rivo');
     const isOriol = nomLower.includes('oriol') || nomLower.includes("ca n'");
     const accentColor = isRivo ? '#E05A22' : isOriol ? '#1E6BA0' : '#4A5568';
     const accentLight = isRivo ? '#FFF3EE' : isOriol ? '#EEF4FA' : '#F7F8FA';
@@ -2314,20 +2315,20 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
       const v = (val || '').trim().toLowerCase();
       if (!v || v === '—') return 'background:#fafafa;color:#ccc;';
       if (/^lliure$/.test(v)) return 'background:#E6F4EA;color:#3A7D52;font-weight:600;';
-      if (/^tp$/.test(v))     return 'background:#FEF3E2;color:#B06020;font-weight:600;';
-      if (/^pati$/.test(v))   return 'background:#F0E6F9;color:#7B52A0;font-weight:600;';
+      if (/^tp$/.test(v)) return 'background:#FEF3E2;color:#B06020;font-weight:600;';
+      if (/^pati$/.test(v)) return 'background:#F0E6F9;color:#7B52A0;font-weight:600;';
       if (/coordinaci|càrrec|equip direct/i.test(v)) return 'background:#EAE4F5;color:#5C4A8A;';
       return 'background:#E8F1FB;color:#3A5F8A;';
     }
 
     // Funció per pintar capçalera de hora (pastel amb text fosc)
     function horaHeaderStyle(hora) {
-      if (hora === 'Pati')  return `background:#EFE0F8;color:#6B3FA0;font-weight:700;`;
+      if (hora === 'Pati') return `background:#EFE0F8;color:#6B3FA0;font-weight:700;`;
       if (hora === 'Dinar') return `background:#E8EDF0;color:#4A5E6A;font-weight:700;`;
       if (hora === 'Tarda') return `background:#FDE8E4;color:#A04030;font-weight:700;`;
       // Matí: color d'accent molt clar
       const matiLight = isRivo ? '#FDEEE6' : '#E6EFF8';
-      const matiText  = isRivo ? '#A04010' : '#2A5080';
+      const matiText = isRivo ? '#A04010' : '#2A5080';
       return `background:${matiLight};color:${matiText};font-weight:700;`;
     }
 
@@ -2366,7 +2367,7 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
     }
 
     // Colors per docent (barra lateral)
-    const AVATAR_COLORS = ['#E53935','#D81B60','#8E24AA','#3949AB','#1E88E5','#00897B','#43A047','#FB8C00','#6D4C41','#546E7A'];
+    const AVATAR_COLORS = ['#E53935', '#D81B60', '#8E24AA', '#3949AB', '#1E88E5', '#00897B', '#43A047', '#FB8C00', '#6D4C41', '#546E7A'];
     function strColor(nom) {
       let h = 0; for (let i = 0; i < nom.length; i++) h = nom.charCodeAt(i) + ((h << 5) - h);
       return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
@@ -2437,9 +2438,9 @@ function EditingIntensivaView({ docents, editingMap, normalFranjes, canvisAnteri
 
       <!-- LLEGENDA -->
       <div style="display:flex;gap:14px;flex-wrap:wrap;padding:0 24px 14px;font-size:9px;">
-        ${[['#E6F4EA','#3A7D52','Lliure'],['#FEF3E2','#B06020','TP'],['#F0E6F9','#7B52A0','Pati'],['#EAE4F5','#5C4A8A','Coord/Càrrec'],['#E8F1FB','#3A5F8A','Classe']].map(([bg,c,lbl])=>
-          `<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${bg};border:1px solid ${c};display:inline-block;"></span><span style="color:#666;">${lbl}</span></span>`
-        ).join('')}
+        ${[['#E6F4EA', '#3A7D52', 'Lliure'], ['#FEF3E2', '#B06020', 'TP'], ['#F0E6F9', '#7B52A0', 'Pati'], ['#EAE4F5', '#5C4A8A', 'Coord/Càrrec'], ['#E8F1FB', '#3A5F8A', 'Classe']].map(([bg, c, lbl]) =>
+      `<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${bg};border:1px solid ${c};display:inline-block;"></span><span style="color:#666;">${lbl}</span></span>`
+    ).join('')}
       </div>
 
       <!-- HORARIS PROFESSIONALS -->
@@ -2760,7 +2761,7 @@ function HorariInlineIntensiu({ horari, horariAnterior, tpFranges = [], franjes,
   return (
     <div style={{ padding: '0 12px 12px', background: 'var(--bg)' }}>
       <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati']].map(([bg,bc,lbl]) => (
+        {[['var(--green-bg)', 'var(--green-mid)', 'Lliure'], ['var(--amber-bg)', '#F0D5A8', 'TP'], ['var(--purple-bg)', 'var(--purple-mid)', 'Coord/Càrrec'], ['var(--blue-bg)', '#C0D0EE', 'Classe'], ['var(--bg-3)', 'var(--border-2)', 'Pati']].map(([bg, bc, lbl]) => (
           <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, color: 'var(--ink-3)' }}>
             <span style={{ width: 7, height: 7, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />{lbl}
           </span>
@@ -2786,7 +2787,7 @@ function HorariInlineIntensiu({ horari, horariAnterior, tpFranges = [], franjes,
               const grp = horaGroups[f.hora] || [];
               const isFirst = grp[0]?.id === f.id;
               const rowH = f.lliure ? 18 : f.patio ? 22 : (f.min || 15) * 2;
-              const pad  = (f.lliure || f.patio || (f.min || 15) <= 15) ? '1px 3px' : '4px 3px';
+              const pad = (f.lliure || f.patio || (f.min || 15) <= 15) ? '1px 3px' : '4px 3px';
               return (
                 <tr key={f.id} style={{ height: rowH }}>
                   {isFirst && (
@@ -2837,7 +2838,7 @@ function TPRetallatView({ casos, docents, editingMap, escolaId, onConfirm, onDis
   const DIES = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
   const DIE_LBL = { dilluns: 'Dilluns', dimarts: 'Dimarts', dimecres: 'Dimecres', dijous: 'Dijous', divendres: 'Divendres' };
   const DIE_COLOR = { dilluns: 'var(--blue)', dimarts: 'var(--green)', dimecres: 'var(--amber)', dijous: '#7C3AED', divendres: '#E05050' };
-  const DIE_BG    = { dilluns: 'var(--blue-bg)', dimarts: 'var(--green-bg)', dimecres: 'var(--amber-bg)', dijous: '#F5F0FF', divendres: '#FFF0F0' };
+  const DIE_BG = { dilluns: 'var(--blue-bg)', dimarts: 'var(--green-bg)', dimecres: 'var(--amber-bg)', dijous: '#F5F0FF', divendres: '#FFF0F0' };
 
   const [assignacions, setAssignacions] = useState(() => casos.map(c => ({ ...c })));
   const [lastSaved, setLastSaved] = useState(null);
@@ -2849,7 +2850,7 @@ function TPRetallatView({ casos, docents, editingMap, escolaId, onConfirm, onDis
       const initial = casos.map(c => ({ ...c }));
       const draft = { editingMap, casos, assignacions: initial, savedAt: new Date().toISOString() };
       localStorage.setItem(`gd_tp_draft_${escolaId}`, JSON.stringify(draft));
-    } catch {}
+    } catch { }
   }, []);
 
   function setAssignat(idx, val) {
@@ -2859,7 +2860,7 @@ function TPRetallatView({ casos, docents, editingMap, escolaId, onConfirm, onDis
         const draft = { editingMap, casos, assignacions: next, savedAt: new Date().toISOString() };
         localStorage.setItem(`gd_tp_draft_${escolaId}`, JSON.stringify(draft));
         setLastSaved(new Date());
-      } catch {}
+      } catch { }
       return next;
     });
   }
@@ -2880,7 +2881,7 @@ function TPRetallatView({ casos, docents, editingMap, escolaId, onConfirm, onDis
         break;
       }
     }
-    const cicleIdx = g => { const s = (g||'').trim(); if (/^[Ii]\d/.test(s)) return 0; const n = parseInt(s.match(/\d+/)?.[0]||'99'); return n<=2?1:n<=4?2:3; };
+    const cicleIdx = g => { const s = (g || '').trim(); if (/^[Ii]\d/.test(s)) return 0; const n = parseInt(s.match(/\d+/)?.[0] || '99'); return n <= 2 ? 1 : n <= 4 ? 2 : 3; };
     const cd = cicleIdx(cas.docent.grup_principal || '');
     return opts.sort((a, b) => Math.abs(cicleIdx(a.grup) - cd) - Math.abs(cicleIdx(b.grup) - cd) || a.grup.localeCompare(b.grup, 'ca'));
   }
@@ -2893,7 +2894,7 @@ function TPRetallatView({ casos, docents, editingMap, escolaId, onConfirm, onDis
 
   const jornadaLabel = j => j === 'mitja' ? 'Mitja jornada' : j === 'dos_tercos' ? '2/3 jornada' : '';
 
-  const tpMinsLabel = mins => mins >= 60 ? `${mins/60}h` : `${mins}min`;
+  const tpMinsLabel = mins => mins >= 60 ? `${mins / 60}h` : `${mins}min`;
 
   return (
     <div>
@@ -2953,7 +2954,7 @@ function TPRetallatView({ casos, docents, editingMap, escolaId, onConfirm, onDis
               const isAssigned = cas.assignat !== 'disponible';
 
               const CICLE_ORDER = ['Infantil', 'Cicle inicial', 'Cicle mitjà', 'Cicle superior'];
-              const cicleLabel = g => { const s=(g||'').trim(); if(/^[Ii]\d/.test(s)) return 'Infantil'; const n=parseInt(s.match(/\d+/)?.[0]||'99'); return n<=2?'Cicle inicial':n<=4?'Cicle mitjà':'Cicle superior'; };
+              const cicleLabel = g => { const s = (g || '').trim(); if (/^[Ii]\d/.test(s)) return 'Infantil'; const n = parseInt(s.match(/\d+/)?.[0] || '99'); return n <= 2 ? 'Cicle inicial' : n <= 4 ? 'Cicle mitjà' : 'Cicle superior'; };
               const cicleGroups = grupsOpts.reduce((acc, g) => {
                 const c = cicleLabel(g.grup);
                 if (!acc[c]) acc[c] = [];
@@ -3131,16 +3132,36 @@ function parseHorariAlumnat(raw) {
   try {
     const parsed = typeof raw === 'object' ? raw : JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const dies = ['dilluns','dimarts','dimecres','dijous','divendres'];
+      const dies = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
       if (dies.some(d => d in parsed)) return parsed;
     }
-  } catch {}
+  } catch { }
   return null;
 }
 
+// 16 colors màximament distintius (hues espaiats pel cercle cromàtic)
+const PATI_PALETTE = [
+  { color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' },  // Vermell
+  { color: '#EA580C', bg: '#FFF7ED', border: '#FED7AA' },  // Taronja
+  { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },  // Ambre
+  { color: '#65A30D', bg: '#F7FEE7', border: '#D9F99D' },  // Lima
+  { color: '#16A34A', bg: '#F0FDF4', border: '#86EFAC' },  // Verd
+  { color: '#0F766E', bg: '#F0FDFA', border: '#5EEAD4' },  // Teal
+  { color: '#0369A1', bg: '#E0F2FE', border: '#7DD3FC' },  // Blau cel
+  { color: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },  // Blau
+  { color: '#6D28D9', bg: '#F5F3FF', border: '#DDD6FE' },  // Violeta
+  { color: '#A21CAF', bg: '#FDF4FF', border: '#F0ABFC' },  // Fúcsia
+  { color: '#BE185D', bg: '#FDF2F8', border: '#FBCFE8' },  // Rosa
+  { color: '#9F1239', bg: '#FFF1F2', border: '#FDA4AF' },  // Carmesí
+  { color: '#92400E', bg: '#FEF3C7', border: '#FDE68A' },  // Marró
+  { color: '#4D7C0F', bg: '#ECFCCB', border: '#BEF264' },  // Oliva
+  { color: '#701A75', bg: '#FAF5FF', border: '#E9D5FF' },  // Porpra fosc
+  { color: '#475569', bg: '#F8FAFC', border: '#CBD5E1' },  // Pissarra
+];
+
 function PatiView({ docents, franjes, configIntensiva, api, showToast, isOriol, baixes, escola }) {
   const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
-  const DIE_LBL  = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
+  const DIE_LBL = { dilluns: 'Dl', dimarts: 'Dt', dimecres: 'Dc', dijous: 'Dj', divendres: 'Dv' };
   const patioFranjes = franjes.filter(f => f.patio);
 
   // Baixes actives: mapa absent (lowercase) → substitut
@@ -3164,6 +3185,24 @@ function PatiView({ docents, franjes, configIntensiva, api, showToast, isOriol, 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const docentColorMap = useMemo(() => {
+    if (!torns) return {};
+    const allNoms = new Set();
+    for (const dia of DIES_ALL) {
+      for (const f of filesTorns) {
+        for (const n of (torns[dia]?.[f.id] || [])) {
+          if (n) allNoms.add(n);
+        }
+      }
+    }
+    const sorted = [...allNoms].sort();
+    const map = {};
+    sorted.forEach((nom, i) => { map[nom] = PATI_PALETTE[i % PATI_PALETTE.length]; });
+    return map;
+  }, [torns, filesTorns]);
+
+  const getDC = nom => docentColorMap[nom] || { color: '#64748B', bg: 'var(--bg-2)', border: 'var(--border)' };
+
   // Inicialitza torns buits
   const initTorns = () => {
     const t = {};
@@ -3178,9 +3217,21 @@ function PatiView({ docents, franjes, configIntensiva, api, showToast, isOriol, 
     if (!api) return;
     api.getPatiTorns().then(res => {
       const saved = res?.[0]?.config_pati?.torns;
-      setTorns(saved || initTorns());
+      if (saved) {
+        const deduped = {};
+        DIES_ALL.forEach(dia => {
+          deduped[dia] = {};
+          filesTorns.forEach(f => {
+            const arr = saved[dia]?.[f.id] || [];
+            deduped[dia][f.id] = [...new Set(arr.filter(Boolean))];
+          });
+        });
+        setTorns(deduped);
+      } else {
+        setTorns(initTorns());
+      }
     }).catch(() => setTorns(initTorns()))
-    .finally(() => setLoading(false));
+      .finally(() => setLoading(false));
   }, [api]);
 
   function setTornDocent(dia, pid, idx, nom) {
@@ -3224,13 +3275,13 @@ function PatiView({ docents, franjes, configIntensiva, api, showToast, isOriol, 
               // Rivo: enrutar al pati d'Infantil o de Primària segons grup_principal
               const gp = (d.grup_principal || '').trim();
               const dest = /^[iI]/.test(gp) ? 'patiB_inf'
-                         : /^[456]/.test(gp) ? 'patiB_pri'
-                         : 'patiB_inf'; // per defecte → Infantil
+                : /^[456]/.test(gp) ? 'patiB_pri'
+                  : 'patiB_inf'; // per defecte → Infantil
               if (!nousTorns[dia][dest]) nousTorns[dia][dest] = [];
-              nousTorns[dia][dest].push(d.nom);
+              if (!nousTorns[dia][dest].includes(d.nom)) nousTorns[dia][dest].push(d.nom);
             } else {
               if (!nousTorns[dia][f.id]) nousTorns[dia][f.id] = [];
-              nousTorns[dia][f.id].push(d.nom);
+              if (!nousTorns[dia][f.id].includes(d.nom)) nousTorns[dia][f.id].push(d.nom);
             }
           }
         }
@@ -3273,29 +3324,29 @@ function PatiView({ docents, franjes, configIntensiva, api, showToast, isOriol, 
   function imprimirTornsPati() {
     if (!torns) return showToast('Primer guarda els torns de pati');
     const nomEscola = escola?.nom || 'Centre Educatiu';
-    const _nomLow   = nomEscola.toLowerCase();
-    const logoUrl   = _nomLow.includes('rivo')  ? `${window.location.origin}/logo_rivo.png`
-                    : _nomLow.includes('oriol') ? `${window.location.origin}/logo_canoriol.png`
-                    : null;
+    const _nomLow = nomEscola.toLowerCase();
+    const logoUrl = _nomLow.includes('rivo') ? `${window.location.origin}/logo_rivo.png`
+      : _nomLow.includes('oriol') ? `${window.location.origin}/logo_canoriol.png`
+        : null;
     const ara = new Date();
     const curs = ara.getMonth() >= 8
       ? `${ara.getFullYear()}–${ara.getFullYear() + 1}`
       : `${ara.getFullYear() - 1}–${ara.getFullYear()}`;
 
     const PDF_INFO = {
-      patiA:     { label: 'Primària · 1r, 2n i 3r',  time: '10:30–11:00', color: '#16a34a' },
-      patiB_inf: { label: 'Infantil · I3, I4 i I5',  time: '11:00–11:30', color: '#2563eb' },
-      patiB_pri: { label: 'Primària · 4t, 5è i 6è',  time: '11:00–11:30', color: '#7c3aed' },
-      opatiA:    { label: 'Infantil / Primària',       time: '11:00–11:30', color: '#16a34a' },
-      opatiB:    { label: 'Secundària',                time: '11:30–12:00', color: '#2563eb' },
+      patiA: { label: 'Primària · 1r, 2n i 3r', time: '10:30–11:00', color: '#16a34a' },
+      patiB_inf: { label: 'Infantil · I3, I4 i I5', time: '11:00–11:30', color: '#2563eb' },
+      patiB_pri: { label: 'Primària · 4t, 5è i 6è', time: '11:00–11:30', color: '#7c3aed' },
+      opatiA: { label: 'Infantil / Primària', time: '11:00–11:30', color: '#16a34a' },
+      opatiB: { label: 'Secundària', time: '11:30–12:00', color: '#2563eb' },
     };
-    const DIES_ALL  = ['dilluns','dimarts','dimecres','dijous','divendres'];
-    const DIES_FULL = { dilluns:'Dilluns', dimarts:'Dimarts', dimecres:'Dimecres', dijous:'Dijous', divendres:'Divendres' };
+    const DIES_ALL = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres'];
+    const DIES_FULL = { dilluns: 'Dilluns', dimarts: 'Dimarts', dimecres: 'Dimecres', dijous: 'Dijous', divendres: 'Divendres' };
 
     const pagesHtml = filesTorns.map(f => {
-      const info   = PDF_INFO[f.id] || { label: f.label, time: f.sub || '', color: '#374151' };
+      const info = PDF_INFO[f.id] || { label: f.label, time: f.sub || '', color: '#374151' };
       const colsHtml = DIES_ALL.map(dia => {
-        const noms  = (torns[dia]?.[f.id] || []).filter(Boolean);
+        const noms = (torns[dia]?.[f.id] || []).filter(Boolean);
         const chips = noms.length > 0
           ? noms.map(n => `<div class="chip">${n}</div>`).join('')
           : `<div class="empty">—</div>`;
@@ -3357,11 +3408,11 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
   const hasIntensiu = docents.some(d => d.horari_intensiu);
 
   const TORN_STYLE_MAP = {
-    patiA:     { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
+    patiA: { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
     patiB_inf: { color: '#2563eb', bg: '#EEF5FF', borderColor: '#BFDBFE' },
     patiB_pri: { color: '#7C3AED', bg: '#F5F0FF', borderColor: '#DDD6FE' },
-    opatiA:    { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
-    opatiB:    { color: '#2563eb', bg: '#EEF5FF', borderColor: '#BFDBFE' },
+    opatiA: { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
+    opatiB: { color: '#2563eb', bg: '#EEF5FF', borderColor: '#BFDBFE' },
   };
   const FALLBACK_COLORS = [
     { color: '#16a34a', bg: '#EAF5EE', borderColor: '#B8DFC8' },
@@ -3460,7 +3511,10 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
                   <div className="pati-grid">
                     {DIES_ALL.map(dia => {
                       const allNoms = torns?.[dia]?.[f.id] || [];
-                      const assignats = allNoms.map((nom, idx) => ({ nom, idx })).filter(({ nom }) => nom);
+                      const _seen = new Set();
+                      const assignats = allNoms
+                        .map((nom, idx) => ({ nom, idx }))
+                        .filter(({ nom }) => { if (!nom || _seen.has(nom)) return false; _seen.add(nom); return true; });
                       const cobert = assignats.length > 0;
                       const disponibles = docentsDisponibles.filter(d => !allNoms.includes(d.nom));
 
@@ -3470,17 +3524,20 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
                             {DIE_LBL_FULL[dia]}
                           </div>
                           <div className="pati-day-body">
-                            {assignats.map(({ nom, idx }) => (
-                              <div key={idx} className="pati-chip">
-                                <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarColor(nom), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, flexShrink: 0 }}>
-                                  {initials(nom)}
+                            {assignats.map(({ nom, idx }) => {
+                              const dc = getDC(nom);
+                              return (
+                                <div key={idx} className="pati-chip" style={{ background: dc.bg, borderColor: dc.border }}>
+                                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: dc.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, flexShrink: 0 }}>
+                                    {initials(nom)}
+                                  </div>
+                                  <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: dc.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {nom.split(' ').slice(0, 2).join(' ')}
+                                  </span>
+                                  <button className="pati-chip-x" onClick={() => eliminarSlot(dia, f.id, idx)}>✕</button>
                                 </div>
-                                <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {nom.split(' ').slice(0, 2).join(' ')}
-                                </span>
-                                <button className="pati-chip-x" onClick={() => eliminarSlot(dia, f.id, idx)}>✕</button>
-                              </div>
-                            ))}
+                              );
+                            })}
                             {disponibles.length > 0 && (
                               <select
                                 className="pati-add"
@@ -3511,8 +3568,8 @@ body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#fff;color:#11
 }
 
 const RATIOS_SORTIDA = {
-  sortida:  { EI: 10, CI: 15, CM: 15, CS: 20 },
-  colonies: { EI: 8,  CI: 12, CM: 12, CS: 18 },
+  sortida: { EI: 10, CI: 15, CM: 15, CS: 20 },
+  colonies: { EI: 8, CI: 12, CM: 12, CS: 18 },
 };
 const CICLE_LABEL = { EI: 'Ed. Infantil', CI: 'Cicle Inicial', CM: 'Cicle Mitjà', CS: 'Cicle Superior' };
 
@@ -3573,11 +3630,10 @@ async function analitzarNombreAlumnes(file) {
 }
 
 function buildSortidaEmailHtml({ title, date, descripcio, llistaPart, docAdjunt, escolaNom }) {
-  const fmtData = iso => new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   return `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
     <div style="background:#1d4ed8;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
       <h1 style="margin:0;font-size:20px">🚌 ${title}</h1>
-      <p style="margin:6px 0 0;opacity:.85;font-size:14px">${fmtData(date)}</p>
+      <p style="margin:6px 0 0;opacity:.85;font-size:14px">${fmtData(date, { weekday: 'long' })}</p>
     </div>
     <div style="padding:20px 24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
       ${descripcio?.trim() ? `<h2 style="font-size:15px;color:#374151;margin:0 0 8px">Sobre l'activitat</h2><p style="color:#4b5563;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:0 0 20px">${descripcio.trim()}</p>` : ''}
@@ -3683,7 +3739,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     const fi = new Date((dateFi || date) + 'T12:00:00');
     while (cur <= fi) {
       const d = cur.getDay();
-      if (d >= 1 && d <= 5) dies.push(['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'][d]);
+      if (d >= 1 && d <= 5) dies.push(['diumenge', 'dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres', 'dissabte'][d]);
       cur.setDate(cur.getDate() + 1);
     }
     return dies;
@@ -3841,7 +3897,6 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           .map(nom => docents.find(d => d.nom === nom))
           .filter(d => d?.email?.trim());
         if (participants.length > 0) {
-          const fmtDataLlarga = iso => new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
           const llistaPart = [...docentsAniran].map(nom => {
             const esTutor = nomsTutors.has(nom);
             return `<li style="margin-bottom:4px">${nom} <span style="color:#6b7280;font-size:12px">(${esTutor ? 'tutor/a · va amb el grup' : 'acompanyant'})</span></li>`;
@@ -3850,7 +3905,7 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             title: title.trim(), date, descripcio, llistaPart, docAdjunt, escolaNom: escola.nom,
           });
           const attachments = docAdjunt ? [{ filename: docAdjunt.nom, path: docAdjunt.url }] : undefined;
-          await sendEmail(participants.map(d => d.email.trim()), `[Sortida] ${title.trim()} — ${fmtDataLlarga(date)}`, htmlEmail, attachments);
+          await sendEmail(participants.map(d => d.email.trim()), `[Sortida] ${title.trim()} — ${fmtData(date, { weekday: 'long' })}`, htmlEmail, attachments);
         }
       } catch (e) {
         console.error('[sortida] Error enviant correus:', e);
@@ -3903,8 +3958,6 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
     finally { setSaving(false); }
   }
 
-  const fmtData = iso => new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-
   // Docents manuals ja afegits (no tutors ni suggerits però sí a docentsAniran)
   const docentsManualsAfegits = [...docentsAniran].filter(nom => !tutorNoms.has(nom) && !especialisteNoms.has(nom));
 
@@ -3930,8 +3983,8 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
             </div>
             <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5 }}>
               {savedOk.dies > 1
-                ? `${fmtData(savedOk.date)} – ${fmtData(savedOk.dateFi)} · ${savedOk.dies} dies`
-                : fmtData(savedOk.date)}
+                ? `${fmtData(savedOk.date, { weekday: 'long' })} – ${fmtData(savedOk.dateFi, { weekday: 'long' })} · ${savedOk.dies} dies`
+                : fmtData(savedOk.date, { weekday: 'long' })}
               {' · '}La IA ja sap quins grups surten. Gestiona les cobertures des de <strong>Avisos</strong>.
             </div>
           </div>
@@ -4039,10 +4092,10 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
           {allGrups.length === 0
             ? <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>Primer puja els horaris dels tutors des de Personal.</p>
             : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {allGrups.map(g => (
-                  <button key={g} className={`grup-pill${grupsSeleccionats.has(g) ? ' actiu' : ''}`} onClick={() => toggleGrup(g)}>{g}</button>
-                ))}
-              </div>
+              {allGrups.map(g => (
+                <button key={g} className={`grup-pill${grupsSeleccionats.has(g) ? ' actiu' : ''}`} onClick={() => toggleGrup(g)}>{g}</button>
+              ))}
+            </div>
           }
         </div>
       </div>
@@ -4188,9 +4241,9 @@ function SortidesView({ docents, franjes, api, escola, baixes, showToast }) {
 }
 
 function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStatus, hint, dayGroupSlots, rowColor = 'var(--blue)', rowBg = 'var(--blue-bg)' }) {
-  const isBaixa   = leaveStatus?.status === 'baixa';
+  const isBaixa = leaveStatus?.status === 'baixa';
   const isPendent = leaveStatus?.status === 'pendent';
-  const fmtFi = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
+  const fmtFi = iso => iso ? fmtData(iso, { year: false }) : '';
   const avatBg = (isBaixa || isPendent) ? 'var(--amber)' : selected ? rowColor : avatarColor(d.nom);
 
   return (
@@ -4212,7 +4265,7 @@ function SortidaDocentsRow({ d, selected, onToggle, isTutor, isManual, leaveStat
         </div>
       </div>
       <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0 }}>
-        {isBaixa   && <span style={{ fontSize: 9, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 6px', fontWeight: 700, whiteSpace: 'nowrap' }}>🩹 Baixa</span>}
+        {isBaixa && <span style={{ fontSize: 9, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 6px', fontWeight: 700, whiteSpace: 'nowrap' }}>🩹 Baixa</span>}
         {isPendent && <span style={{ fontSize: 9, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 20, padding: '1px 6px', fontWeight: 700, whiteSpace: 'nowrap' }}>⚠ Permís fins {fmtFi(leaveStatus.fi)}</span>}
         {!leaveStatus && dayGroupSlots > 0 && <span style={{ fontSize: 9, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 6px', fontWeight: 700 }}>🎯 {dayGroupSlots} fr.</span>}
         {!leaveStatus && isTutor && <span style={{ fontSize: 9, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 6px', fontWeight: 700 }}>tutor/a</span>}
@@ -4245,7 +4298,7 @@ function HorariInline({ horari, tpFranges = [], franjes, onCellSave }) {
   return (
     <div style={{ padding: '0 12px 12px', background: 'var(--bg)' }}>
       <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati'],['#EBF5FB','#A9D4EC','Piscina']].map(([bg,bc,lbl]) => (
+        {[['var(--green-bg)', 'var(--green-mid)', 'Lliure'], ['var(--amber-bg)', '#F0D5A8', 'TP'], ['var(--purple-bg)', 'var(--purple-mid)', 'Coord/Càrrec'], ['var(--blue-bg)', '#C0D0EE', 'Classe'], ['var(--bg-3)', 'var(--border-2)', 'Pati'], ['#EBF5FB', '#A9D4EC', 'Piscina']].map(([bg, bc, lbl]) => (
           <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, color: 'var(--ink-3)' }}>
             <span style={{ width: 7, height: 7, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />{lbl}
           </span>
@@ -4266,7 +4319,7 @@ function HorariInline({ horari, tpFranges = [], franjes, onCellSave }) {
               const grp = horaGroups[f.hora] || [];
               const isFirst = grp[0]?.id === f.id;
               const rowH = f.lliure ? 18 : f.patio ? 22 : (f.min || 30) * 1.5;
-              const pad  = (f.lliure || f.patio || (f.min || 30) <= 15) ? '1px 3px' : '4px 3px';
+              const pad = (f.lliure || f.patio || (f.min || 30) <= 15) ? '1px 3px' : '4px 3px';
               return (
                 <tr key={f.id} style={{ height: rowH }}>
                   {isFirst && (
@@ -4335,13 +4388,13 @@ function fileToBase64(file) {
 
 // Inline confirm/edit view for a docent horari
 function ConfirmHorari({ data, onSave, onCancel, franjes }) {
-  const [nom,            setNom]            = useState(data.nom || '');
-  const [rol,            setRol]            = useState(data.rol || 'tutor');
-  const [grup,           setGrup]           = useState(data.grup_principal || '');
-  const [pin,            setPin]            = useState(data.pin || '1234');
-  const [email,          setEmail]          = useState(data.email || '');
-  const [coordCicle,     setCoordCicle]     = useState(data.coordinador_cicle ?? null); // null = no coord, string = coord + cicle
-  const [jornada,        setJornada]        = useState(data.jornada || 'sencera');
+  const [nom, setNom] = useState(data.nom || '');
+  const [rol, setRol] = useState(data.rol || 'tutor');
+  const [grup, setGrup] = useState(data.grup_principal || '');
+  const [pin, setPin] = useState(data.pin || '1234');
+  const [email, setEmail] = useState(data.email || '');
+  const [coordCicle, setCoordCicle] = useState(data.coordinador_cicle ?? null); // null = no coord, string = coord + cicle
+  const [jornada, setJornada] = useState(data.jornada || 'sencera');
   const [horari, setHorari] = useState(() => {
     const h = {};
     const tpSet = new Set(Array.isArray(data.tp_franges) ? data.tp_franges : []);
@@ -4455,7 +4508,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
         <div className="card-head">
           <h3>Horari extret per la IA <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink-3)' }}>(pots editar)</span></h3>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[['var(--green-bg)','var(--green-mid)','Lliure'],['var(--amber-bg)','#F0D5A8','TP'],['var(--purple-bg)','var(--purple-mid)','Coord/Càrrec'],['var(--blue-bg)','#C0D0EE','Classe'],['var(--bg-3)','var(--border-2)','Pati']].map(([bg,bc,lbl]) => (
+            {[['var(--green-bg)', 'var(--green-mid)', 'Lliure'], ['var(--amber-bg)', '#F0D5A8', 'TP'], ['var(--purple-bg)', 'var(--purple-mid)', 'Coord/Càrrec'], ['var(--blue-bg)', '#C0D0EE', 'Classe'], ['var(--bg-3)', 'var(--border-2)', 'Pati']].map(([bg, bc, lbl]) => (
               <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--ink-3)' }}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />{lbl}
               </span>
@@ -4472,7 +4525,7 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
             </thead>
             <tbody>
               {franjes.map(f => {
-                const grp    = horaGroups[f.hora];
+                const grp = horaGroups[f.hora];
                 const isFirst = grp[0].id === f.id;
                 return (
                   <tr key={f.id}>
@@ -4489,10 +4542,10 @@ function ConfirmHorari({ data, onSave, onCancel, franjes }) {
                           {f.lliure
                             ? <input disabled style={{ width: '100%', border: 'none', outline: 'none', background: cellBg('lliure'), fontFamily: 'inherit', fontSize: 10, textAlign: 'center', padding: '5px 2px', color: 'var(--green)', fontWeight: 600 }} value="Lliure" readOnly />
                             : <input
-                                style={{ width: '100%', border: 'none', outline: 'none', background: cellBg(val), fontFamily: 'inherit', fontSize: 10, textAlign: 'center', padding: '5px 2px', color: cellColor(val), transition: 'background .15s, color .15s' }}
-                                value={val}
-                                onChange={e => setCell(dia, f.id, e.target.value)}
-                              />
+                              style={{ width: '100%', border: 'none', outline: 'none', background: cellBg(val), fontFamily: 'inherit', fontSize: 10, textAlign: 'center', padding: '5px 2px', color: cellColor(val), transition: 'background .15s, color .15s' }}
+                              value={val}
+                              onChange={e => setCell(dia, f.id, e.target.value)}
+                            />
                           }
                         </td>
                       );
@@ -4633,14 +4686,14 @@ function BaixaFormRow({ draft, onChange, onSave, onCancel, saving, isNew, docent
 }
 
 const TIPUS_BAIXA = [
-  { key: 'malaltia',   label: 'Malaltia',             color: '#dc2626' },
+  { key: 'malaltia', label: 'Malaltia', color: '#dc2626' },
   { key: 'maternitat', label: 'Maternitat/Paternitat', color: '#7c3aed' },
-  { key: 'accident',   label: 'Accident laboral',      color: '#d97706' },
-  { key: 'llicencia',  label: 'Llicència oficial',     color: '#2563eb' },
-  { key: 'altre',      label: 'Altra causa',           color: '#6b7280' },
+  { key: 'accident', label: 'Accident laboral', color: '#d97706' },
+  { key: 'llicencia', label: 'Llicència oficial', color: '#2563eb' },
+  { key: 'altre', label: 'Altra causa', color: '#6b7280' },
 ];
 
-const MESOS_NOM = ['Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agost','Setembre','Octubre','Novembre','Desembre'];
+const MESOS_NOM = ['Gener', 'Febrer', 'Març', 'Abril', 'Maig', 'Juny', 'Juliol', 'Agost', 'Setembre', 'Octubre', 'Novembre', 'Desembre'];
 
 function duradaDies(b) {
   if (!b.data_inici) return null;
@@ -4688,20 +4741,20 @@ function extractBadge(nom) {
 function badgeStyle(badge) {
   if (!badge) return {};
   const b = badge.toUpperCase();
-  if (b === 'PAE')          return { bg: 'var(--purple-bg)', color: 'var(--purple)' };
-  if (b === 'MALL')         return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
+  if (b === 'PAE') return { bg: 'var(--purple-bg)', color: 'var(--purple)' };
+  if (b === 'MALL') return { bg: 'var(--amber-bg)', color: 'var(--amber)' };
   if (b === 'MUS' || b === 'MÚS') return { bg: 'var(--green-bg)', color: 'var(--green)' };
-  if (b === 'ESTIM')        return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
-  if (b === 'EVIP')         return { bg: 'var(--red-bg)',    color: 'var(--red)'    };
-  if (b === 'SUP')          return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
-  if (b === 'EF')           return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
-  if (b === 'ANG')          return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
-  if (b === 'EIS')          return { bg: 'var(--amber-bg)',  color: 'var(--amber)'  };
-  if (b === 'SIEI')         return { bg: '#FFF0F0',          color: '#C03030'       };
-  if (b === 'SIEI+')        return { bg: '#FFF0F5',          color: '#D81B60'       };
-  if (b === 'MESI')         return { bg: 'var(--blue-bg)',   color: 'var(--blue)'   };
-  if (b === 'TEI')          return { bg: 'var(--green-bg)',  color: 'var(--green)'  };
-  if (b === 'TUT')          return { bg: 'var(--bg-3)',      color: 'var(--ink-3)'  };
+  if (b === 'ESTIM') return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
+  if (b === 'EVIP') return { bg: 'var(--red-bg)', color: 'var(--red)' };
+  if (b === 'SUP') return { bg: 'var(--amber-bg)', color: 'var(--amber)' };
+  if (b === 'EF') return { bg: 'var(--green-bg)', color: 'var(--green)' };
+  if (b === 'ANG') return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
+  if (b === 'EIS') return { bg: 'var(--amber-bg)', color: 'var(--amber)' };
+  if (b === 'SIEI') return { bg: '#FFF0F0', color: '#C03030' };
+  if (b === 'SIEI+') return { bg: '#FFF0F5', color: '#D81B60' };
+  if (b === 'MESI') return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
+  if (b === 'TEI') return { bg: 'var(--green-bg)', color: 'var(--green)' };
+  if (b === 'TUT') return { bg: 'var(--bg-3)', color: 'var(--ink-3)' };
   return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
 }
 
@@ -4710,12 +4763,12 @@ function sortRivoGrupKey(g) {
   if (/^i3/.test(v)) return '01' + v;
   if (/^i4/.test(v)) return '02' + v;
   if (/^i5/.test(v)) return '03' + v;
-  if (/^1/.test(v))  return '04' + v;
-  if (/^2/.test(v))  return '05' + v;
-  if (/^3/.test(v))  return '06' + v;
-  if (/^4/.test(v))  return '07' + v;
-  if (/^5/.test(v))  return '08' + v;
-  if (/^6/.test(v))  return '09' + v;
+  if (/^1/.test(v)) return '04' + v;
+  if (/^2/.test(v)) return '05' + v;
+  if (/^3/.test(v)) return '06' + v;
+  if (/^4/.test(v)) return '07' + v;
+  if (/^5/.test(v)) return '08' + v;
+  if (/^6/.test(v)) return '09' + v;
   return '99' + v;
 }
 
@@ -4731,26 +4784,26 @@ function rolBadgeRivo(e, activeGrup) {
   const gpL = gp.toLowerCase();
 
   // Detectar per grup_principal — molt més fiable que el rol
-  if (/mesi\+?/i.test(gpL))  return 'MESI';
-  if (/siei\+/i.test(gpL))   return 'SIEI+';
-  if (/siei/i.test(gpL))     return 'SIEI';
-  if (gpL === 'ef')           return 'EF';
+  if (/mesi\+?/i.test(gpL)) return 'MESI';
+  if (/siei\+/i.test(gpL)) return 'SIEI+';
+  if (/siei/i.test(gpL)) return 'SIEI';
+  if (gpL === 'ef') return 'EF';
   if (/^angl[eè]s$/i.test(gpL)) return 'ANG';
   if (/^m[uú]sica$/i.test(gpL)) return 'MÚS';
-  if (gpL === 'ei suport')   return 'EIS';
-  if (/mall/i.test(gpL))     return 'MALL';
-  if (/estim/i.test(gpL))    return 'ESTIM';
-  if (/evip/i.test(gpL))     return 'EVIP';
-  if (/^tei/i.test(gpL))     return 'TEI';
-  if (/^pae/i.test(gpL))     return 'PAE';
+  if (gpL === 'ei suport') return 'EIS';
+  if (/mall/i.test(gpL)) return 'MALL';
+  if (/estim/i.test(gpL)) return 'ESTIM';
+  if (/evip/i.test(gpL)) return 'EVIP';
+  if (/^tei/i.test(gpL)) return 'TEI';
+  if (/^pae/i.test(gpL)) return 'PAE';
 
   // Fallback pel rol si el grup_principal no és informatiu
-  if (e.rol === 'ee')         return 'SIEI';
-  if (e.rol === 'msuport')    return 'SUP';
-  if (e.rol === 'suport')     return 'SUP'; // suport a grup específic, no PAE
+  if (e.rol === 'ee') return 'SIEI';
+  if (e.rol === 'msuport') return 'SUP';
+  if (e.rol === 'suport') return 'SUP'; // suport a grup específic, no PAE
   if (['educador', 'vetllador'].includes(e.rol)) return 'PAE';
-  if (e.rol === 'tei')        return 'TEI';
-  if (e.rol === 'tutor')      return 'TUT';
+  if (e.rol === 'tei') return 'TEI';
+  if (e.rol === 'tutor') return 'TUT';
   // teacher / especialista sense grup_principal → sense badge
   return null;
 }
@@ -4839,7 +4892,7 @@ function RivoGrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSav
       const mime = file.type || 'application/pdf';
       const isImage = mime.startsWith('image/');
       const fileBlock = isImage
-        ? { type: 'image',    source: { type: 'base64', media_type: mime, data: base64 } }
+        ? { type: 'image', source: { type: 'base64', media_type: mime, data: base64 } }
         : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } };
       const schoolFranjes = franjes.filter(f => !f.lliure);
       const franjDesc = schoolFranjes.map(f => `${f.id}=${f.sub}`).join(', ');
@@ -5032,7 +5085,7 @@ Retorna ÚNICAMENT JSON sense cap altre text:
                         {DIES.map(dia => {
                           const entries = grupHorari[dia]?.[f.id] || [];
                           const primaris = entries.filter(e => !rolBadgeRivo(e, activeGrup));
-                          const suports  = entries.filter(e =>  rolBadgeRivo(e, activeGrup));
+                          const suports = entries.filter(e => rolBadgeRivo(e, activeGrup));
                           const hasCoverage = entries.length > 0;
                           const isAdding = addingEntry?.dia === dia && addingEntry?.fid === f.id;
                           return (
@@ -5096,12 +5149,14 @@ Retorna ÚNICAMENT JSON sense cap altre text:
             <h3>📅 Horari de l'alumnat · {activeGrup}</h3>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {/* Toggle Normal / Intensiva per a l'horari de l'alumnat */}
-              {(() => { const hd = parseHorariAlumnat(curriculumText); return hd && !curriculumEdit ? (
-                <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
-                  <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !showAlumnatIntensiva ? 'var(--ink)' : 'transparent', color: !showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(false)}>📅 Normal</button>
-                  <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: showAlumnatIntensiva ? 'var(--amber)' : 'transparent', color: showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(true)}>🌅 Intensiva</button>
-                </div>
-              ) : null; })()}
+              {(() => {
+                const hd = parseHorariAlumnat(curriculumText); return hd && !curriculumEdit ? (
+                  <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                    <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !showAlumnatIntensiva ? 'var(--ink)' : 'transparent', color: !showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(false)}>📅 Normal</button>
+                    <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: showAlumnatIntensiva ? 'var(--amber)' : 'transparent', color: showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(true)}>🌅 Intensiva</button>
+                  </div>
+                ) : null;
+              })()}
               <input ref={currFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) pujarCurriculumPDF(f); e.target.value = ''; }} />
               <button className="btn btn-sm" style={{ fontSize: 11, background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)' }} onClick={() => currFileRef.current?.click()} disabled={loadingCurriculum}>
                 {loadingCurriculum ? '⏳ Extraient...' : '📎 Pujar PDF/Word'}
@@ -5129,9 +5184,9 @@ Retorna ÚNICAMENT JSON sense cap altre text:
               if (!horariData) return curriculumText
                 ? <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{curriculumText}</div>
                 : <div style={{ fontSize: 12.5, color: 'var(--ink-4)', fontStyle: 'italic', textAlign: 'center', padding: '16px 0' }}>
-                    Cap horari de l'alumnat pujat per a {activeGrup}.<br />
-                    <span style={{ fontSize: 11 }}>Puja el PDF o Word de l'horari dels nens, o arrossega'l aquí.</span>
-                  </div>;
+                  Cap horari de l'alumnat pujat per a {activeGrup}.<br />
+                  <span style={{ fontSize: 11 }}>Puja el PDF o Word de l'horari dels nens, o arrossega'l aquí.</span>
+                </div>;
               const franjesAlumnat = showAlumnatIntensiva
                 ? franjes.filter(f => !f.lliure && f.hora !== 'Tarda')
                 : franjes;
@@ -5239,7 +5294,7 @@ function GrupsView({ docents, franjes, selectedGrup, onSelectGrup, onCellSave, c
       const mime = file.type || 'application/pdf';
       const isImage = mime.startsWith('image/');
       const fileBlock = isImage
-        ? { type: 'image',    source: { type: 'base64', media_type: mime, data: base64 } }
+        ? { type: 'image', source: { type: 'base64', media_type: mime, data: base64 } }
         : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } };
       const schoolFranjes = franjes.filter(f => !f.lliure);
       const franjDesc = schoolFranjes.map(f => `${f.id}=${f.sub}`).join(', ');
@@ -5357,16 +5412,16 @@ Retorna ÚNICAMENT JSON sense cap altre text:
                       <td style={{ ...tdS, fontSize: 9, width: 68 }}>{f.sub}</td>
                       {DIES.map(dia => {
                         const entries = grupHorari[dia]?.[f.id] || [];
-                        const tutorRawVal    = tutor?.horari?.[dia]?.[f.id] || '';
-                        const tutorVal       = tutorRawVal.toLowerCase();
-                        const isGrupPiscina  = tutorVal.includes('piscina');
-                        const isGrupCeepsir  = tutorVal.includes('ceepsir');
+                        const tutorRawVal = tutor?.horari?.[dia]?.[f.id] || '';
+                        const tutorVal = tutorRawVal.toLowerCase();
+                        const isGrupPiscina = tutorVal.includes('piscina');
+                        const isGrupCeepsir = tutorVal.includes('ceepsir');
                         const isGrupActivity = isGrupPiscina || isGrupCeepsir;
                         const isTutorTrivial = !tutorRawVal || tutorVal === 'lliure' || tutorVal === 'libre' || tutorVal.startsWith('pati') || /^tp\b/i.test(tutorVal);
                         const showTutorPresence = !isTutorTrivial && !isGrupActivity;
                         const rolBadge = e => extractBadge(e.nom) || (e.rol === 'msuport' ? 'SUP' : null);
                         const primaris = entries.filter(e => !rolBadge(e));
-                        const suports  = entries.filter(e =>  rolBadge(e));
+                        const suports = entries.filter(e => rolBadge(e));
                         const renderEntry = (e, i, isSup) => {
                           const isEditing = isEditMode && editing?.nom === e.nom && editing?.dia === dia && editing?.fid === f.id;
                           const badge = isSup ? rolBadge(e) : null;
@@ -5471,12 +5526,14 @@ Retorna ÚNICAMENT JSON sense cap altre text:
           <h3>📅 Horari de l'alumnat · {selectedGrup}</h3>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {/* Toggle Normal / Intensiva per a l'horari de l'alumnat */}
-            {(() => { const hd = parseHorariAlumnat(curriculumText); return hd && !curriculumEdit ? (
-              <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
-                <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !showAlumnatIntensiva ? 'var(--ink)' : 'transparent', color: !showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(false)}>📅 Normal</button>
-                <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: showAlumnatIntensiva ? 'var(--amber)' : 'transparent', color: showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(true)}>🌅 Intensiva</button>
-              </div>
-            ) : null; })()}
+            {(() => {
+              const hd = parseHorariAlumnat(curriculumText); return hd && !curriculumEdit ? (
+                <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                  <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: !showAlumnatIntensiva ? 'var(--ink)' : 'transparent', color: !showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(false)}>📅 Normal</button>
+                  <button style={{ padding: '3px 8px', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, background: showAlumnatIntensiva ? 'var(--amber)' : 'transparent', color: showAlumnatIntensiva ? '#fff' : 'var(--ink-3)', transition: 'all .1s' }} onClick={() => setShowAlumnatIntensiva(true)}>🌅 Intensiva</button>
+                </div>
+              ) : null;
+            })()}
             <input ref={currFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) pujarCurriculumPDF(f); e.target.value = ''; }} />
             <button className="btn btn-sm" style={{ fontSize: 11, background: 'var(--blue-bg)', color: 'var(--blue)', borderColor: 'var(--blue)' }} onClick={() => currFileRef.current?.click()} disabled={loadingCurriculum}>
               {loadingCurriculum ? '⏳ Extraient...' : '📎 Pujar PDF/Word'}
@@ -5504,9 +5561,9 @@ Retorna ÚNICAMENT JSON sense cap altre text:
             if (!horariData) return curriculumText
               ? <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{curriculumText}</div>
               : <div style={{ fontSize: 12.5, color: 'var(--ink-4)', fontStyle: 'italic', textAlign: 'center', padding: '16px 0' }}>
-                  Cap horari de l'alumnat pujat per a {selectedGrup}.<br />
-                  <span style={{ fontSize: 11 }}>Puja el PDF o Word de l'horari dels nens, o arrossega'l aquí.</span>
-                </div>;
+                Cap horari de l'alumnat pujat per a {selectedGrup}.<br />
+                <span style={{ fontSize: 11 }}>Puja el PDF o Word de l'horari dels nens, o arrossega'l aquí.</span>
+              </div>;
             const franjesAlumnat = showAlumnatIntensiva
               ? franjes.filter(f => !f.lliure && f.hora !== 'Tarda')
               : franjes;

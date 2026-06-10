@@ -34,6 +34,70 @@ function autoTextAbsents(absencies) {
   }).join('\n');
 }
 
+// Maps escola.nom keyword → logo file. Afegir entrada per a cada nova escola.
+const LOGO_MAP = [
+  { match: 'rivo',  src: '/logo_rivo.png' },
+  { match: 'oriol', src: '/logo_canoriol.png' },
+];
+function getSchoolLogo(nom) {
+  if (!nom) return null;
+  const low = nom.toLowerCase();
+  return LOGO_MAP.find(m => low.includes(m.match))?.src || null;
+}
+
+// Analitza la imatge amb canvas: retorna true si el logo és fosc o massa petit/escàs
+function useLogoStyle(src) {
+  const [needsLight, setNeedsLight] = useState(false);
+  useEffect(() => {
+    if (!src) { setNeedsLight(false); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const SIZE = 64;
+        const c = document.createElement('canvas');
+        c.width = c.height = SIZE;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, SIZE, SIZE);
+        const d = ctx.getImageData(0, 0, SIZE, SIZE).data;
+        let lum = 0, count = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] > 30) {
+            lum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+            count++;
+          }
+        }
+        const avgLum = count > 0 ? lum / count : 255;
+        const coverage = count / (SIZE * SIZE);
+        setNeedsLight(avgLum < 100 || coverage < 0.2);
+      } catch { setNeedsLight(false); }
+    };
+    img.onerror = () => setNeedsLight(false);
+    img.src = src;
+  }, [src]);
+  return needsLight;
+}
+
+// Botó del grid d'escoles amb adaptació automàtica de contrast
+function SchoolLogoBtn({ src, alt, fallback, onClick }) {
+  const needsLight = useLogoStyle(src);
+  return (
+    <button
+      className="school-logo-btn"
+      onClick={onClick}
+      style={needsLight && src ? { background: '#F0F3F8', borderColor: '#C5CDD8' } : {}}
+    >
+      {src ? (
+        <img
+          src={src}
+          alt={alt}
+          onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }}
+        />
+      ) : null}
+      <div className="fallback-logo-text" style={{ display: src ? 'none' : 'block' }}>{fallback}</div>
+    </button>
+  );
+}
+
 export default function LoginFlow() {
   const { login } = useApp();
   const [step, setStep]               = useState(() => (_urlEscola || localStorage.getItem('gd_last_escola_key')) ? 'role' : 'school');
@@ -215,6 +279,8 @@ export default function LoginFlow() {
   const filtered = users.filter(u => u.nom.toLowerCase().includes(search.toLowerCase()));
 
   const isOriol = school?.nom?.toLowerCase().includes('oriol');
+  const heroLogoSrc      = getSchoolLogo(school?.nom);
+  const heroLogoNeedsLight = useLogoStyle(heroLogoSrc);
 
   return (
     <div id="login">
@@ -236,10 +302,16 @@ export default function LoginFlow() {
             <>
               {/* Logo + nom escola */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-                {(school.nom?.toLowerCase().includes('rivo') || school.nom?.toLowerCase().includes('oriol')) && (
-                  <div style={{ background: 'rgba(255,255,255,.15)', borderRadius: 12, padding: 8, flexShrink: 0 }}>
+                {heroLogoSrc && (
+                  <div style={{
+                    background: heroLogoNeedsLight ? 'rgba(255,255,255,.93)' : 'rgba(255,255,255,.15)',
+                    borderRadius: 14,
+                    padding: heroLogoNeedsLight ? 10 : 8,
+                    flexShrink: 0,
+                    ...(heroLogoNeedsLight && { boxShadow: '0 2px 10px rgba(0,0,0,.18)', border: '1px solid rgba(190,205,220,.5)' }),
+                  }}>
                     <img
-                      src={school.nom.toLowerCase().includes('rivo') ? '/logo_rivo.png' : '/logo_canoriol.png'}
+                      src={heroLogoSrc}
                       alt={school.nom}
                       style={{ height: 52, width: 52, objectFit: 'contain', display: 'block' }}
                     />
@@ -320,12 +392,7 @@ export default function LoginFlow() {
                 const open = linkOpen === key;
                 return (
                   <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <button className="school-logo-btn" onClick={() => selectSchool(key)}>
-                      {src
-                        ? <img src={src} alt={alt} onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
-                        : null}
-                      <div className="fallback-logo-text" style={{ display: src ? 'none' : 'block' }}>{fallback}</div>
-                    </button>
+                    <SchoolLogoBtn src={src} alt={alt} fallback={fallback} onClick={() => selectSchool(key)} />
                     <button
                       onClick={() => setLinkOpen(open ? null : key)}
                       style={{ fontSize: 10, color: 'var(--ink-4)', background: 'none', border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { useApp } from '../../context/AppContext';
+import { fmtData } from '../../lib/utils';
 import FrangesChips from '../../components/FrangesChips';
 import Spinner from '../../components/Spinner';
 
@@ -132,7 +133,7 @@ export default function HistorialPage() {
     const cursLabel = `Curs ${anyInici}–${anyInici + 1}`;
 
     const nomEscola = escola?.nom || 'Centre educatiu';
-    const dataGen   = new Date().toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+    const dataGen   = fmtData(new Date().toISOString().split('T')[0]);
 
     function absRow(dia, a, cobs) {
       const myCobs = (cobs || []).filter(c => c.absencia_id === a.id || c.docent_absent_nom === a.docent_nom);
@@ -446,7 +447,7 @@ export default function HistorialPage() {
         {diaFiltrat && (
           <button onClick={() => setDiaFiltrat(null)}
             style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8, border: '1px solid var(--red)', background: 'var(--red-bg)', color: 'var(--red)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-            ✕ {new Date(diaFiltrat + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
+            ✕ {fmtData(diaFiltrat, { year: false })}
           </button>
         )}
       </div>
@@ -479,7 +480,7 @@ export default function HistorialPage() {
       {diesFiltrats.map(dia => {
         const { abs, cobs } = byDay[dia];
         const dataFmt = dia !== 'sense-data'
-          ? new Date(dia + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          ? fmtData(dia, { weekday: 'long' })
           : 'Sense data';
         const absReals   = abs.filter(a => a.tipus !== 'sortida');
         const sortides   = abs.filter(a => a.tipus === 'sortida');

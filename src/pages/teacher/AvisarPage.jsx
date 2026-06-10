@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA, MOTIUS_AMB_JUSTIFICANT, MOTIU_ACOMPANYAR, MOTIU_FLEXIBILITZACIO, ACOMPANYAR_MAX_USOS, esMotuiATRI } from '../../lib/constants';
-import { todayISO } from '../../lib/utils';
+import { todayISO, fmtData } from '../../lib/utils';
 import { uploadFitxer } from '../../lib/api';
 import MeusAvisosCard from '../../components/MeusAvisosCard';
 
@@ -261,7 +261,7 @@ async function loadMeusAvisos() {
                         {dt.getDate()}
                       </span>
                       <span style={{ fontSize: 13 }}>
-                        {dt.toLocaleDateString('ca-ES', { weekday: 'short', month: 'short' })}
+                        {fmtData(d)}
                       </span>
                       <span onClick={() => removeDate(d)} style={{ cursor: 'pointer', opacity: .5, fontSize: 16, fontWeight: 700, lineHeight: 1 }}>×</span>
                     </div>

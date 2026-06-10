@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
+import { fmtData } from '../../lib/utils';
 import Spinner from '../../components/Spinner';
 
 async function fetchChatLogs(escolaId, limit = 50) {
@@ -18,8 +19,7 @@ async function fetchChatLogs(escolaId, limit = 50) {
 function formatData(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    + ' ' + d.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
+  return fmtData(iso.split('T')[0]) + ' ' + d.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
 }
 
 function BadgeResultat({ resultat }) {
@@ -163,7 +163,7 @@ export default function LogsPage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>
                   {log.docent_absent || 'Consulta general'}
-                  {log.data_absencia ? ` · ${new Date(log.data_absencia + 'T12:00:00').toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit' })}` : ''}
+                  {log.data_absencia ? ` · ${fmtData(log.data_absencia, { year: false })}` : ''}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
                   {formatData(log.creat_el)} · {log.num_missatges} missatges

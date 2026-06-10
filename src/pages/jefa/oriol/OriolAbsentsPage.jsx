@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL } from '../../../lib/constants';
-import { parseFranges } from '../../../lib/utils';
+import { parseFranges, fmtData } from '../../../lib/utils';
 import Spinner from '../../../components/Spinner';
 
 function generarAutoText(absencies) {
@@ -26,7 +26,7 @@ export default function OriolAbsentsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const avui = new Date().toISOString().split('T')[0];
-  const dataLabel = new Date().toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dataLabel = fmtData(avui, { weekday: 'long' });
 
   useEffect(() => { if (api) load(); }, [api]);
 

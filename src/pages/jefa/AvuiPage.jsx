@@ -240,7 +240,12 @@ export default function AvuiPage() {
               newSieiCells[key] = { estat: 'pendent', avisId: a.id, student: matched, fid };
             } else {
               const cob = findCobertura(cobertures, a.id, fid, FRANJES_ACT, a.docent_nom);
-              newSieiCells[key] = { estat: 'resolt', cobrint: cob?.docent_cobrint_nom?.split(' ')[0] || '?' };
+              if (cob?.docent_cobrint_nom) {
+                newSieiCells[key] = { estat: 'resolt', cobrint: cob.docent_cobrint_nom.split(' ')[0] };
+              } else {
+                // Resolt sense cobertura assignada → sense suport però gestionat
+                newSieiCells[key] = { estat: 'ok', noms: [] };
+              }
             }
           });
         });
@@ -434,14 +439,18 @@ function computeSpans(items, cellsMap, blocs) {
 
 function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLabel = 'Pendent', onPendentClick, style }) {
   return (
-    <div className="card" style={style}>
+    <div className="card" style={{ marginTop: 14, ...style }}>
       <div className="card-head" style={{ padding: '10px 14px' }}>
         <h3 style={{ fontSize: 13 }}>{title}</h3>
-        <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--ink-3)' }}>
-          {[['var(--green-bg)','var(--green-mid)','Horari habitual'],['var(--amber-bg)','#F0D5A8','Substitució activa'],['var(--red-bg)','#F0C0B8', pendentLabel]].map(([bg,bc,lbl]) => (
-            <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: bg, border: `1px solid ${bc}`, display: 'inline-block' }} />
-              {lbl}
+        <div style={{ display: 'flex', gap: 10, fontSize: 10, color: 'var(--ink-3)', flexWrap: 'wrap' }}>
+          {[
+            ['var(--green-bg)','var(--green-mid)','var(--green)','Horari normal'],
+            ['var(--amber-bg)','#F0D5A8','var(--amber)','Cobertura activa'],
+            ['var(--red-bg)','#F5C6C0','var(--red)', pendentLabel],
+          ].map(([bg,bc,tc,lbl]) => (
+            <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: bg, border: `1px solid ${bc}`, display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ color: tc }}>{lbl}</span>
             </span>
           ))}
         </div>
@@ -472,25 +481,60 @@ function GraellaCard({ title, items, cells, spans, blocs, franjesAct, pendentLab
                         const sp = spans[item]?.[fid] || {};
                         if (sp.skip) return null;
                         const cell = cells[`${item}__${fid}`];
-                        const bg = cell?.estat === 'pendent' ? 'var(--red-bg)' : cell?.estat === 'resolt' ? 'var(--amber-bg)' : 'var(--green-bg)';
-                        const bc = cell?.estat === 'pendent' ? '#F0C0B8' : cell?.estat === 'resolt' ? '#F0D5A8' : 'var(--green-mid)';
+                        const hasContent = cell && (cell.cobrint || cell.noms?.length > 0);
+                        const bg = cell?.estat === 'pendent'                       ? 'var(--red-bg)'
+                                 : cell?.estat === 'resolt' && cell.cobrint        ? 'var(--amber-bg)'
+                                 : 'var(--green-bg)';
+                        const bc = cell?.estat === 'pendent'                       ? '#F5C6C0'
+                                 : cell?.estat === 'resolt' && cell.cobrint        ? '#F0D5A8'
+                                 : 'var(--green-mid)';
                         return (
                           <td key={item} rowSpan={sp.rowSpan || 1}
-                            style={{ padding: '3px 2px', border: `1px solid ${bc}`, textAlign: 'center', background: bg, cursor: cell?.estat === 'pendent' ? 'pointer' : 'default', minWidth: 48, verticalAlign: 'middle' }}
+                            style={{
+                              padding: '4px 3px', border: `1px solid ${bc}`,
+                              textAlign: 'center', background: bg, verticalAlign: 'middle',
+                              minWidth: 50, maxWidth: 72,
+                              cursor: cell?.estat === 'pendent' ? 'pointer' : 'default',
+                            }}
                             onClick={() => cell?.estat === 'pendent' && onPendentClick?.()}
                           >
-                            {cell?.estat === 'pendent' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)' }}>!{sp.rowSpan > 1 ? ` ×${sp.rowSpan}` : ''}</span>}
-                            {cell?.estat === 'resolt' && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--amber)', display: 'block', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell.cobrint}</span>}
-                            {(cell?.estat === 'normal' || cell?.estat === 'ok') && (
-                              cell.noms?.length > 0
-                                ? <>
-                                    {cell.noms.map((n, i) => <span key={i} style={{ fontSize: 8, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{n}</span>)}
-                                    {cell.lloc && <span style={{ fontSize: 7, color: 'var(--ink-3)', display: 'block', lineHeight: 1.2, fontStyle: 'italic' }}>{cell.lloc}</span>}
-                                  </>
-                                : cell.cobrint
-                                  ? <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.2 }}>{cell.cobrint}</span>
-                                  : null
+                            {/* Pendent: botó roig */}
+                            {cell?.estat === 'pendent' && (
+                              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--red)', lineHeight: 1 }}>
+                                !{sp.rowSpan > 1 ? <span style={{ fontSize: 8 }}> ×{sp.rowSpan}</span> : ''}
+                              </span>
                             )}
+
+                            {/* Resolt amb cobertura assignada: nom en ambre */}
+                            {cell?.estat === 'resolt' && cell.cobrint && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 700, color: 'var(--amber)',
+                                display: 'block', lineHeight: 1.3,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                padding: '0 2px',
+                              }}>{cell.cobrint}</span>
+                            )}
+
+                            {/* Resolt sense cobertura específica: checkmark neutre */}
+                            {cell?.estat === 'resolt' && !cell.cobrint && (
+                              <span style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1 }}>—</span>
+                            )}
+
+                            {/* Normal/ok amb noms */}
+                            {(cell?.estat === 'normal' || cell?.estat === 'ok') && cell.noms?.length > 0 && (
+                              <>
+                                {cell.noms.map((n, i) => (
+                                  <span key={i} style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.35 }}>{n}</span>
+                                ))}
+                                {cell.lloc && <span style={{ fontSize: 7, color: 'var(--ink-3)', display: 'block', lineHeight: 1.2, fontStyle: 'italic' }}>{cell.lloc}</span>}
+                              </>
+                            )}
+
+                            {/* Normal/ok amb cobrint (especialistes) */}
+                            {(cell?.estat === 'normal' || cell?.estat === 'ok') && !cell.noms?.length && cell.cobrint && (
+                              <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--green)', display: 'block', lineHeight: 1.3 }}>{cell.cobrint}</span>
+                            )}
+
                           </td>
                         );
                       })}

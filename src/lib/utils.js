@@ -22,6 +22,23 @@ export function normGrup(s) {
 
 export const todayISO = () => new Date().toISOString().split('T')[0];
 
+const _DIES_L = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'];
+const _DIES_C = ['dg.','dl.','dt.','dc.','dj.','dv.','ds.'];
+
+/** Formata una data ISO (o Date) com DD/MM/YYYY.
+ *  opts.year    = false → DD/MM
+ *  opts.weekday = 'short' | 'long' → afegeix dia de la setmana al davant */
+export function fmtData(iso, opts = {}) {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso + 'T12:00:00') : iso;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const datePart = opts.year === false ? `${dd}/${mm}` : `${dd}/${mm}/${d.getFullYear()}`;
+  if (!opts.weekday) return datePart;
+  const dies = opts.weekday === 'short' ? _DIES_C : _DIES_L;
+  return `${dies[d.getDay()]} ${datePart}`;
+}
+
 // Supabase retorna `franges` com a array natiu (jsonb) o string (text antic).
 export function parseFranges(v) {
   if (Array.isArray(v)) return v;
@@ -29,8 +46,7 @@ export function parseFranges(v) {
 }
 
 export function formatDate(dateStr, opts = {}) {
-  if (!dateStr) return '';
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('ca-ES', opts);
+  return fmtData(dateStr, opts);
 }
 
 export function rolLabel(rol) {
@@ -93,7 +109,7 @@ export function emailAbsencia({ nom, dates, franges, motiu, isOriol, escola }) {
   const deepLink = `${APP_URL}?escola=${escolaKey}`;
 
   const datesHtml = dates.map(d =>
-    `<li style="margin-bottom:2px">${new Date(d + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</li>`
+    `<li style="margin-bottom:2px">${fmtData(d, { weekday: 'long' })}</li>`
   ).join('');
   const frangesHtml = frangesText(franges, isOriol);
 

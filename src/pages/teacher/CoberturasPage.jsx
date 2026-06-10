@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FRANJES, FRANJES_ORIOL } from '../../lib/constants';
+import { fmtData } from '../../lib/utils';
 import Spinner from '../../components/Spinner';
 
 const DAYS_CAT = ['diumenge','dilluns','dimarts','dimecres','dijous','divendres','dissabte'];
@@ -194,7 +195,7 @@ export default function CoberturasPage() {
           >‹</button>
           <div style={{ flex: 1, textAlign: 'center' }}>
             <div style={{ fontSize: 22, fontWeight: 600, textTransform: 'capitalize', fontFamily: 'Georgia,serif' }}>
-              {diaCat}, {dateObj.toLocaleDateString('ca-ES', { day: 'numeric', month: 'long' })}
+              {diaCat}, {fmtData(selectedDate)}
             </div>
             {!esAvui && (
               <button

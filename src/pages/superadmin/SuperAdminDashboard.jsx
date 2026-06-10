@@ -8,6 +8,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { SUPA_URL, SUPA_KEY } from '../../lib/constants';
+import { fmtData } from '../../lib/utils';
 
 // ── Configuració ──────────────────────────────────────────────────────────────
 const AUTH_KEY = 'gdocent_sa_v1';
@@ -55,8 +56,7 @@ function fmtEur(n) {
 function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
-    + ' ' + d.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
+  return fmtData(iso.split('T')[0]) + ' ' + d.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
 }
 
 function relDate(iso) {
@@ -702,7 +702,7 @@ function LogsTab({ schools }) {
                     </span>
                     {log.data_absencia && (
                       <span style={{ fontSize: 11, color: '#9ca3af' }}>
-                        {new Date(log.data_absencia + 'T12:00:00').toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit' })}
+                        {fmtData(log.data_absencia, { year: false })}
                       </span>
                     )}
                     {/* Badge escola */}

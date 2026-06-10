@@ -1,4 +1,4 @@
-import { parseFranges } from '../lib/utils';
+import { parseFranges, fmtData } from '../lib/utils';
 
 export default function MeusAvisosCard({ avisos, franjesAct, schoolFranjesAct }) {
   if (!avisos || avisos.length === 0) return null;
@@ -19,9 +19,7 @@ export default function MeusAvisosCard({ avisos, franjesAct, schoolFranjesAct })
         <h3 style={{ fontSize: 13 }}>Les teves absències recents</h3>
       </div>
       {avisos.map(a => {
-        const dataFmt = a.data
-          ? new Date(a.data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })
-          : '—';
+        const dataFmt = fmtData(a.data, { weekday: 'short' });
         const cobert  = a.estat === 'resolt' || a.estat === 'arxivat';
         const pendent = a.estat === 'pendent';
         const cobrantsUnics = [...new Set(a.cobrants)];

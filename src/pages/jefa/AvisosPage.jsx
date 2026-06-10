@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { FRANJES, SCHOOL_FRANJES, FRANJES_ORIOL, SCHOOL_FRANJES_ORIOL, MOTIUS_ABSENCIA } from '../../lib/constants';
 import { proposarCobertura, analitzarInfoExtra, classificarDiariOriol, construirContextXat } from '../../lib/claude';
 import { notifyCobertura } from '../../lib/api';
-import { parseFranges, escHtml, frangesHorari, normGrup } from '../../lib/utils';
+import { parseFranges, escHtml, frangesHorari, normGrup, fmtData, initials, avatarColor } from '../../lib/utils';
 
 import FrangesChips from '../../components/FrangesChips';
 import Spinner from '../../components/Spinner';
@@ -44,10 +44,11 @@ export default function AvisosPage() {
   // Avisos descoberts des d'infoExtra
   const [avisosDescoberts, setAvisosDescoberts] = useState([]);
   const [creantAvisos,     setCreantAvisos]     = useState(false);
-  const [generantPropostes, setGenerantPropostes] = useState(null); // null or { actual, total }
   const [coberturesPerId,  setCoberturesPerId]  = useState({});
   const [tallersPending,   setTallersPending]   = useState(null); // { avis, totsIds, tallersIds }
   const [iaDecisions, setIaDecisions] = useState([]);
+  const [directiusNoms, setDirectiusNoms] = useState([]);
+  const [expandedResolts, setExpandedResolts] = useState(new Set());
   const infoFileRef = useRef(null);
 
   useEffect(() => { if (api) load(); }, [api]);
@@ -55,12 +56,14 @@ export default function AvisosPage() {
   async function load() {
     try {
       const avui = new Date().toISOString().split('T')[0];
-      const [data, infoRes, diariRes, decisionsRes] = await Promise.all([
+      const [data, infoRes, diariRes, decisionsRes, directiusRes] = await Promise.all([
         api.getAbsencies(),
         api.getInfoExtra().catch(() => null),
         api.getOriolDiari().catch(() => null),
         api.getIaDecisions().catch(() => null),
+        api.getDirectiusNoms().catch(() => []),
       ]);
+      setDirectiusNoms((directiusRes || []).map(d => d.nom).filter(Boolean));
       setIaDecisions(Array.isArray(decisionsRes?.[0]?.ia_decisions) ? decisionsRes[0].ia_decisions : []);
       setBaixes(diariRes?.[0]?.oriol_baixes || []);
       // Carregar i validar infoExtra persistent (suporta format antic objecte i nou array)
@@ -108,6 +111,16 @@ export default function AvisosPage() {
     try {
       await api.patchAbsencia(id, { estat: 'arxivat' });
       showToast('Avis esborrat de la llista');
+      load();
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
+  async function arxivarTotes() {
+    const resolts = (absencies || []).filter(a => a.estat === 'resolt');
+    if (!resolts.length) return;
+    try {
+      await Promise.all(resolts.map(a => api.patchAbsencia(a.id, { estat: 'arxivat' })));
+      showToast(`✓ ${resolts.length} avís${resolts.length > 1 ? 'os' : ''} arxivat${resolts.length > 1 ? 's' : ''}`);
       load();
     } catch (e) { showToast('Error: ' + e.message); }
   }
@@ -167,9 +180,21 @@ export default function AvisosPage() {
     for (const blocked of docentsBlocats) {
       const nom = blocked.nom || blocked;
       const docent = docents.find(d => nomsSimilars(d.nom, nom));
-      if (!docent?.horari) continue;
+
+      if (!docent?.horari) {
+        // Persona sense horari (directiu, persona nova, etc.): crear absència per tot el rang horari
+        const frangesBloquejades = horaAFranges(blocked.hores, schoolFranjesAct);
+        if (frangesBloquejades.length > 0) {
+          const resolvedNom = docent?.nom || nom;
+          const motiu = entrada.titol || entrada.resum?.split(' ').slice(0, 4).join(' ') || 'Activitat especial';
+          for (const { iso, dia } of dates) {
+            results.push({ nom: resolvedNom, data: iso, dia, franges: frangesBloquejades, motiu });
+          }
+        }
+        continue;
+      }
+
       const gp = (docent.grup_principal || '').toUpperCase();
-      if (gp.includes('MESI') || gp.includes('MEE')) continue;
       const esTutor = !!docent.grup_principal && !gp.includes('SIEI');
 
       // Tutor amb ambGrup:true → el seu grup va amb ell, no cal cobrir res
@@ -205,10 +230,9 @@ export default function AvisosPage() {
   async function crearAvisosAutomatics() {
     setCreantAvisos(true);
     const totalAvisos = avisosDescoberts.length;
-    const savedAbsencies = [];
     try {
       for (const av of avisosDescoberts) {
-        const result = await api.saveAbsencia({
+        await api.saveAbsencia({
           escola_id: escola.id,
           docent_nom: av.nom,
           data: av.data,
@@ -217,82 +241,14 @@ export default function AvisosPage() {
           estat: 'pendent',
           tipus: isOriol ? 'absencia' : 'sortida',
         });
-        const absId = result?.[0]?.id;
-        if (absId) savedAbsencies.push({ ...av, id: absId });
       }
       setAvisosDescoberts([]);
-      showToast(`✓ ${totalAvisos} avís${totalAvisos > 1 ? 'os' : ''} creat${totalAvisos > 1 ? 's' : ''}`);
+      showToast(`✓ ${totalAvisos} avís${totalAvisos > 1 ? 'os' : ''} creat${totalAvisos > 1 ? 's' : ''} — usa Horaria per proposar cobertures`);
     } catch (e) {
       showToast('Error creant avisos: ' + e.message);
+    } finally {
       setCreantAvisos(false);
-      return;
-    }
-    setCreantAvisos(false);
-    load();
-
-    // Auto-generar propostes provisionals per a totes les absències creades
-    if (savedAbsencies.length > 0) {
-      setGenerantPropostes({ actual: 0, total: savedAbsencies.length });
-      for (let i = 0; i < savedAbsencies.length; i++) {
-        setGenerantPropostes({ actual: i + 1, total: savedAbsencies.length });
-        await generarIGuardarProvisional(savedAbsencies[i]);
-      }
-      setGenerantPropostes(null);
       load();
-    }
-  }
-
-  async function generarIGuardarProvisional(av) {
-    try {
-      const absData = av.data;
-      const infoExtraActiva = infoExtra.filter(ie =>
-        (!ie.data_inici || ie.data_inici <= absData) && (!ie.data_fi || ie.data_fi >= absData)
-      );
-      const nomsBlocats = infoExtraActiva.flatMap(ie => (ie.docentsBlocats || []).map(b => b.nom || b));
-      const absentDocent = docents.find(d => nomsSimilars(d.nom, av.nom));
-      const esSIEITutor = ['SIEI', 'SIEI+'].includes(absentDocent?.grup_principal);
-      const ROLS_EXCLOSOS = esSIEITutor ? new Set(['tei']) : new Set(['vetllador', 'educador', 'tei']);
-      const docentsFiltrats = docents.filter(d =>
-        d.nom === av.nom ||
-        (!nomsBlocats.some(nb => nomsSimilars(nb, d.nom)) &&
-         !baixes.some(b => nomsSimilars(b.absent, d.nom)) &&
-         !ROLS_EXCLOSOS.has(d.rol) &&
-         !['SIEI', 'SIEI+'].includes(d.grup_principal) &&
-         d.horari)
-      );
-      const infoExtraCombinada = infoExtraActiva.length
-        ? { context: infoExtraActiva.map(ie => ie.context).filter(Boolean).join(' | '), docentsBlocats: infoExtraActiva.flatMap(ie => ie.docentsBlocats || []) }
-        : null;
-
-      const result = await proposarCobertura(av.nom, av.franges, docentsFiltrats, normes, absData, isOriol, infoExtraCombinada, baixes.length ? baixes : null, frangesIA);
-
-      if (!result.noCalCobrir && result.proposta?.length > 0) {
-        const grupFallback = absentDocent?.grup_principal || '';
-        const GRUPS_GENERICS = new Set(['suport','pae','mee','mall','estim','evip','atri']);
-        for (const p of result.proposta) {
-          const rawOrigen = (p.grup_origen || '').trim();
-          const grupCobertura = (!rawOrigen || GRUPS_GENERICS.has(rawOrigen.toLowerCase()))
-            ? ((p.motiu || '').match(/\b(G\d{1,2}|MxI|CEEPSIR)\b/i)?.[1]?.toUpperCase() || rawOrigen || grupFallback)
-            : (rawOrigen || grupFallback);
-          const frangesACobrir = p.franges_ids?.length ? p.franges_ids : [p.franja];
-          for (const fid of frangesACobrir) {
-            await api.saveCobertura({
-              escola_id:          escola.id,
-              absencia_id:        av.id,
-              docent_cobrint_nom: p.docent,
-              franja:             fid,
-              docent_absent_nom:  av.nom,
-              grup:               grupCobertura,
-              data:               absData,
-              tp_afectat:         p.tp_afectat || false,
-              motiu:              p.motiu || '',
-            });
-          }
-        }
-        await api.patchAbsencia(av.id, { estat: 'provisional' });
-      }
-    } catch (e) {
-      console.warn(`Error generant proposta provisional per ${av.nom} (${av.data}):`, e);
     }
   }
 
@@ -391,7 +347,34 @@ export default function AvisosPage() {
           r.readAsDataURL(infoFitxer);
         });
       }
-      const result = await analitzarInfoExtra(infoNotes, base64, docents.map(d => d.nom));
+      const totsElsNoms = [...docents.map(d => d.nom), ...directiusNoms];
+      const result = await analitzarInfoExtra(infoNotes, base64, totsElsNoms);
+
+      // Fallback client-side: detectar noms del claustre que la IA pot haver omès
+      if (infoNotes?.trim()) {
+        const nn = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const txt = nn(infoNotes);
+        const jaInclosos = new Set(
+          (result.docentsBlocats || []).flatMap(b => nn(b.nom || '').split(' ').filter(p => p.length >= 3))
+        );
+        for (const nom of totsElsNoms) {
+          const parts = nn(nom).split(' ').filter(p => p.length >= 3);
+          if (!parts.length || parts.some(p => jaInclosos.has(p))) continue;
+          const trobat = parts.some(p => {
+            const i = txt.indexOf(p);
+            if (i < 0) return false;
+            const pre  = i === 0 || !/[a-zàáèéíïòóúü]/.test(txt[i - 1]);
+            const post = i + p.length >= txt.length || !/[a-zàáèéíïòóúü]/.test(txt[i + p.length]);
+            return pre && post;
+          });
+          if (trobat) {
+            result.docentsBlocats = result.docentsBlocats || [];
+            result.docentsBlocats.push({ nom, hores: 'tot el dia', ambGrup: false });
+            parts.forEach(p => jaInclosos.add(p));
+          }
+        }
+      }
+
       const novaLlista = [...infoExtra, result];
       await api.saveInfoExtra(novaLlista);
       setInfoExtra(novaLlista);
@@ -803,7 +786,7 @@ export default function AvisosPage() {
                 {avisosDescoberts.map((av, i) => {
                   const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
                   const frangesLabel = av.franges.map(fid => schoolFranjesAct.find(f => f.id === fid)?.label || fid).join(', ');
-                  const dataFmt = new Date(av.data + 'T12:00:00').toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+                  const dataFmt = fmtData(av.data, { weekday: 'short' });
                   return (
                     <div key={i} style={{ fontSize: 12, color: 'var(--ink-2)', marginBottom: 2 }}>
                       · <strong>{av.nom}</strong> — {dataFmt} ({frangesLabel})
@@ -828,20 +811,6 @@ export default function AvisosPage() {
           </div>
         )}
 
-        {/* Progrés generació de propostes provisionals */}
-        {generantPropostes && (
-          <div style={{ marginTop: 8, background: '#E8F5E9', border: '1px solid #A5D6A7', borderRadius: 10, padding: '12px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Spinner size={14} />
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#2E7D32' }}>
-                Generant propostes provisionals... ({generantPropostes.actual}/{generantPropostes.total})
-              </div>
-            </div>
-            <div style={{ marginTop: 6, height: 4, background: '#C8E6C9', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', background: '#4CAF50', borderRadius: 2, width: `${(generantPropostes.actual / generantPropostes.total) * 100}%`, transition: 'width .3s' }} />
-            </div>
-          </div>
-        )}
 
         {/* Panel cobertura manual */}
         {showCoberturaManual && (() => {
@@ -969,8 +938,8 @@ export default function AvisosPage() {
                       onClick={() => { setEditingDateIdx(idx); setEditingDateInici(ie.data_inici); setEditingDateFi(ie.data_fi || ie.data_inici); }}
                     >
                       {ie.data_fi && ie.data_fi !== ie.data_inici
-                        ? `${new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })} – ${new Date(ie.data_fi + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}`
-                        : new Date(ie.data_inici + 'T12:00:00').toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' })}
+                        ? `${fmtData(ie.data_inici, { year: false })} – ${fmtData(ie.data_fi, { year: false })}`
+                        : fmtData(ie.data_inici, { year: false })}
                     </button>
                   ) : null}
                   <button
@@ -1028,8 +997,10 @@ export default function AvisosPage() {
         const avui = new Date().toISOString().split('T')[0];
         const absByDocent = {};
         absencies.forEach(a => { absByDocent[a.docent_nom] = (absByDocent[a.docent_nom] || 0) + 1; });
-        const pendentsList   = absencies.filter(a => a.estat === 'pendent');
-        const noPendentsList = absencies.filter(a => a.estat !== 'pendent');
+        const pendentsList      = absencies.filter(a => a.estat === 'pendent');
+        const provisionalsList  = absencies.filter(a => a.estat === 'provisional');
+        const resoltsList       = absencies.filter(a => a.estat === 'resolt');
+        const noPendentsList    = absencies.filter(a => a.estat !== 'pendent');
         const schoolFranjesAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
 
         const renderCard = (a) => {
@@ -1097,7 +1068,7 @@ export default function AvisosPage() {
 
               {esProvisional && (
                 <div style={{ padding: '4px 16px 10px', fontSize: 11.5, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  📅 Cobertura provisional — {esAvui ? 'confirma avui' : `prevista per al ${dObj.toLocaleDateString('ca-ES', { weekday: 'short', day: 'numeric', month: 'short' })}`}
+                  📅 Cobertura provisional — {esAvui ? 'confirma avui' : `prevista per al ${fmtData(a.data, { weekday: 'short' })}`}
                 </div>
               )}
               {(esPendent || esProvisional) && (
@@ -1225,17 +1196,151 @@ export default function AvisosPage() {
           );
         };
 
-        const nPendents = pendentsList.length;
-        const nConfirm  = noPendentsList.length;
+        const toggleResolt = (id) => setExpandedResolts(prev => {
+          const next = new Set(prev);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+
+        const renderCompactRow = (a) => {
+          const isExpanded = expandedResolts.has(a.id);
+          const dateFmt = fmtData(a.data, { year: false });
+          const cobsCard = coberturesPerId[a.id] || [];
+          const perDocent = {};
+          for (const c of cobsCard) {
+            if (!perDocent[c.docent_cobrint_nom]) perDocent[c.docent_cobrint_nom] = [];
+            perDocent[c.docent_cobrint_nom].push(c.franja);
+          }
+          return (
+            <div key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
+              {/* Fila compacta clicable */}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: 'var(--surface)', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => toggleResolt(a.id)}
+              >
+                <span style={{ fontSize: 10, color: 'var(--ink-4)', flexShrink: 0, lineHeight: 1 }}>{isExpanded ? '▾' : '▸'}</span>
+                <span style={{ fontSize: 11, color: 'var(--ink-3)', flexShrink: 0, minWidth: 48, fontWeight: 500 }}>{dateFmt}</span>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{a.docent_nom}</span>
+                  {Object.keys(perDocent).length > 0 && (
+                    <>
+                      <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: 12 }}>→</span>
+                      {Object.keys(perDocent).map((nom, i) => (
+                        <span key={i} style={{ fontSize: 11, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 7px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {nom.split(' ')[0]}
+                        </span>
+                      ))}
+                    </>
+                  )}
+                  {coberturesPerId[a.id] !== undefined && cobsCard.length === 0 && (
+                    <span style={{ fontSize: 11, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-mid)', borderRadius: 20, padding: '1px 7px', fontWeight: 600 }}>✓ no cal cobrir</span>
+                  )}
+                </div>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, color: 'var(--ink-4)', flexShrink: 0, padding: '3px 8px', lineHeight: 1 }}
+                  title="Arxivar"
+                  onClick={(e) => { e.stopPropagation(); arxivar(a.id); }}
+                >✕</button>
+              </div>
+
+              {/* Detall expandit */}
+              {isExpanded && (
+                <div style={{ padding: '12px 16px 14px', background: 'var(--bg-2)', borderTop: '1px solid var(--border)' }}>
+                  {/* Capçalera: motiu + data */}
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 12, lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{a.motiu || 'Sense motiu'}</span>
+                    {' · '}
+                    <span>{fmtData(a.data, { weekday: 'long' })}</span>
+                  </div>
+
+                  {/* Franges de l'absència */}
+                  <div style={{ marginBottom: 12 }}>
+                    <FrangesChips frangesJson={a.franges} isOriol={isOriol} />
+                  </div>
+
+                  {/* Cobridors per franja */}
+                  {Object.entries(perDocent).length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                      {Object.entries(perDocent).map(([nom, franges], i) => {
+                        const hLabel = frangesHorari(franges, isOriol);
+                        const tpAfectat = cobsCard.some(c => c.docent_cobrint_nom === nom && c.tp_afectat);
+                        const bg = avatarColor(nom);
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: '50%', background: bg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                              {initials(nom)}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{nom}</div>
+                              <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{hLabel}</div>
+                            </div>
+                            {tpAfectat && (
+                              <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid #F0D5A8', borderRadius: 20, padding: '1px 6px', fontWeight: 700 }}>TP</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : coberturesPerId[a.id] !== undefined ? (
+                    <div style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600, marginBottom: 12 }}>✅ No ha calgut cobrir cap franja</div>
+                  ) : null}
+
+                  {/* Botó eliminar */}
+                  <button
+                    className="btn btn-ghost btn-sm btn-full"
+                    style={{ fontSize: 12, color: 'var(--ink-3)' }}
+                    onClick={() => arxivar(a.id)}
+                  >🗑️ Eliminar del registre</button>
+                </div>
+              )}
+            </div>
+          );
+        };
+
         return (
           <>
-            {absencies.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                {nPendents > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)', background: 'var(--red-bg)', borderRadius: 20, padding: '3px 10px' }}>{nPendents} pendent{nPendents > 1 ? 's' : ''}</span>}
-                {nConfirm  > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', background: 'var(--green-bg)', borderRadius: 20, padding: '3px 10px' }}>{nConfirm} coberta{nConfirm > 1 ? 's' : ''}</span>}
+            {/* Pendents */}
+            {pendentsList.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--red)', display: 'inline-block' }} />
+                  Pendents de cobertura — {pendentsList.length}
+                </div>
+                {pendentsList.map(renderCard)}
               </div>
             )}
-            {absencies.map(renderCard)}
+            {/* Provisionals */}
+            {provisionalsList.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--amber)', display: 'inline-block' }} />
+                  Provisionals — {provisionalsList.length}
+                </div>
+                {provisionalsList.map(renderCard)}
+              </div>
+            )}
+            {/* Resolts (vista compacta) */}
+            {resoltsList.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--ink-3)', display: 'inline-block' }} />
+                    Resolts — {resoltsList.length}
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 11, color: 'var(--ink-3)' }}
+                    onClick={arxivarTotes}
+                  >
+                    🗑️ Arxivar tots ({resoltsList.length})
+                  </button>
+                </div>
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  {resoltsList.map(renderCompactRow)}
+                </div>
+              </div>
+            )}
           </>
         );
       })()}

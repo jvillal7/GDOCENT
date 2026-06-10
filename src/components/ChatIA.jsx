@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { xatIA, logChat } from '../lib/claude';
+import { fmtData } from '../lib/utils';
 import Spinner from './Spinner';
 
 const LOADING_MSGS = [
@@ -10,22 +11,23 @@ const LOADING_MSGS = [
   "✍️ Últims detalls...",
 ];
 
+const SS_KEY = id => `gd_chat_${id || 'global'}`;
+
 function parsePropostaFromText(text) {
   const m = /<proposta>([\s\S]*?)<\/proposta>/i.exec(text);
   if (!m) return null;
   try {
     const parsed = JSON.parse(m[1].trim());
-    if (Array.isArray(parsed)) return parsed; // pot ser [] (cap cobertura) o [{...}]
+    if (Array.isArray(parsed)) return parsed;
     if (parsed && typeof parsed === 'object') return [parsed];
     return null;
   } catch { return null; }
 }
 
-function MessageBubble({ msg, onAplicar, messages }) {
+function MessageBubble({ msg, onAplicar, messages, idx }) {
   const isUser = msg.role === 'user';
   const proposta = !isUser ? parsePropostaFromText(msg.content) : null;
 
-  // Separa el raonament del bloc final 📋 (pot estar a l'inici o precedit per \n)
   const cleanContent = msg.content.replace(/<proposta>[\s\S]*?<\/proposta>/gi, '').trim();
   const gridMatch = /(^|\n)(📋[\s\S]*)$/.exec(cleanContent);
   const reasoning = gridMatch
@@ -35,7 +37,6 @@ function MessageBubble({ msg, onAplicar, messages }) {
 
   const propostaEmpty = Array.isArray(proposta) && proposta.length === 0;
   const NOCALHeader = `✅ NO CAL COBRIR — TOT CORRECTE\n══════════════════════════════`;
-  // Construïm el bloc verd: si proposta buida, sempre posem el títol "No cal cobrir" al davant
   const summaryFinal = propostaEmpty
     ? `${NOCALHeader}\n${summary || 'Totes les franges queden resoltes sense assignar cap docent.'}`
     : summary
@@ -46,8 +47,14 @@ function MessageBubble({ msg, onAplicar, messages }) {
           : null);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start', gap: 8 }}>
-      {/* Raonament (si n'hi ha) */}
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column',
+        alignItems: isUser ? 'flex-end' : 'flex-start',
+        gap: 8,
+        animation: 'fadeUp .22s ease',
+      }}
+    >
       {reasoning && (
         <div style={{
           maxWidth: '90%', padding: '10px 14px',
@@ -59,7 +66,6 @@ function MessageBubble({ msg, onAplicar, messages }) {
           {reasoning}
         </div>
       )}
-      {/* Graella resum 📋 — monospace per alineació de columnes */}
       {summaryFinal && (
         <div style={{
           maxWidth: '92%', padding: '12px 14px',
@@ -87,17 +93,41 @@ function MessageBubble({ msg, onAplicar, messages }) {
 }
 
 export default function ChatIA({ systemContext, greeting, onAplicarProposta, onClose, onMinimize, initialMessage, escolaId, absenciaId, docentAbsent, dataAbsencia }) {
-  const [messages, setMessages] = useState([
-    { role: 'assistant', content: greeting, _local: true },
-  ]);
+  // Restore from sessionStorage if available
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(SS_KEY(absenciaId));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [{ role: 'assistant', content: greeting, _local: true }];
+  });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  const [visible, setVisible] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const sentInitial = useRef(false);
   const sessioId = useRef(crypto.randomUUID());
   const lastErrorRef = useRef(null);
+
+  // Slide-in animation on mount
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Save messages to sessionStorage on every change
+  useEffect(() => {
+    if (!absenciaId) return;
+    try {
+      const toSave = messages.filter(m => !m._streaming);
+      sessionStorage.setItem(SS_KEY(absenciaId), JSON.stringify(toSave));
+    } catch {}
+  }, [messages, absenciaId]);
 
   useEffect(() => {
     if (!loading) { setLoadingMsgIdx(0); return; }
@@ -109,9 +139,12 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Auto-enviar missatge inicial si n'hi ha
+  // Auto-send initial message only if no saved conversation
   useEffect(() => {
     if (!initialMessage || sentInitial.current) return;
+    // If we restored a conversation, don't re-send initial
+    const hasRealMessages = messages.some(m => !m._local);
+    if (hasRealMessages) { sentInitial.current = true; return; }
     sentInitial.current = true;
     const initMsgs = [
       { role: 'assistant', content: greeting, _local: true },
@@ -144,6 +177,10 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
   useEffect(() => {
     if (!initialMessage) inputRef.current?.focus();
   }, []);
+
+  function clearSession() {
+    try { if (absenciaId) sessionStorage.removeItem(SS_KEY(absenciaId)); } catch {}
+  }
 
   function guardarLog(msgsActuals, resultat, propostaAprovada = null) {
     if (!escolaId) return;
@@ -204,14 +241,22 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-    if (e.key === 'Escape') { guardarLog(messages, 'abandonada'); onClose(); }
+    if (e.key === 'Escape') { clearSession(); guardarLog(messages, 'abandonada'); onClose(); }
   }
+
+  const dataFmt = dataAbsencia ? fmtData(dataAbsencia, { weekday: 'short' }) : null;
 
   return (
     <>
       <div
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 300 }}
-        onClick={() => { guardarLog(messages, 'abandonada'); onClose(); }}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,.45)',
+          zIndex: 300,
+          opacity: visible ? 1 : 0,
+          transition: 'opacity .3s',
+        }}
+        onClick={() => { clearSession(); guardarLog(messages, 'abandonada'); onClose(); }}
       />
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
@@ -220,6 +265,8 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
         zIndex: 301,
         display: 'flex', flexDirection: 'column',
         boxShadow: '-4px 0 32px rgba(0,0,0,.22)',
+        transform: visible ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform .3s cubic-bezier(.4,0,.2,1)',
       }}>
         {/* Header */}
         <div style={{ flexShrink: 0 }}>
@@ -228,14 +275,24 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(to right, #7c3aed, #2563eb)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>💬 Horaria</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>Assistent expert en cobertures</div>
+              <div style={{ fontSize: 14, fontWeight: 700, background: 'linear-gradient(to right, #7c3aed, #2563eb)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                💬 Horaria
+              </div>
+              {(docentAbsent || dataFmt) ? (
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
+                  {docentAbsent && <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{docentAbsent}</span>}
+                  {docentAbsent && dataFmt && <span style={{ margin: '0 4px', opacity: .5 }}>·</span>}
+                  {dataFmt && <span>{dataFmt}</span>}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>Assistent expert en cobertures</div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
               {onMinimize && (
                 <button className="btn btn-ghost btn-sm" onClick={onMinimize} style={{ fontSize: 16, padding: '4px 10px' }} title="Minimitzar">−</button>
               )}
-              <button className="btn btn-ghost btn-sm" onClick={() => { guardarLog(messages, 'abandonada'); onClose(); }} style={{ fontSize: 16, padding: '4px 10px' }}>✕</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { clearSession(); guardarLog(messages, 'abandonada'); onClose(); }} style={{ fontSize: 16, padding: '4px 10px' }}>✕</button>
             </div>
           </div>
           {/* Barra de progrés indeterminada mentre carrega */}
@@ -248,7 +305,7 @@ export default function ChatIA({ systemContext, greeting, onAplicarProposta, onC
         {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {messages.map((m, i) => (
-            <MessageBubble key={i} msg={m} onAplicar={(proposta, msgs) => { guardarLog(msgs, 'aprovada', proposta); onAplicarProposta(proposta, msgs); }} messages={messages} />
+            <MessageBubble key={i} idx={i} msg={m} onAplicar={(proposta, msgs) => { guardarLog(msgs, 'aprovada', proposta); onAplicarProposta(proposta, msgs); }} messages={messages} />
           ))}
           {loading && (
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>

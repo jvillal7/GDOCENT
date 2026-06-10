@@ -221,7 +221,7 @@ export default function AppShell() {
           <div className="desk-content"><PageRouter /></div>
         </div>
       </div>
-      <GlobalChat />
+      {GlobalChat()}
       </>
     );
   }
@@ -365,7 +365,7 @@ export default function AppShell() {
         <div className="page-wrap"><PageRouter /></div>
       </div>
     </div>
-    <GlobalChat />
+    {GlobalChat()}
     </>
   );
 }

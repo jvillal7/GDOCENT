@@ -145,7 +145,13 @@ export function makeApi(escolaId) {
     getDeutesTP:         ()    => f('deutes_tp?retornat=eq.false&order=data_deute'),
     getMeusDeutesTP:     nom   => f(`deutes_tp?docent_nom=eq.${encodeURIComponent(nom)}&retornat=eq.false`),
     saveDeuteTP:         d     => f('deutes_tp', { method: 'POST', body: JSON.stringify(d) }),
-    marcarDeuteTornat:   id    => f(`deutes_tp?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ retornat: true }) }),
+    marcarDeuteTornat:   id    => f(`deutes_tp?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ retornat: true }), prefer: 'return=minimal' }),
+    programarDevolucioTP: (id, data_devolucio, franjes_devolucio, nota_devolucio) => {
+      const franja_devolucio = Array.isArray(franjes_devolucio) && franjes_devolucio.length
+        ? JSON.stringify(franjes_devolucio)
+        : null;
+      return f(`deutes_tp?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ data_devolucio, franja_devolucio, nota_devolucio: nota_devolucio || null }), prefer: 'return=minimal' });
+    },
     getNormesIA:         ()    => f(`escoles?id=eq.${escolaId}&select=normes_ia`, { bypassSchoolId: true }),
     saveNormesIA:        txt   => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ normes_ia: txt }), bypassSchoolId: true }),
     getContextIA:        ()    => f(`escoles?id=eq.${escolaId}&select=context_ia`, { bypassSchoolId: true }),
@@ -163,6 +169,7 @@ export function makeApi(escolaId) {
     saveOriolPdfData:            d  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_pdf_data: d }), bypassSchoolId: true }),
     saveOriolLema:               t  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify({ oriol_lema: t }),    bypassSchoolId: true }),
     saveOriolDiariClassificacio: d  => f(`escoles?id=eq.${escolaId}`, { method: 'PATCH', body: JSON.stringify(d),                    bypassSchoolId: true }),
+    getDirectiusNoms: () => f(`directius?escola_id=eq.${escolaId}&select=nom&actiu=eq.true`, { bypassSchoolId: true }),
     syncDirectiuPin: (nom, pin) => f(`directius?escola_id=eq.${escolaId}&nom=eq.${encodeURIComponent(nom)}`, { method: 'PATCH', body: JSON.stringify({ pin }), bypassSchoolId: true, prefer: 'return=minimal' }),
     getAbsenciesByDocent: nom => f(`absencies?docent_nom=eq.${encodeURIComponent(nom)}&estat=neq.arxivat&order=data.desc&limit=10`),
     getCoberturesForAbsent: nom => f(`cobertures?docent_absent_nom=eq.${encodeURIComponent(nom)}&order=data.desc&limit=30`),

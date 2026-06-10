@@ -358,29 +358,38 @@ export async function analitzarInfoExtra(notes, base64Pdf, nomsDocents = []) {
     content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Pdf } });
   }
   const notesLine = notes?.trim()
-    ? `Informació addicional escrita per la cap d'estudis: ${notes.trim()}\n\n`
+    ? `La cap d'estudis ha escrit: "${notes.trim()}"\n\n`
     : base64Pdf
-      ? `Llegeix el document PDF adjunt i extreu tota la informació sobre l'activitat o esdeveniment.\n\n`
+      ? `Llegeix el document PDF adjunt i extreu tota la informació sobre absències o activitats especials.\n\n`
       : '';
   const avui = new Date().toISOString().split('T')[0];
   const nomsLine = nomsDocents.length
-    ? `\nLlista de docents del centre (usa SEMPRE el nom exacte d'aquesta llista, fent coincidir amb el nom del document):\n${nomsDocents.join(', ')}\n`
+    ? `\nPersonal del centre (usa SEMPRE el nom exacte d'aquesta llista quan el text en faci referència):\n${nomsDocents.join(', ')}\n`
     : '';
   content.push({
     type: 'text',
-    text: `Ets l'assistent d'un centre educatiu de primària. Analitza la informació sobre l'activitat o esdeveniment especial.
-${notesLine}La teva tasca:
-1. Identificar quins docents NO poden cobrir absències (sortida, colònies, reunió externa, jornada, etc.) i en quins horaris aproximats (p.ex. "9:00-12:30" o "tot el dia").
-2. Detectar les dates de l'activitat: data_inici i data_fi en format YYYY-MM-DD. Si és d'un sol dia usa la data d'avui (${avui}) per ambdues. Si dura diversos dies, determina les dates exactes del document.${nomsLine}
-Per cada docent identificat, troba el nom més semblant de la llista del centre i usa'l exactament. Si no hi ha noms concrets, retorna llista buida.
-IMPORTANT — camp "ambGrup" per a cada docent:
-- ambGrup: true → surt AMB els alumnes de la sortida/excursió (tutor o especialista acompanyant). Les franges amb grups que van de sortida no necessiten cobertura. Però un especialista pot tenir altres grups al centre que sí cal cobrir.
-- ambGrup: false → surt SENSE cap grup d'alumnes (reunió CRP, formació, permís). El seu grup queda descobert.
+    text: `Ets l'assistent de la cap d'estudis d'una escola de primària. Avui és ${avui}.
 
-Camp "grups_fora" (a nivell d'entrada, no per docent): llista dels codis de grups que surten físicament del centre (ex: ["3rA","3rB","4tA","4tB"]). Buit [] si no hi ha grups fora (reunions, formacions...). Serveix per detectar quines franges dels especialistes acompanyants queden cobertes pels grups absents.
+${notesLine}TASCA: Identifica TOTA persona del centre que avui NO estarà disponible o no podrà cobrir absències. Inclou QUALSEVOL cas:
+- Permís personal o sindical (p.ex. "Jorge té un permís avui")
+- Malaltia o baixa
+- Reunió fora del centre (CRP, inspecció, formació...)
+- Sortida o colònies amb alumnes
+- Qualsevol altre motiu d'absència o indisponibilitat
 
-Respon ÚNICAMENT en JSON sense cap altre text:
-{"titol":"2-3 paraules màx (ex: 'Sortida 1r-2n', 'Seminari CRP', 'Reunió externa')","resum":"descripció breu (1-2 frases)","docentsBlocats":[{"nom":"Nom Cognom","hores":"9:00-12:30","ambGrup":false}],"grups_fora":[],"context":"instrucció curta per a la IA de cobertures","data_inici":"${avui}","data_fi":"${avui}"}`,
+REGLES IMPORTANTS:
+- Si el text menciona el nom d'algú (fins i tot en minúscules o amb nom abreujat), inclou'l SEMPRE a docentsBlocats.
+- Busca el nom a la llista del personal i usa'l exactament. Si no hi és, inclou'l tal com apareix al text.
+- Si no s'especifica horari, usa hores="tot el dia".
+- Si no s'esmenta cap persona, retorna docentsBlocats=[].${nomsLine}
+Camp "ambGrup":
+- true → surt AMB alumnes (tutor/especialista acompanyant en sortida)
+- false → surt sense alumnes (permís, reunió, formació, malaltia)
+
+Camp "grups_fora": grups que surten físicament del centre (ex: ["3rA","4tA"]). Buit [] si no n'hi ha.
+
+Respon ÚNICAMENT en JSON:
+{"titol":"màx 3 paraules","resum":"1-2 frases","docentsBlocats":[{"nom":"Nom Cognom","hores":"tot el dia","ambGrup":false}],"grups_fora":[],"context":"nota breu per a la IA de cobertures","data_inici":"${avui}","data_fi":"${avui}"}`,
   });
   return callClaude([{ role: 'user', content }], 1000);
 }
