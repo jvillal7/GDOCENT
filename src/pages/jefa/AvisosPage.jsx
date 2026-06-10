@@ -491,19 +491,31 @@ export default function AvisosPage() {
     const decisionsRellevants = iaDecisions.filter(d => nomsSimilars(d.absent, avis.docent_nom)).slice(0, 5);
     const decisionsInjectades = decisionsRellevants.length ? decisionsRellevants : iaDecisions.slice(0, 3);
     const cobsAvui = await api.getCoberturasAvui().catch(() => []);
+
+    // Si infoExtra especifica hores concretes per l'absent, les usem per limitar les franges
+    const schoolFAct = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
+    let frangesIds = parseFranges(avis.franges);
+    const absentBlock = blocsDescChat.find(b => nomsSimilars(b.nom || b, avis.docent_nom));
+    if (absentBlock?.hores && !/tot el dia/i.test(absentBlock.hores)) {
+      const frangesFromInfo = horaAFranges(absentBlock.hores, schoolFAct);
+      if (frangesFromInfo.length > 0 && frangesFromInfo.length < frangesIds.length) {
+        frangesIds = frangesFromInfo;
+      }
+    }
+    // Filtrar l'absent de docentsBlocats: ja apareix a absenciaContext, duplicar-lo confon la IA
+    const blocsPerContext = blocsDescChat.filter(b => !nomsSimilars(b.nom || b, avis.docent_nom));
+
     const systemContext = construirContextXat(escola, docents, normes, isOriol, {
       nom: avis.docent_nom, data: avis.data, dia,
-      frangesIds: parseFranges(avis.franges), motiu: avis.motiu,
-    }, blocsDescChat, baixes, decisionsInjectades, contextIA, frangesIA, cobsAvui, chatCorreccions || []);
+      frangesIds, motiu: avis.motiu,
+    }, blocsPerContext, baixes, decisionsInjectades, contextIA, frangesIA, cobsAvui, chatCorreccions || []);
 
     const MESOS = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];
     const dataStr = dateObj ? `${dateObj.getDate()} de ${MESOS[dateObj.getMonth()]}` : '';
-    const frangesIds = parseFranges(avis.franges);
-    const schoolF = isOriol ? SCHOOL_FRANJES_ORIOL : SCHOOL_FRANJES;
-    const esTotElDia = frangesIds.length >= schoolF.length;
+    const esTotElDia = frangesIds.length >= schoolFAct.length;
     const frangesStr = esTotElDia
       ? 'tot el dia'
-      : frangesIds.map(fid => schoolF.find(f => f.id === fid)?.sub || fid).join(', ');
+      : frangesIds.map(fid => schoolFAct.find(f => f.id === fid)?.sub || fid).join(', ');
     const initialMessage = `Proposa una cobertura per a ${avis.docent_nom}, ${frangesStr}${dia ? ` del ${dia}` : ''}${dataStr ? ` ${dataStr}` : ''}.`;
 
     openChat({ systemContext, initialMessage, avis, iaDecisions, onApplied: load });
